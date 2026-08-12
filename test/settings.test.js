@@ -20,11 +20,17 @@ import {
   configureCameraTrack,
 } from '../src/cameras.js'
 import {
+  alwaysOnTopLevelFor,
   fullscreenButtonCopy,
   fullscreenWindowPlan,
   interpolateWindowBounds,
   isFullscreenExitInput,
 } from '../src/fullscreen.js'
+
+test('places the Windows camera above the taskbar without changing macOS layering', () => {
+  assert.equal(alwaysOnTopLevelFor('win32'), 'pop-up-menu')
+  assert.equal(alwaysOnTopLevelFor('darwin'), 'floating')
+})
 
 test('sanitizes untrusted settings and keeps safe values', () => {
   const result = sanitizeSettings({

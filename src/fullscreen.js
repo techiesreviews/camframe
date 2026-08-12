@@ -6,6 +6,10 @@ export function isFullscreenExitInput(input = {}) {
   return input.type === 'keyDown' && input.key === 'Escape'
 }
 
+export function alwaysOnTopLevelFor(platform) {
+  return platform === 'win32' ? 'pop-up-menu' : 'floating'
+}
+
 export function fullscreenWindowPlan({
   fullscreen,
   normalBounds,

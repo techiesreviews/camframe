@@ -22,6 +22,7 @@ import {
   startupSettings,
 } from './settings.js'
 import {
+  alwaysOnTopLevelFor,
   fullscreenWindowPlan,
   interpolateWindowBounds,
   isFullscreenExitInput,
@@ -29,6 +30,7 @@ import {
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const preferencesPath = () => join(app.getPath('userData'), 'preferences.json')
+const alwaysOnTopLevel = alwaysOnTopLevelFor(process.platform)
 
 let controlWindow
 let overlayWindow
@@ -102,7 +104,7 @@ function applyOverlayWindow({ keepCenter = true } = {}) {
 
   const bounds = overlayBounds({ keepCenter })
   if (!overlayFullscreen && !overlayTransitioning) overlayWindow.setBounds(bounds)
-  overlayWindow.setAlwaysOnTop(overlayFullscreen || settings.alwaysOnTop, 'floating')
+  overlayWindow.setAlwaysOnTop(overlayFullscreen || settings.alwaysOnTop, alwaysOnTopLevel)
 
   if (settings.overlayVisible) overlayWindow.showInactive()
   else {
@@ -232,7 +234,7 @@ function setOverlayFullscreen(fullscreen) {
       alwaysOnTop: settings.alwaysOnTop,
       visible: settings.overlayVisible,
     })
-    overlayWindow.setAlwaysOnTop(plan.alwaysOnTop, 'floating')
+    overlayWindow.setAlwaysOnTop(plan.alwaysOnTop, alwaysOnTopLevel)
     overlayWindow.show()
     setOverlayInteractive(true)
     emitFullscreen()
@@ -253,12 +255,12 @@ function setOverlayFullscreen(fullscreen) {
     alwaysOnTop: settings.alwaysOnTop,
     visible: settings.overlayVisible,
   })
-  overlayWindow.setAlwaysOnTop(true, 'floating')
+  overlayWindow.setAlwaysOnTop(true, alwaysOnTopLevel)
   overlayWindow.show()
   emitFullscreen()
   animateOverlayBounds(plan.bounds, () => {
     if (overlayFullscreen || !overlayWindow || overlayWindow.isDestroyed()) return
-    overlayWindow.setAlwaysOnTop(plan.alwaysOnTop, 'floating')
+    overlayWindow.setAlwaysOnTop(plan.alwaysOnTop, alwaysOnTopLevel)
     if (plan.visible) {
       overlayWindow.showInactive()
       overlayWindow.moveTop()
@@ -309,7 +311,7 @@ function createOverlayWindow() {
   })
 
   overlayWindow.loadFile(join(currentDirectory, 'overlay.html'))
-  overlayWindow.setAlwaysOnTop(settings.alwaysOnTop, 'floating')
+  overlayWindow.setAlwaysOnTop(settings.alwaysOnTop, alwaysOnTopLevel)
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
 
   overlayWindow.once('ready-to-show', () => {

@@ -11,7 +11,7 @@ CamFrame is a small Windows and macOS desktop app that places a live camera feed
 - Reposition the live image inside its crop and double-click to recenter it.
 - Animated fullscreen mode with `Esc` to restore the previous size and position.
 - Adjustable frame width, frame color, and mirroring.
-- Optional always-on-top behavior.
+- Optional always-on-top behavior, including above the Windows taskbar.
 - Hover toolbar with inline camera, size, frame, and always-on-top settings.
 - Tray controls and `Ctrl+Shift+C` to reveal the inline controls.
 - Remembers the selected camera, crop position, appearance, and screen position.
