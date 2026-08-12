@@ -1,6 +1,6 @@
 {
   "name": "camframe",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "A fast, shapeable camera overlay for Windows.",
   "author": "Techies",
   "type": "module",
@@ -10,8 +10,8 @@
     "start": "electron .",
     "test": "node --test",
     "pack": "electron-builder --dir --win",
-    "dist": "electron-builder --win nsis portable",
-    "dist:mac": "electron-builder --mac dmg zip"
+    "dist": "electron-builder --win nsis portable --publish never",
+    "dist:mac": "electron-builder --mac dmg zip --publish never"
   },
   "devDependencies": {
     "electron": "latest",
