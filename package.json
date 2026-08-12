@@ -1,6 +1,6 @@
 {
   "name": "camframe",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "A fast, shapeable camera overlay for Windows.",
   "author": "Techies",
   "type": "module",
@@ -10,11 +10,8 @@
     "start": "electron .",
     "test": "node --test",
     "pack": "electron-builder --dir --win",
-    "dist": "electron-builder --win nsis portable"
-  },
-  "dependencies": {
-    "@fontsource-variable/inter": "latest",
-    "@phosphor-icons/web": "latest"
+    "dist": "electron-builder --win nsis portable",
+    "dist:mac": "electron-builder --mac dmg zip"
   },
   "devDependencies": {
     "electron": "latest",
@@ -25,12 +22,13 @@
     "appId": "tools.techies.camframe",
     "productName": "CamFrame",
     "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
     "files": [
       "src/**/*",
-      "package.json",
-      "node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
-      "node_modules/@phosphor-icons/web/src/regular/*",
-      "node_modules/@phosphor-icons/web/src/thin/*"
+      "package.json"
     ],
     "win": {
       "target": [
@@ -40,7 +38,24 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "CamFrame-Setup-${version}-Windows-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "CamFrame-Portable-${version}-Windows-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.video",
+      "identity": null,
+      "hardenedRuntime": false,
+      "artifactName": "CamFrame-${version}-macOS-${arch}.${ext}",
+      "extendInfo": {
+        "NSCameraUsageDescription": "CamFrame uses your camera to show a movable video overlay."
+      }
     }
   }
 }
