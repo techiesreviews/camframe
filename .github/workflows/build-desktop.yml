@@ -1,0 +1,83 @@
+name: Build desktop apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            os: windows-latest
+            command: npm.cmd run dist -- --x64
+            files: dist/*.exe
+          - platform: macos-arm64
+            os: macos-15
+            command: npm run dist:mac -- --arm64
+            files: |
+              dist/*.dmg
+              dist/*.zip
+          - platform: macos-x64
+            os: macos-15-intel
+            command: npm run dist:mac -- --x64
+            files: |
+              dist/*.dmg
+              dist/*.zip
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build application
+        run: ${{ matrix.command }}
+
+      - name: Upload application
+        uses: actions/upload-artifact@v4
+        with:
+          name: camframe-${{ matrix.platform }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          compression-level: 0
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download applications
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" --generate-notes --title "CamFrame $GITHUB_REF_NAME"

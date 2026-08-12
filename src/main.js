@@ -460,6 +460,7 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
+  app.dock?.hide()
   loadSettings()
   registerIpc()
 
