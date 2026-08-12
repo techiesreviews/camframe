@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" class="scheme-only-dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CamFrame overlay</title>
+    <link rel="stylesheet" href="../node_modules/@phosphor-icons/web/src/regular/style.css" />
+    <link rel="stylesheet" href="../node_modules/@phosphor-icons/web/src/thin/style.css" />
+    <link rel="stylesheet" href="./overlay.css" />
+  </head>
+  <body>
+    <main class="overlay" id="overlay" data-shape="circle" data-hovered="false" data-fullscreen="false" data-positioning="false">
+      <nav class="hover-toolbar" id="hover-toolbar" aria-label="Camera quick actions">
+        <button type="button" id="close-button" aria-label="Close CamFrame" title="Close CamFrame">
+          <i class="ph ph-x-circle" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="fullscreen-button" aria-label="Enter full screen" title="Enter full screen">
+          <i class="ph ph-corners-out" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="shape-button" aria-label="Change camera shape" title="Change camera shape">
+          <i class="ph ph-circle" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="selected" id="mirror-button" aria-label="Mirror camera" title="Mirror camera">
+          <i class="ph ph-arrows-clockwise" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="position-button" aria-label="Position camera in frame" aria-pressed="false" title="Position camera in frame">
+          <i class="ph ph-crosshair" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="controls-button" aria-label="Open camera controls" title="Open camera controls">
+          <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>
+        </button>
+      </nav>
+
+      <section class="inline-settings" id="inline-settings" aria-label="Camera settings" hidden>
+        <div class="inline-setting">
+          <label for="overlay-camera-select">Camera</label>
+          <select id="overlay-camera-select" name="camera">
+            <option value="">Finding cameras...</option>
+          </select>
+        </div>
+        <div class="inline-setting inline-range">
+          <div><label for="overlay-size-range">Size</label><output id="overlay-size-output">288 px</output></div>
+          <input id="overlay-size-range" name="size" type="range" min="180" max="640" step="4" value="288" />
+        </div>
+        <div class="inline-setting inline-range">
+          <div><label for="overlay-frame-range">Frame</label><output id="overlay-frame-output">0 px</output></div>
+          <input id="overlay-frame-range" name="frame" type="range" min="0" max="12" step="1" value="0" />
+        </div>
+        <label class="inline-toggle" for="overlay-top-toggle">
+          <span>Always on top</span>
+          <input id="overlay-top-toggle" name="always-on-top" type="checkbox" checked />
+        </label>
+      </section>
+
+      <section class="camera-surface" id="camera-surface" aria-label="Movable camera overlay">
+        <video id="camera" autoplay muted playsinline aria-label="Live camera preview"></video>
+        <div class="camera-state" id="camera-state" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="camera-state-label">Starting camera.</span>
+        </div>
+      </section>
+
+      <button type="button" class="selection-corner corner-top-left" data-resize-handle="top-left" aria-label="Resize from top left"></button>
+      <button type="button" class="selection-corner corner-top-right" data-resize-handle="top-right" aria-label="Resize from top right"></button>
+      <button type="button" class="selection-corner corner-bottom-left" data-resize-handle="bottom-left" aria-label="Resize from bottom left"></button>
+      <button type="button" class="selection-corner corner-bottom-right" data-resize-handle="bottom-right" aria-label="Resize from bottom right"></button>
+    </main>
+    <script type="module" src="./overlay.js"></script>
+  </body>
+</html>

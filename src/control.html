@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" class="scheme-only-dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>CamFrame</title>
+    <link rel="stylesheet" href="./control.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div class="title-group">
+          <div class="brand-row">
+            <h1>CamFrame</h1>
+            <span class="status-badge"><span class="status-dot" aria-hidden="true"></span>Live</span>
+          </div>
+          <p>Your camera, anywhere on screen.</p>
+        </div>
+      </header>
+
+      <section class="preview-section" aria-label="Overlay preview">
+        <div class="shape-preview" id="shape-preview" data-shape="circle">
+          <div class="preview-glow"></div>
+          <span>Drag the camera itself to move it</span>
+        </div>
+      </section>
+
+      <section class="settings" aria-labelledby="settings-heading">
+        <div class="section-heading">
+          <h2 id="settings-heading">Appearance</h2>
+          <span id="size-output" class="numeric-label">320 px</span>
+        </div>
+
+        <div class="field">
+          <label for="camera-select">Camera</label>
+          <div class="select-wrap">
+            <select id="camera-select" name="camera">
+              <option value="">Finding cameras…</option>
+            </select>
+            <span class="select-chevron" aria-hidden="true">⌄</span>
+          </div>
+          <p id="camera-error" class="field-message" hidden></p>
+        </div>
+
+        <fieldset class="field">
+          <legend>Shape</legend>
+          <div class="shape-options">
+            <label><input type="radio" name="shape" value="circle" checked /><span>Circle</span></label>
+            <label><input type="radio" name="shape" value="rounded" /><span>Square</span></label>
+            <label><input type="radio" name="shape" value="portrait" /><span>Portrait</span></label>
+            <label><input type="radio" name="shape" value="landscape" /><span>Wide</span></label>
+          </div>
+        </fieldset>
+
+        <div class="field range-field">
+          <label for="size-range">Size</label>
+          <input id="size-range" name="size" type="range" min="180" max="640" step="10" value="320" />
+        </div>
+
+        <div class="field frame-row">
+          <div class="range-field compact">
+            <label for="border-range">Frame</label>
+            <input id="border-range" name="border-width" type="range" min="0" max="12" step="1" value="4" />
+          </div>
+          <label class="color-field" for="border-color">
+            <span>Color</span>
+            <input id="border-color" name="border-color" type="color" value="#ffffff" />
+          </label>
+        </div>
+
+        <div class="toggle-list">
+          <label class="toggle-row" for="mirror-toggle">
+            <span><strong>Mirror camera</strong><small>Match the view you see in a mirror.</small></span>
+            <span class="switch"><input id="mirror-toggle" name="mirror" type="checkbox" checked /><i></i></span>
+          </label>
+          <label class="toggle-row" for="top-toggle">
+            <span><strong>Always on top</strong><small>Keep the camera above other windows.</small></span>
+            <span class="switch"><input id="top-toggle" name="always-on-top" type="checkbox" checked /><i></i></span>
+          </label>
+        </div>
+      </section>
+
+      <footer class="actions">
+        <button type="button" class="primary-button" id="visibility-button">Hide camera</button>
+        <button type="button" class="secondary-button" id="center-button">Center</button>
+        <div class="footer-note">
+          <span><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>C</kbd> opens controls</span>
+          <button type="button" class="text-button" id="quit-button">Quit</button>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="./control.js"></script>
+  </body>
+</html>
