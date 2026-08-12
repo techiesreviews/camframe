@@ -1,16 +1,46 @@
-export function cameraConstraintsFor(cameraId, { allowSlowerFrameRate = false } = {}) {
+export function cameraTrackConstraintsFor(
+  fullscreen = false,
+  { allowSlowerFrameRate = false } = {},
+) {
+  if (fullscreen) {
+    return {
+      width: { ideal: 3840 },
+      height: { ideal: 2160 },
+      frameRate: { ideal: 30, max: 30 },
+    }
+  }
+
+  return {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: {
+      ideal: 60,
+      ...(!allowSlowerFrameRate ? { min: 30 } : {}),
+      max: 60,
+    },
+  }
+}
+
+export function cameraConstraintsFor(
+  cameraId,
+  { allowSlowerFrameRate = false, fullscreen = false } = {},
+) {
   return {
     audio: false,
     video: {
       ...(cameraId ? { deviceId: { exact: cameraId } } : {}),
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      frameRate: {
-        ideal: 60,
-        ...(!allowSlowerFrameRate ? { min: 30 } : {}),
-        max: 60,
-      },
+      ...cameraTrackConstraintsFor(fullscreen, { allowSlowerFrameRate }),
     },
+  }
+}
+
+export async function applyCameraTrackProfile(track, fullscreen) {
+  if (!track?.applyConstraints) return false
+  try {
+    await track.applyConstraints(cameraTrackConstraintsFor(fullscreen))
+    return true
+  } catch {
+    return false
   }
 }
 

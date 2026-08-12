@@ -12,8 +12,10 @@ import {
   startupSettings,
 } from '../src/settings.js'
 import {
+  applyCameraTrackProfile,
   cameraConstraintsFor,
   cameraOptionsFrom,
+  cameraTrackConstraintsFor,
   canReuseCameraStream,
   configureCameraTrack,
 } from '../src/cameras.js'
@@ -162,6 +164,41 @@ test('uses the verified low-latency camera profile', () => {
   const track = { contentHint: 'detail' }
   configureCameraTrack(track)
   assert.equal(track.contentHint, 'motion')
+})
+
+test('switches between 4K fullscreen and 720p overlay capture profiles', async () => {
+  assert.deepEqual(cameraTrackConstraintsFor(true), {
+    width: { ideal: 3840 },
+    height: { ideal: 2160 },
+    frameRate: { ideal: 30, max: 30 },
+  })
+  assert.deepEqual(cameraTrackConstraintsFor(false), {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: { ideal: 60, min: 30, max: 60 },
+  })
+  assert.deepEqual(cameraConstraintsFor('cam-link', { fullscreen: true }), {
+    audio: false,
+    video: {
+      deviceId: { exact: 'cam-link' },
+      width: { ideal: 3840 },
+      height: { ideal: 2160 },
+      frameRate: { ideal: 30, max: 30 },
+    },
+  })
+
+  const applied = []
+  const track = { applyConstraints: async (constraints) => applied.push(constraints) }
+  assert.equal(await applyCameraTrackProfile(track, true), true)
+  assert.equal(await applyCameraTrackProfile(track, false), true)
+  assert.deepEqual(applied, [cameraTrackConstraintsFor(true), cameraTrackConstraintsFor(false)])
+
+  const unsupportedTrack = {
+    applyConstraints: async () => {
+      throw new DOMException('Unsupported profile', 'OverconstrainedError')
+    },
+  }
+  assert.equal(await applyCameraTrackProfile(unsupportedTrack, true), false)
 })
 
 test('fullscreen copy and Escape behavior stay in sync', () => {

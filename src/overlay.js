@@ -1,4 +1,5 @@
 import {
+  applyCameraTrackProfile,
   cameraConstraintsFor,
   cameraOptionsFrom,
   canReuseCameraStream,
@@ -69,6 +70,16 @@ let fullscreen = false
 let positioning = false
 let cameraReposition
 let resizing = false
+let cameraQualityUpdates = Promise.resolve()
+
+function queueCameraQualityUpdate(nextFullscreen = fullscreen) {
+  if (isQaPreview) return
+  cameraQualityUpdates = cameraQualityUpdates.then(async () => {
+    const track = activeStream?.getVideoTracks()[0]
+    if (!track || track.readyState === 'ended') return
+    await applyCameraTrackProfile(track, nextFullscreen)
+  })
+}
 
 function showCameraState(message) {
   cameraStateLabel.textContent = message
@@ -138,11 +149,13 @@ async function startCamera(cameraId = '') {
   try {
     let nextStream
     try {
-      nextStream = await navigator.mediaDevices.getUserMedia(cameraConstraintsFor(cameraId))
+      nextStream = await navigator.mediaDevices.getUserMedia(
+        cameraConstraintsFor(cameraId, { fullscreen }),
+      )
     } catch (error) {
       if (error.name !== 'OverconstrainedError') throw error
       nextStream = await navigator.mediaDevices.getUserMedia(
-        cameraConstraintsFor(cameraId, { allowSlowerFrameRate: true }),
+        cameraConstraintsFor(cameraId, { allowSlowerFrameRate: true, fullscreen }),
       )
     }
     if (request !== startRequest) {
@@ -208,6 +221,7 @@ function applyState(nextState) {
 
 function applyFullscreen(nextFullscreen) {
   fullscreen = Boolean(nextFullscreen)
+  queueCameraQualityUpdate(fullscreen)
   overlay.dataset.fullscreen = String(fullscreen)
   fullscreenButton.classList.toggle('selected', fullscreen)
   const label = fullscreenButtonCopy(fullscreen)
