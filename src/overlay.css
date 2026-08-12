@@ -1,0 +1,377 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+html.qa-preview body {
+  display: grid;
+  place-items: center;
+  background: #181818;
+}
+
+html.qa-preview {
+  min-width: calc(var(--camera-width) + 84px);
+  min-height: calc(var(--camera-height) + 150px);
+  overflow: auto;
+}
+
+html.qa-preview .overlay {
+  width: calc(var(--camera-width) + 36px);
+  height: calc(var(--camera-height) + 102px);
+}
+
+html.qa-preview .overlay[data-fullscreen='true'] {
+  width: 100vw;
+  height: 100vh;
+}
+
+html.qa-preview .camera-surface {
+  background: #263973;
+}
+
+button {
+  font: inherit;
+}
+
+.overlay {
+  --camera-width: 288px;
+  --camera-height: 288px;
+  --camera-left: 18px;
+  --camera-top: 84px;
+  --target-offset: 6px;
+  --target-corner-size: 28px;
+  --frame-width: 0px;
+  --frame-color: #ffffff;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.camera-surface {
+  position: absolute;
+  top: var(--camera-top);
+  left: var(--camera-left);
+  width: var(--camera-width);
+  height: var(--camera-height);
+  overflow: hidden;
+  background: #18181b;
+  box-shadow: inset 0 0 0 var(--frame-width) var(--frame-color);
+  contain: paint;
+  cursor: grab;
+  transform: translateZ(0);
+  transition:
+    top 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    left 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    width 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    height 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    border-radius 280ms cubic-bezier(0.65, 0, 0.35, 1);
+  -webkit-app-region: no-drag;
+}
+
+.camera-surface[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.overlay[data-resizing='true'] .camera-surface {
+  transition: none;
+}
+
+.overlay[data-shape='circle'] .camera-surface {
+  border-radius: 50%;
+}
+
+.overlay[data-shape='rounded'] .camera-surface {
+  border-radius: 16%;
+}
+
+.overlay[data-shape='portrait'] .camera-surface,
+.overlay[data-shape='landscape'] .camera-surface {
+  border-radius: 12%;
+}
+
+.overlay[data-fullscreen='true'] .camera-surface {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  cursor: default;
+}
+
+.overlay[data-positioning='true'] .camera-surface {
+  cursor: move;
+}
+
+.overlay[data-positioning='true'] .camera-surface[data-repositioning='true'] {
+  cursor: grabbing;
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.hover-toolbar {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  width: min(240px, calc(100% - 8px));
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  opacity: 0;
+  background: #0c0c0d;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+  transition:
+    opacity 120ms ease,
+    transform 160ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.overlay[data-hovered='true'] .hover-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.hover-toolbar button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  min-width: 0;
+  max-width: 36px;
+  flex: 1 1 36px;
+  place-items: center;
+  padding: 0;
+  color: #8b8b90;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  outline: 0;
+  background: transparent;
+}
+
+.hover-toolbar button:hover {
+  color: #e5e5e5;
+  background: #19191b;
+}
+
+.hover-toolbar button.selected {
+  color: #e8e8e8;
+  box-shadow: inset 0 0 0 1.5px #eeeeef;
+}
+
+.hover-toolbar button:focus-visible {
+  outline: 2px solid #fb923c;
+  outline-offset: 1px;
+}
+
+.hover-toolbar i {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.selection-corner {
+  position: absolute;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid rgb(244 244 245 / 92%);
+  border-radius: 3px;
+  opacity: 0;
+  background: #18181b;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.corner-top-left {
+  top: calc(var(--camera-top) - 7px);
+  left: calc(var(--camera-left) - 7px);
+  cursor: nwse-resize;
+}
+
+.corner-top-right {
+  top: calc(var(--camera-top) - 7px);
+  left: calc(var(--camera-left) + var(--camera-width) - 7px);
+  cursor: nesw-resize;
+}
+
+.corner-bottom-left {
+  top: calc(var(--camera-top) + var(--camera-height) - 7px);
+  left: calc(var(--camera-left) - 7px);
+  cursor: nesw-resize;
+}
+
+.corner-bottom-right {
+  top: calc(var(--camera-top) + var(--camera-height) - 7px);
+  left: calc(var(--camera-left) + var(--camera-width) - 7px);
+  cursor: nwse-resize;
+}
+
+.overlay[data-hovered='true'] .selection-corner,
+.overlay[data-resizing='true'] .selection-corner {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.overlay[data-fullscreen='true'] .selection-corner {
+  display: none;
+}
+
+.inline-settings {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  width: min(240px, calc(var(--camera-width) - 28px));
+  gap: 12px;
+  padding: 14px;
+  color: #e4e4e7;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  background: rgb(12 12 13 / 96%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 42%);
+  transform: translateX(-50%);
+  -webkit-app-region: no-drag;
+}
+
+.inline-settings[hidden] {
+  display: none;
+}
+
+.inline-setting {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.inline-setting > label,
+.inline-setting > div label,
+.inline-toggle {
+  color: #a1a1aa;
+  font: 500 11px/16px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.inline-setting select {
+  width: 100%;
+  height: 30px;
+  padding: 0 28px 0 9px;
+  color: #f4f4f5;
+  border: 0;
+  border-radius: 7px;
+  outline: 1px solid rgb(255 255 255 / 12%);
+  outline-offset: -1px;
+  background: #202023;
+  font: 500 11px/1 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.inline-range > div,
+.inline-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inline-range output {
+  color: #71717a;
+  font: 500 10px/1 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.inline-range input[type='range'] {
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+}
+
+.inline-range input[type='range']::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: #3f3f46;
+}
+
+.inline-range input[type='range']::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: #f4f4f5;
+}
+
+.inline-toggle {
+  cursor: pointer;
+}
+
+.inline-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: #f97316;
+}
+
+.camera-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: #fafafa;
+  background: #18181b;
+  font: 500 13px/1.4 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  text-align: center;
+}
+
+.camera-state[hidden] {
+  display: none;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid rgb(255 255 255 / 20%);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .camera-surface,
+  .hover-toolbar,
+  .selection-corner {
+    animation: none;
+    transition: none;
+  }
+}

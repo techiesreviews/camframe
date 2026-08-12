@@ -1,0 +1,10 @@
+node_modules/
+dist*/
+debug/
+qa/
+qa-*.png
+qa-*.html
+design-qa.md
+*.log
+.DS_Store
+Thumbs.db

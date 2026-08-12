@@ -1,0 +1,46 @@
+{
+  "name": "camframe",
+  "version": "0.2.12",
+  "description": "A fast, shapeable camera overlay for Windows.",
+  "author": "Techies",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "vite",
+    "start": "electron .",
+    "test": "node --test",
+    "pack": "electron-builder --dir --win",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "latest",
+    "@phosphor-icons/web": "latest"
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "electron-builder": "latest",
+    "vite": "latest"
+  },
+  "build": {
+    "appId": "tools.techies.camframe",
+    "productName": "CamFrame",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json",
+      "node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+      "node_modules/@phosphor-icons/web/src/regular/*",
+      "node_modules/@phosphor-icons/web/src/thin/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
