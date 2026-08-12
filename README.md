@@ -43,6 +43,6 @@ Native Apple Silicon and Intel builds are produced by the GitHub Actions desktop
 
 ## Performance and download size
 
-The overlay uses one native Chromium video element and one camera stream. It does not copy frames through canvas or JavaScript. Capture prefers 1280x720 at 60 fps with a motion-first content hint, falls back for slower cameras, leaves GPU acceleration enabled, and disables background throttling only for the overlay window. Transparent areas stay click-through, while forwarded pointer movement reveals the controls without clipping the antialiased camera edge.
+The overlay uses one native Chromium video element and one camera stream. It does not copy frames through canvas or JavaScript. Normal overlay capture prefers 1280x720 at 60 fps. Fullscreen capture switches the same track to a preferred 3840x2160 at 30 fps, then returns it to 720p when fullscreen closes. Unsupported 4K cameras keep their current working stream. CamFrame uses a motion-first content hint, leaves GPU acceleration enabled, and disables background throttling only for the overlay window. Transparent areas stay click-through, while forwarded pointer movement reveals the controls without clipping the antialiased camera edge.
 
 Release builds include only the English Chromium locale and the exact font assets used by the interface. Electron still provides the browser, camera, GPU, and window runtime, so it imposes a larger baseline than a fully native application.
