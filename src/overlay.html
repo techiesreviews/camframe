@@ -41,6 +41,29 @@
           <div><label for="overlay-size-range">Size</label><output id="overlay-size-output">288 px</output></div>
           <input id="overlay-size-range" name="size" type="range" min="180" max="640" step="4" value="288" />
         </div>
+        <fieldset class="inline-setting inline-resolution-setting">
+          <legend>Camera resolution</legend>
+          <div class="inline-resolution-grid">
+            <label for="overlay-resolution-select">
+              <span>Small</span>
+              <select id="overlay-resolution-select" name="overlay-resolution">
+                <option value="480p">480p</option>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+                <option value="2160p">4K</option>
+              </select>
+            </label>
+            <label for="fullscreen-resolution-select">
+              <span>Full screen</span>
+              <select id="fullscreen-resolution-select" name="fullscreen-resolution">
+                <option value="480p">480p</option>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+                <option value="2160p">4K</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
         <div class="inline-setting inline-range">
           <div><label for="overlay-frame-range">Frame</label><output id="overlay-frame-output">0 px</output></div>
           <input id="overlay-frame-range" name="frame" type="range" min="0" max="12" step="1" value="0" />

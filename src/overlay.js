@@ -15,6 +15,8 @@ const inlineSettings = document.querySelector('#inline-settings')
 const cameraSelect = document.querySelector('#overlay-camera-select')
 const sizeRange = document.querySelector('#overlay-size-range')
 const sizeOutput = document.querySelector('#overlay-size-output')
+const overlayResolutionSelect = document.querySelector('#overlay-resolution-select')
+const fullscreenResolutionSelect = document.querySelector('#fullscreen-resolution-select')
 const frameRange = document.querySelector('#overlay-frame-range')
 const frameOutput = document.querySelector('#overlay-frame-output')
 const topToggle = document.querySelector('#overlay-top-toggle')
@@ -30,6 +32,8 @@ const camFrame = window.camFrame ?? {
     cameraId: '',
     shape: 'circle',
     size: 288,
+    overlayResolution: '720p',
+    fullscreenResolution: '2160p',
     borderWidth: 0,
     borderColor: '#ffffff',
     mirror: true,
@@ -77,7 +81,8 @@ function queueCameraQualityUpdate(nextFullscreen = fullscreen) {
   cameraQualityUpdates = cameraQualityUpdates.then(async () => {
     const track = activeStream?.getVideoTracks()[0]
     if (!track || track.readyState === 'ended') return
-    await applyCameraTrackProfile(track, nextFullscreen)
+    const resolution = nextFullscreen ? state.fullscreenResolution : state.overlayResolution
+    await applyCameraTrackProfile(track, nextFullscreen, resolution)
   })
 }
 
@@ -150,12 +155,19 @@ async function startCamera(cameraId = '') {
     let nextStream
     try {
       nextStream = await navigator.mediaDevices.getUserMedia(
-        cameraConstraintsFor(cameraId, { fullscreen }),
+        cameraConstraintsFor(cameraId, {
+          fullscreen,
+          resolution: fullscreen ? state.fullscreenResolution : state.overlayResolution,
+        }),
       )
     } catch (error) {
       if (error.name !== 'OverconstrainedError') throw error
       nextStream = await navigator.mediaDevices.getUserMedia(
-        cameraConstraintsFor(cameraId, { allowSlowerFrameRate: true, fullscreen }),
+        cameraConstraintsFor(cameraId, {
+          allowSlowerFrameRate: true,
+          fullscreen,
+          resolution: fullscreen ? state.fullscreenResolution : state.overlayResolution,
+        }),
       )
     }
     if (request !== startRequest) {
@@ -189,6 +201,10 @@ async function startCamera(cameraId = '') {
 
 function applyState(nextState) {
   const cameraChanged = !cameraStateInitialized || state?.cameraId !== nextState.cameraId
+  const qualityChanged =
+    cameraStateInitialized &&
+    (state?.overlayResolution !== nextState.overlayResolution ||
+      state?.fullscreenResolution !== nextState.fullscreenResolution)
   state = nextState
   const cameraWidth = state.shape === 'portrait' ? state.size * 0.75 : state.size
   const cameraHeight = state.shape === 'landscape' ? state.size * 0.5625 : state.size
@@ -207,6 +223,8 @@ function applyState(nextState) {
   document.querySelector('#mirror-button').classList.toggle('selected', state.mirror)
   sizeRange.value = String(state.size)
   sizeOutput.textContent = `${state.size} px`
+  overlayResolutionSelect.value = state.overlayResolution
+  fullscreenResolutionSelect.value = state.fullscreenResolution
   frameRange.value = String(state.borderWidth)
   frameOutput.textContent = `${state.borderWidth} px`
   topToggle.checked = state.alwaysOnTop
@@ -216,7 +234,7 @@ function applyState(nextState) {
   if (cameraChanged) {
     cameraStateInitialized = true
     startCamera(state.cameraId)
-  }
+  } else if (qualityChanged) queueCameraQualityUpdate(fullscreen)
 }
 
 function applyFullscreen(nextFullscreen) {
@@ -416,6 +434,14 @@ cameraSelect.addEventListener('change', () => {
 sizeRange.addEventListener('input', () => {
   sizeOutput.textContent = `${sizeRange.value} px`
   camFrame.updateState({ size: Number(sizeRange.value) })
+})
+
+overlayResolutionSelect.addEventListener('change', () => {
+  camFrame.updateState({ overlayResolution: overlayResolutionSelect.value })
+})
+
+fullscreenResolutionSelect.addEventListener('change', () => {
+  camFrame.updateState({ fullscreenResolution: fullscreenResolutionSelect.value })
 })
 
 frameRange.addEventListener('input', () => {

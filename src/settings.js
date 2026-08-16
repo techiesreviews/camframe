@@ -1,11 +1,14 @@
 export const SHAPES = new Set(['circle', 'rounded', 'portrait', 'landscape'])
+export const CAPTURE_RESOLUTIONS = new Set(['480p', '720p', '1080p', '2160p'])
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  schemaVersion: 4,
+  schemaVersion: 5,
   cameraId: '',
   cameraLabel: 'Default camera',
   shape: 'circle',
   size: 288,
+  overlayResolution: '720p',
+  fullscreenResolution: '2160p',
   borderWidth: 0,
   borderColor: '#ffffff',
   mirror: true,
@@ -24,6 +27,12 @@ export function sanitizeSettings(input = {}) {
   if (typeof input.cameraLabel === 'string') settings.cameraLabel = input.cameraLabel.slice(0, 120)
   if (SHAPES.has(input.shape)) settings.shape = input.shape
   if (Number.isFinite(input.size)) settings.size = Math.round(clamp(input.size, 180, 640))
+  if (CAPTURE_RESOLUTIONS.has(input.overlayResolution)) {
+    settings.overlayResolution = input.overlayResolution
+  }
+  if (CAPTURE_RESOLUTIONS.has(input.fullscreenResolution)) {
+    settings.fullscreenResolution = input.fullscreenResolution
+  }
   if (Number.isFinite(input.borderWidth)) {
     settings.borderWidth = Math.round(clamp(input.borderWidth, 0, 12))
   }
@@ -68,6 +77,10 @@ export function startupSettings(input = {}) {
     alwaysOnTop: true,
     overlayVisible: true,
   }
+}
+
+export function settingsPatchChangesOverlayGeometry(patch = {}) {
+  return ['shape', 'size', 'position'].some((key) => Object.hasOwn(patch, key))
 }
 
 export function dimensionsFor(settings) {
@@ -200,7 +213,11 @@ export function overlayRegionsFor(settings, hovered = false, controlsOpen = fals
   if (controlsOpen) {
     const controlsWidth = Math.min(240, camera.width - 28)
     const controlsX = Math.round(left + (camera.width - controlsWidth) / 2)
-    regions.push(...offsetRegions(regionsFor('rounded', controlsWidth, 202, 1), controlsX, 76))
+    const overlayHeight = camera.height + OVERLAY_CHROME.top + OVERLAY_CHROME.bottom
+    const controlsHeight = Math.min(268, overlayHeight - 76)
+    regions.push(
+      ...offsetRegions(regionsFor('rounded', controlsWidth, controlsHeight, 1), controlsX, 76),
+    )
   }
 
   return regions

@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   DEFAULT_SETTINGS,
   cameraPositionAfterDrag,
@@ -9,6 +11,7 @@ import {
   regionsFor,
   resizeOverlayFromCorner,
   sanitizeSettings,
+  settingsPatchChangesOverlayGeometry,
   startupSettings,
 } from '../src/settings.js'
 import {
@@ -50,6 +53,32 @@ test('sanitizes untrusted settings and keeps safe values', () => {
   assert.equal(result.mirror, false)
   assert.deepEqual(result.cameraPosition, { x: 0, y: 100 })
   assert.deepEqual(result.position, { x: 12, y: 34 })
+})
+
+test('sanitizes compact and fullscreen capture resolutions independently', () => {
+  const valid = sanitizeSettings({
+    overlayResolution: '1080p',
+    fullscreenResolution: '720p',
+  })
+  const invalid = sanitizeSettings({
+    overlayResolution: '12k',
+    fullscreenResolution: 'automatic',
+  })
+
+  assert.equal(valid.overlayResolution, '1080p')
+  assert.equal(valid.fullscreenResolution, '720p')
+  assert.equal(invalid.overlayResolution, DEFAULT_SETTINGS.overlayResolution)
+  assert.equal(invalid.fullscreenResolution, DEFAULT_SETTINGS.fullscreenResolution)
+})
+
+test('capture quality changes do not reapply native overlay bounds', () => {
+  assert.equal(settingsPatchChangesOverlayGeometry({ overlayResolution: '2160p' }), false)
+  assert.equal(settingsPatchChangesOverlayGeometry({ fullscreenResolution: '1080p' }), false)
+  assert.equal(settingsPatchChangesOverlayGeometry({ mirror: false }), false)
+  assert.equal(settingsPatchChangesOverlayGeometry({ alwaysOnTop: false }), false)
+  assert.equal(settingsPatchChangesOverlayGeometry({ size: 420 }), true)
+  assert.equal(settingsPatchChangesOverlayGeometry({ shape: 'landscape' }), true)
+  assert.equal(settingsPatchChangesOverlayGeometry({ position: { x: 10, y: 20 } }), true)
 })
 
 test('camera positioning follows drag direction and respects mirroring', () => {
@@ -205,6 +234,55 @@ test('switches between 4K fullscreen and 720p overlay capture profiles', async (
     },
   }
   assert.equal(await applyCameraTrackProfile(unsupportedTrack, true), false)
+})
+
+test('uses the selected capture resolution for each camera mode', async () => {
+  assert.deepEqual(cameraTrackConstraintsFor(false, { resolution: '1080p' }), {
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    frameRate: { ideal: 60, min: 30, max: 60 },
+  })
+  assert.deepEqual(cameraTrackConstraintsFor(true, { resolution: '720p' }), {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: { ideal: 30, max: 30 },
+  })
+
+  const applied = []
+  const track = { applyConstraints: async (constraints) => applied.push(constraints) }
+  assert.equal(await applyCameraTrackProfile(track, false, '1080p'), true)
+  assert.deepEqual(applied, [cameraTrackConstraintsFor(false, { resolution: '1080p' })])
+})
+
+test('toolbar centering does not depend on the animated transform', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.css'), 'utf8')
+  const toolbarRule = css.match(/\.hover-toolbar\s*\{([^}]+)\}/)?.[1] ?? ''
+
+  assert.match(toolbarRule, /--toolbar-width:/)
+  assert.match(toolbarRule, /var\(--active-camera-left\)/)
+  assert.match(toolbarRule, /var\(--active-camera-width\)/)
+  assert.doesNotMatch(toolbarRule, /translateX/)
+})
+
+test('every compact camera shape has an explicit compositor clip mask', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.css'), 'utf8')
+
+  assert.match(
+    css,
+    /\.overlay\[data-shape='circle'\] \.camera-surface\s*\{[^}]*clip-path:\s*inset\(0 round 50%\)/s,
+  )
+  assert.match(
+    css,
+    /\.overlay\[data-shape='rounded'\] \.camera-surface\s*\{[^}]*clip-path:\s*inset\(0 round 16%\)/s,
+  )
+  assert.match(
+    css,
+    /\.overlay\[data-shape='portrait'\] \.camera-surface[^}]*clip-path:\s*inset\(0 round 12%\)/s,
+  )
+  assert.match(
+    css,
+    /\.overlay\[data-fullscreen='true'\] \.camera-surface\s*\{[^}]*clip-path:\s*inset\(0\)/s,
+  )
 })
 
 test('fullscreen copy and Escape behavior stay in sync', () => {

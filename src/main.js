@@ -19,6 +19,7 @@ import {
   OVERLAY_CHROME,
   resizeOverlayFromCorner,
   sanitizeSettings,
+  settingsPatchChangesOverlayGeometry,
   startupSettings,
 } from './settings.js'
 import {
@@ -99,11 +100,12 @@ function overlayBounds({ keepCenter = true } = {}) {
   }
 }
 
-function applyOverlayWindow({ keepCenter = true } = {}) {
+function applyOverlayWindow({ keepCenter = true, updateBounds = true } = {}) {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
 
-  const bounds = overlayBounds({ keepCenter })
-  if (!overlayFullscreen && !overlayTransitioning) overlayWindow.setBounds(bounds)
+  if (updateBounds && !overlayFullscreen && !overlayTransitioning) {
+    overlayWindow.setBounds(overlayBounds({ keepCenter }))
+  }
   overlayWindow.setAlwaysOnTop(overlayFullscreen || settings.alwaysOnTop, alwaysOnTopLevel)
 
   if (settings.overlayVisible) overlayWindow.showInactive()
@@ -270,8 +272,9 @@ function setOverlayFullscreen(fullscreen) {
 }
 
 function updateSettings(patch) {
+  const updateBounds = settingsPatchChangesOverlayGeometry(patch)
   settings = sanitizeSettings({ ...settings, ...patch })
-  applyOverlayWindow()
+  applyOverlayWindow({ updateBounds })
   emitState()
   setTrayMenu()
   saveSettings()
