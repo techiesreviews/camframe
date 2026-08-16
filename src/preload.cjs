@@ -3,6 +3,12 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('camFrame', {
   getState: () => ipcRenderer.invoke('state:get'),
   updateState: (patch) => ipcRenderer.send('state:update', patch),
+  savePreset: (name, id) => ipcRenderer.send('preset:save', name, id),
+  applyPreset: (id) => ipcRenderer.send('preset:apply', id),
+  deletePreset: (id) => ipcRenderer.send('preset:delete', id),
+  reorderPreset: (id, direction) => ipcRenderer.send('preset:reorder', id, direction),
+  exportPresets: () => ipcRenderer.invoke('preset:export'),
+  importPresets: () => ipcRenderer.invoke('preset:import'),
   onStateChanged: (callback) => {
     const listener = (_event, state) => callback(state)
     ipcRenderer.on('state:changed', listener)
@@ -37,6 +43,11 @@ contextBridge.exposeInMainWorld('camFrame', {
     const listener = () => callback()
     ipcRenderer.on('controls:show', listener)
     return () => ipcRenderer.removeListener('controls:show', listener)
+  },
+  onPresentationNotice: (callback) => {
+    const listener = (_event, message) => callback(message)
+    ipcRenderer.on('presentation:notice', listener)
+    return () => ipcRenderer.removeListener('presentation:notice', listener)
   },
   showController: () => ipcRenderer.send('controller:show'),
   centerOverlay: () => ipcRenderer.send('overlay:center'),

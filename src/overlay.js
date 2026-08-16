@@ -12,21 +12,50 @@ const overlay = document.querySelector('#overlay')
 const cameraSurface = document.querySelector('#camera-surface')
 const hoverToolbar = document.querySelector('#hover-toolbar')
 const inlineSettings = document.querySelector('#inline-settings')
+const settingsTabs = document.querySelectorAll('#inline-settings [data-settings-tab]')
 const cameraSelect = document.querySelector('#overlay-camera-select')
+const presetName = document.querySelector('#overlay-preset-name')
+const savePresetButton = document.querySelector('#overlay-save-preset')
+const presetSelect = document.querySelector('#overlay-preset-select')
+const deletePresetButton = document.querySelector('#overlay-delete-preset')
+const movePresetUpButton = document.querySelector('#overlay-move-preset-up')
+const movePresetDownButton = document.querySelector('#overlay-move-preset-down')
+const importPresetsButton = document.querySelector('#overlay-import-presets')
+const exportPresetsButton = document.querySelector('#overlay-export-presets')
+const sceneMessage = document.querySelector('#overlay-scene-message')
 const sizeRange = document.querySelector('#overlay-size-range')
 const sizeOutput = document.querySelector('#overlay-size-output')
 const overlayResolutionSelect = document.querySelector('#overlay-resolution-select')
 const fullscreenResolutionSelect = document.querySelector('#fullscreen-resolution-select')
+const effectSelect = document.querySelector('#overlay-effect-select')
+const effectColorField = document.querySelector('#overlay-effect-color-field')
+const effectColor = document.querySelector('#overlay-effect-color')
+const effectColorSwatches = document.querySelectorAll('[data-effect-color]')
+const glowControls = document.querySelector('#overlay-glow-controls')
+const glowStrength = document.querySelector('#overlay-glow-strength')
+const glowStrengthOutput = document.querySelector('#overlay-glow-strength-output')
+const glowSpread = document.querySelector('#overlay-glow-spread')
+const glowSpreadOutput = document.querySelector('#overlay-glow-spread-output')
+const blurControls = document.querySelector('#overlay-blur-controls')
+const blurAmount = document.querySelector('#overlay-blur-amount')
+const blurAmountOutput = document.querySelector('#overlay-blur-amount-output')
+const blurOpacity = document.querySelector('#overlay-blur-opacity')
+const blurOpacityOutput = document.querySelector('#overlay-blur-opacity-output')
 const frameRange = document.querySelector('#overlay-frame-range')
 const frameOutput = document.querySelector('#overlay-frame-output')
+const mirrorToggle = document.querySelector('#overlay-mirror-toggle')
 const topToggle = document.querySelector('#overlay-top-toggle')
+const launchToggle = document.querySelector('#overlay-launch-toggle')
+const presentationToast = document.querySelector('#presentation-toast')
 const fullscreenButton = document.querySelector('#fullscreen-button')
 const positionButton = document.querySelector('#position-button')
 const video = document.querySelector('#camera')
+const effectVideo = document.querySelector('#effect-camera')
 const cameraState = document.querySelector('#camera-state')
 const cameraStateLabel = document.querySelector('#camera-state-label')
 const isQaPreview = !window.camFrame
 let qaFullscreenListener
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
 const camFrame = window.camFrame ?? {
   getState: async () => ({
     cameraId: '',
@@ -34,14 +63,27 @@ const camFrame = window.camFrame ?? {
     size: 288,
     overlayResolution: '720p',
     fullscreenResolution: '2160p',
+    frameEffect: 'none',
+    effectColor: '#fb923c',
+    glowStrength: 90,
+    glowSpread: 13,
+    blurAmount: 12,
+    blurOpacity: 72,
     borderWidth: 0,
     borderColor: '#ffffff',
     mirror: true,
     cameraPosition: { x: 50, y: 50 },
     alwaysOnTop: true,
     overlayVisible: true,
+    presets: [],
   }),
   updateState: (patch) => applyState({ ...state, ...patch }),
+  savePreset: () => {},
+  applyPreset: () => {},
+  deletePreset: () => {},
+  reorderPreset: () => {},
+  exportPresets: async () => ({ canceled: false, count: 0 }),
+  importPresets: async () => ({ canceled: false, count: 0 }),
   onStateChanged: () => {},
   reportDevices: () => {},
   reportCameraError: () => {},
@@ -57,6 +99,7 @@ const camFrame = window.camFrame ?? {
     qaFullscreenListener = callback
   },
   onShowControls: () => {},
+  onPresentationNotice: () => {},
   quit: () => {},
 }
 
@@ -65,6 +108,7 @@ let activeCameraId
 let startRequest = 0
 let deviceRequest = 0
 let state
+let selectedPresetId = ''
 let cameraStateInitialized = false
 let hoverTimer
 let controlsOpen = false
@@ -75,6 +119,27 @@ let positioning = false
 let cameraReposition
 let resizing = false
 let cameraQualityUpdates = Promise.resolve()
+let presentationToastTimer
+
+function selectSettingsPanel(panel) {
+  inlineSettings.dataset.activePanel = panel
+  settingsTabs.forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.settingsTab === panel))
+  })
+}
+
+function showPresentationNotice(message) {
+  clearTimeout(presentationToastTimer)
+  presentationToast.textContent = message
+  presentationToast.hidden = false
+  presentationToastTimer = setTimeout(() => {
+    presentationToast.hidden = true
+  }, 1600)
+}
+
+settingsTabs.forEach((button) => {
+  button.addEventListener('click', () => selectSettingsPanel(button.dataset.settingsTab))
+})
 
 function queueCameraQualityUpdate(nextFullscreen = fullscreen) {
   if (isQaPreview) return
@@ -93,6 +158,22 @@ function showCameraState(message) {
 
 function hideCameraState() {
   cameraState.hidden = true
+}
+
+async function syncEffectVideo() {
+  const shouldShowCameraHalo = state?.frameEffect === 'blur' && activeStream
+  if (!shouldShowCameraHalo) {
+    effectVideo.pause()
+    effectVideo.srcObject = null
+    return
+  }
+
+  if (effectVideo.srcObject !== activeStream) effectVideo.srcObject = activeStream
+  try {
+    await effectVideo.play()
+  } catch {
+    // The primary camera video owns playback; a later state update can retry the halo.
+  }
 }
 
 async function reportDevices() {
@@ -130,6 +211,31 @@ function renderDevices(cameras) {
   }
 }
 
+function renderPresets() {
+  const previousPresetId = selectedPresetId
+  if (state.presets.some((preset) => preset.id === state.activePresetId)) {
+    selectedPresetId = state.activePresetId
+  } else if (!state.presets.some((preset) => preset.id === selectedPresetId)) {
+    selectedPresetId = ''
+  }
+  presetSelect.replaceChildren(
+    new Option(state.presets.length ? 'New scene…' : 'No saved scenes', ''),
+  )
+  state.presets.forEach((preset, index) => {
+    presetSelect.add(new Option(`${index + 1}. ${preset.name}`, preset.id))
+  })
+  presetSelect.value = selectedPresetId
+  const selectedIndex = state.presets.findIndex((preset) => preset.id === selectedPresetId)
+  deletePresetButton.disabled = selectedIndex < 0
+  movePresetUpButton.disabled = selectedIndex <= 0
+  movePresetDownButton.disabled = selectedIndex < 0 || selectedIndex >= state.presets.length - 1
+  savePresetButton.textContent = selectedPresetId ? 'Update' : 'Save'
+  if (previousPresetId !== selectedPresetId) {
+    presetName.value = state.presets[selectedIndex]?.name ?? ''
+    savePresetButton.disabled = !presetName.value.trim()
+  }
+}
+
 async function startCamera(cameraId = '') {
   if (isQaPreview) {
     hideCameraState()
@@ -149,6 +255,7 @@ async function startCamera(cameraId = '') {
     activeStream = undefined
     activeCameraId = undefined
     video.srcObject = null
+    effectVideo.srcObject = null
   }
 
   try {
@@ -180,6 +287,7 @@ async function startCamera(cameraId = '') {
     const [track] = nextStream.getVideoTracks()
     configureCameraTrack(track)
     await video.play()
+    await syncEffectVideo()
     await reportDevices()
     hideCameraState()
   } catch (error) {
@@ -201,6 +309,7 @@ async function startCamera(cameraId = '') {
 
 function applyState(nextState) {
   const cameraChanged = !cameraStateInitialized || state?.cameraId !== nextState.cameraId
+  const effectChanged = cameraStateInitialized && state?.frameEffect !== nextState.frameEffect
   const qualityChanged =
     cameraStateInitialized &&
     (state?.overlayResolution !== nextState.overlayResolution ||
@@ -211,6 +320,7 @@ function applyState(nextState) {
   const cameraWidthValue = `${Math.round(cameraWidth)}px`
   const cameraHeightValue = `${Math.round(cameraHeight)}px`
   overlay.dataset.shape = state.shape
+  overlay.dataset.effect = state.frameEffect
   overlay.style.setProperty('--camera-width', cameraWidthValue)
   overlay.style.setProperty('--camera-height', cameraHeightValue)
   document.documentElement.style.setProperty('--camera-width', cameraWidthValue)
@@ -218,23 +328,52 @@ function applyState(nextState) {
   overlay.style.setProperty('--corner-scale-x', String(cameraWidth / cameraHeight))
   overlay.style.setProperty('--frame-width', `${state.borderWidth}px`)
   overlay.style.setProperty('--frame-color', state.borderColor)
+  overlay.style.setProperty('--effect-color', state.effectColor)
+  overlay.style.setProperty('--effect-glow-near', `${Math.max(1, Math.round(state.glowSpread * 0.4))}px`)
+  overlay.style.setProperty('--effect-glow-far', `${state.glowSpread}px`)
+  overlay.style.setProperty('--effect-glow-opacity', String(state.glowStrength / 100))
+  overlay.style.setProperty('--effect-blur-radius', `${state.blurAmount}px`)
+  overlay.style.setProperty('--effect-blur-opacity', String(state.blurOpacity / 100))
   video.style.transform = state.mirror ? 'scaleX(-1)' : 'none'
   video.style.objectPosition = `${state.cameraPosition.x}% ${state.cameraPosition.y}%`
-  document.querySelector('#mirror-button').classList.toggle('selected', state.mirror)
+  effectVideo.style.transform = state.mirror ? 'scaleX(-1)' : 'none'
+  effectVideo.style.objectPosition = `${state.cameraPosition.x}% ${state.cameraPosition.y}%`
+  mirrorToggle.checked = state.mirror
   sizeRange.value = String(state.size)
   sizeOutput.textContent = `${state.size} px`
   overlayResolutionSelect.value = state.overlayResolution
   fullscreenResolutionSelect.value = state.fullscreenResolution
+  effectSelect.value = state.frameEffect
+  effectColor.value = state.effectColor.toUpperCase()
+  effectColorSwatches.forEach((swatch) => {
+    swatch.setAttribute('aria-pressed', String(swatch.dataset.effectColor === state.effectColor))
+  })
+  effectColorField.hidden = state.frameEffect !== 'glow'
+  glowControls.hidden = state.frameEffect !== 'glow'
+  glowStrength.value = String(state.glowStrength)
+  glowStrengthOutput.textContent = `${state.glowStrength}%`
+  glowSpread.value = String(state.glowSpread)
+  glowSpreadOutput.textContent = `${state.glowSpread} px`
+  blurControls.hidden = state.frameEffect !== 'blur'
+  blurAmount.value = String(state.blurAmount)
+  blurAmountOutput.textContent = `${state.blurAmount} px`
+  blurOpacity.value = String(state.blurOpacity)
+  blurOpacityOutput.textContent = `${state.blurOpacity}%`
   frameRange.value = String(state.borderWidth)
   frameOutput.textContent = `${state.borderWidth} px`
   topToggle.checked = state.alwaysOnTop
+  launchToggle.checked = state.launchAtLogin
+  renderPresets()
   if (state.cameraId && [...cameraSelect.options].some((option) => option.value === state.cameraId)) {
     cameraSelect.value = state.cameraId
   }
   if (cameraChanged) {
     cameraStateInitialized = true
     startCamera(state.cameraId)
-  } else if (qualityChanged) queueCameraQualityUpdate(fullscreen)
+  } else {
+    if (qualityChanged) queueCameraQualityUpdate(fullscreen)
+    if (effectChanged) syncEffectVideo()
+  }
 }
 
 function applyFullscreen(nextFullscreen) {
@@ -388,10 +527,6 @@ document.querySelector('#shape-button').addEventListener('click', () => {
   camFrame.updateState({ shape: shapes[(shapes.indexOf(state.shape) + 1) % shapes.length] })
 })
 
-document.querySelector('#mirror-button').addEventListener('click', () => {
-  camFrame.updateState({ mirror: !state.mirror })
-})
-
 positionButton.addEventListener('click', () => {
   setPositioning(!positioning)
 })
@@ -431,6 +566,66 @@ cameraSelect.addEventListener('change', () => {
   camFrame.updateState({ cameraId: cameraSelect.value, cameraLabel: option.textContent })
 })
 
+presetName.addEventListener('input', () => {
+  savePresetButton.disabled = !presetName.value.trim()
+})
+
+savePresetButton.addEventListener('click', () => {
+  const name = presetName.value.trim()
+  if (!name) return
+  camFrame.savePreset(name, selectedPresetId)
+  if (!selectedPresetId) {
+    presetName.value = ''
+    savePresetButton.disabled = true
+  }
+  setControlsOpen(false)
+})
+
+presetName.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !savePresetButton.disabled) savePresetButton.click()
+})
+
+presetSelect.addEventListener('change', () => {
+  selectedPresetId = presetSelect.value
+  const selected = state.presets.find((preset) => preset.id === selectedPresetId)
+  presetName.value = selected?.name ?? ''
+  savePresetButton.textContent = selected ? 'Update' : 'Save'
+  savePresetButton.disabled = !presetName.value.trim()
+  const selectedIndex = state.presets.findIndex((preset) => preset.id === selectedPresetId)
+  deletePresetButton.disabled = selectedIndex < 0
+  movePresetUpButton.disabled = selectedIndex <= 0
+  movePresetDownButton.disabled = selectedIndex < 0 || selectedIndex >= state.presets.length - 1
+  if (selectedPresetId) {
+    camFrame.applyPreset(selectedPresetId)
+    setControlsOpen(false)
+  }
+})
+
+movePresetUpButton.addEventListener('click', () => {
+  if (selectedPresetId) camFrame.reorderPreset(selectedPresetId, -1)
+})
+
+movePresetDownButton.addEventListener('click', () => {
+  if (selectedPresetId) camFrame.reorderPreset(selectedPresetId, 1)
+})
+
+importPresetsButton.addEventListener('click', async () => {
+  const result = await camFrame.importPresets()
+  sceneMessage.textContent = result.error ?? (result.canceled ? '' : `${result.count} imported`)
+})
+
+exportPresetsButton.addEventListener('click', async () => {
+  const result = await camFrame.exportPresets()
+  sceneMessage.textContent = result.error ?? (result.canceled ? '' : `${result.count} exported`)
+})
+
+deletePresetButton.addEventListener('click', () => {
+  if (!selectedPresetId) return
+  camFrame.deletePreset(selectedPresetId)
+  selectedPresetId = ''
+  setControlsOpen(false)
+})
+
 sizeRange.addEventListener('input', () => {
   sizeOutput.textContent = `${sizeRange.value} px`
   camFrame.updateState({ size: Number(sizeRange.value) })
@@ -444,13 +639,53 @@ fullscreenResolutionSelect.addEventListener('change', () => {
   camFrame.updateState({ fullscreenResolution: fullscreenResolutionSelect.value })
 })
 
+effectSelect.addEventListener('change', () => {
+  camFrame.updateState({ frameEffect: effectSelect.value })
+})
+
+effectColor.addEventListener('input', () => {
+  if (HEX_COLOR_PATTERN.test(effectColor.value)) {
+    camFrame.updateState({ effectColor: effectColor.value.toLowerCase() })
+  }
+})
+
+effectColor.addEventListener('blur', () => {
+  if (!HEX_COLOR_PATTERN.test(effectColor.value)) effectColor.value = state.effectColor.toUpperCase()
+})
+
+effectColorSwatches.forEach((swatch) => {
+  swatch.addEventListener('click', () => {
+    camFrame.updateState({ effectColor: swatch.dataset.effectColor })
+  })
+})
+
+function bindEffectRange(input, output, key, suffix) {
+  input.addEventListener('input', () => {
+    output.textContent = `${input.value}${suffix}`
+    camFrame.updateState({ [key]: Number(input.value) })
+  })
+}
+
+bindEffectRange(glowStrength, glowStrengthOutput, 'glowStrength', '%')
+bindEffectRange(glowSpread, glowSpreadOutput, 'glowSpread', ' px')
+bindEffectRange(blurAmount, blurAmountOutput, 'blurAmount', ' px')
+bindEffectRange(blurOpacity, blurOpacityOutput, 'blurOpacity', '%')
+
 frameRange.addEventListener('input', () => {
   frameOutput.textContent = `${frameRange.value} px`
   camFrame.updateState({ borderWidth: Number(frameRange.value) })
 })
 
+mirrorToggle.addEventListener('change', () => {
+  camFrame.updateState({ mirror: mirrorToggle.checked })
+})
+
 topToggle.addEventListener('change', () => {
   camFrame.updateState({ alwaysOnTop: topToggle.checked })
+})
+
+launchToggle.addEventListener('change', () => {
+  camFrame.updateState({ launchAtLogin: launchToggle.checked })
 })
 
 camFrame.onShowControls(() => {
@@ -480,8 +715,11 @@ window.addEventListener('keydown', (event) => {
   camFrame.exitFullscreen()
 })
 
+camFrame.onPresentationNotice(showPresentationNotice)
+
 if (!isQaPreview) navigator.mediaDevices.addEventListener('devicechange', reportDevices)
 window.addEventListener('beforeunload', () => {
   camFrame.stopOverlayDrag()
+  effectVideo.srcObject = null
   activeStream?.getTracks().forEach((track) => track.stop())
 })

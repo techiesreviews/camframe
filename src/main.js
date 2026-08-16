@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
@@ -17,8 +18,12 @@ import {
   dimensionsFor,
   overlayDimensionsFor,
   OVERLAY_CHROME,
+  mergePresets,
+  reorderPresets,
   resizeOverlayFromCorner,
   sanitizeSettings,
+  settingsForPreset,
+  settingsWithLivePosition,
   settingsPatchChangesOverlayGeometry,
   startupSettings,
 } from './settings.js'
@@ -48,6 +53,7 @@ let overlayFullscreen = false
 let overlayNormalBounds
 let overlayBoundsAnimation
 let overlayTransitioning = false
+let activePresetId = ''
 
 const FULLSCREEN_ANIMATION_MS = 280
 
@@ -72,8 +78,18 @@ function saveSettings() {
 }
 
 function emitState() {
-  controlWindow?.webContents.send('state:changed', settings)
-  overlayWindow?.webContents.send('state:changed', settings)
+  const state = { ...settings, activePresetId }
+  controlWindow?.webContents.send('state:changed', state)
+  overlayWindow?.webContents.send('state:changed', state)
+}
+
+function showPresentationNotice(message) {
+  overlayWindow?.webContents.send('presentation:notice', String(message).slice(0, 80))
+}
+
+function applyLaunchAtLoginSetting() {
+  if (!app.isPackaged) return
+  app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
 }
 
 function overlayBounds({ keepCenter = true } = {}) {
@@ -273,10 +289,137 @@ function setOverlayFullscreen(fullscreen) {
 
 function updateSettings(patch) {
   const updateBounds = settingsPatchChangesOverlayGeometry(patch)
+  activePresetId = ''
   settings = sanitizeSettings({ ...settings, ...patch })
+  if (Object.hasOwn(patch, 'launchAtLogin')) applyLaunchAtLoginSetting()
   applyOverlayWindow({ updateBounds })
   emitState()
   setTrayMenu()
+  saveSettings()
+}
+
+function savePreset(nameInput, idInput = '') {
+  const name = String(nameInput ?? '').trim().slice(0, 40)
+  if (!name) return
+
+  settings = settingsWithLivePosition(settings, overlayWindow?.getBounds(), overlayFullscreen)
+
+  const requestedId = String(idInput ?? '')
+  const existing =
+    settings.presets.find((preset) => preset.id === requestedId) ??
+    settings.presets.find(
+      (preset) => preset.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+    )
+  const preset = {
+    id: existing?.id ?? `preset-${Date.now().toString(36)}`,
+    name,
+    settings: settingsForPreset(settings),
+  }
+  const existingIndex = settings.presets.findIndex((candidate) => candidate.id === preset.id)
+  const presets =
+    existingIndex >= 0
+      ? settings.presets.map((candidate, index) => (index === existingIndex ? preset : candidate))
+      : [...settings.presets.slice(-5), preset]
+  settings = sanitizeSettings({ ...settings, presets })
+  activePresetId = preset.id
+  emitState()
+  setTrayMenu()
+  showPresentationNotice(`${name} saved`)
+  saveSettings()
+}
+
+function reorderPreset(idInput, directionInput) {
+  const id = String(idInput ?? '')
+  const direction = Number(directionInput)
+  const presets = reorderPresets(settings.presets, id, direction)
+  if (presets.every((preset, index) => preset.id === settings.presets[index]?.id)) return
+  settings = sanitizeSettings({ ...settings, presets })
+  emitState()
+  setTrayMenu()
+  saveSettings()
+}
+
+async function exportPresets() {
+  const result = await dialog.showSaveDialog({
+    title: 'Export CamFrame scenes',
+    defaultPath: 'CamFrame-scenes.json',
+    filters: [{ name: 'CamFrame scenes', extensions: ['json'] }],
+  })
+  if (result.canceled || !result.filePath) return { canceled: true }
+  const payload = { format: 'camframe-scenes', version: 1, scenes: settings.presets }
+  writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf8')
+  showPresentationNotice('Scenes exported')
+  return { canceled: false, count: settings.presets.length }
+}
+
+async function importPresets() {
+  const result = await dialog.showOpenDialog({
+    title: 'Import CamFrame scenes',
+    properties: ['openFile'],
+    filters: [{ name: 'CamFrame scenes', extensions: ['json'] }],
+  })
+  if (result.canceled || !result.filePaths[0]) return { canceled: true }
+
+  try {
+    const payload = JSON.parse(readFileSync(result.filePaths[0], 'utf8'))
+    const source = Array.isArray(payload) ? payload : (payload.scenes ?? payload.presets)
+    const imported = sanitizeSettings({ presets: source }).presets
+    if (!imported.length) return { canceled: false, error: 'No valid scenes found.' }
+    const presets = mergePresets(settings.presets, imported)
+    settings = sanitizeSettings({ ...settings, presets })
+    emitState()
+    setTrayMenu()
+    saveSettings()
+    showPresentationNotice(`${imported.length} scene${imported.length === 1 ? '' : 's'} imported`)
+    return { canceled: false, count: imported.length }
+  } catch {
+    return { canceled: false, error: 'That file is not a valid CamFrame scene export.' }
+  }
+}
+
+function applyPreset(idInput) {
+  const id = String(idInput ?? '')
+  const preset = settings.presets.find((candidate) => candidate.id === id)
+  if (!preset) return
+
+  settings = sanitizeSettings({ ...settings, ...preset.settings, presets: settings.presets })
+  activePresetId = preset.id
+  const animateScene =
+    overlayWindow && !overlayWindow.isDestroyed() && !overlayFullscreen && settings.overlayVisible
+  if (animateScene) {
+    const targetBounds = overlayBounds({ keepCenter: false })
+    overlayWindow.setAlwaysOnTop(settings.alwaysOnTop, alwaysOnTopLevel)
+    overlayWindow.showInactive()
+    emitState()
+    animateOverlayBounds(targetBounds)
+  } else {
+    applyOverlayWindow({ keepCenter: false })
+    emitState()
+  }
+  setTrayMenu()
+  showPresentationNotice(preset.name)
+  saveSettings()
+}
+
+function cyclePreset() {
+  if (!settings.presets.length) {
+    showPresentationNotice('No saved scenes')
+    return
+  }
+  const currentIndex = settings.presets.findIndex((preset) => preset.id === activePresetId)
+  const nextPreset = settings.presets[(currentIndex + 1) % settings.presets.length]
+  applyPreset(nextPreset.id)
+}
+
+function deletePreset(idInput) {
+  const id = String(idInput ?? '')
+  const presets = settings.presets.filter((preset) => preset.id !== id)
+  if (presets.length === settings.presets.length) return
+  settings = sanitizeSettings({ ...settings, presets })
+  if (activePresetId === id) activePresetId = ''
+  emitState()
+  setTrayMenu()
+  showPresentationNotice('Scene deleted')
   saveSettings()
 }
 
@@ -397,6 +540,14 @@ function createTray() {
 
 function setTrayMenu() {
   if (!tray) return
+  const presetMenu = settings.presets.length
+    ? settings.presets.map((preset) => ({
+        label: preset.name,
+        type: 'radio',
+        checked: preset.id === activePresetId,
+        click: () => applyPreset(preset.id),
+      }))
+    : [{ label: 'No saved scenes', enabled: false }]
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open controls', click: showController },
@@ -406,6 +557,7 @@ function setTrayMenu() {
         checked: settings.overlayVisible,
         click: (item) => updateSettings({ overlayVisible: item.checked }),
       },
+      { label: 'Scenes', submenu: presetMenu },
       { type: 'separator' },
       {
         label: 'Quit CamFrame',
@@ -419,8 +571,14 @@ function setTrayMenu() {
 }
 
 function registerIpc() {
-  ipcMain.handle('state:get', () => settings)
+  ipcMain.handle('state:get', () => ({ ...settings, activePresetId }))
   ipcMain.on('state:update', (_event, patch) => updateSettings(patch))
+  ipcMain.on('preset:save', (_event, name, id) => savePreset(name, id))
+  ipcMain.on('preset:apply', (_event, id) => applyPreset(id))
+  ipcMain.on('preset:delete', (_event, id) => deletePreset(id))
+  ipcMain.on('preset:reorder', (_event, id, direction) => reorderPreset(id, direction))
+  ipcMain.handle('preset:export', exportPresets)
+  ipcMain.handle('preset:import', importPresets)
   ipcMain.on('overlay:devices', (_event, nextDevices) => {
     devices = Array.isArray(nextDevices)
       ? nextDevices.slice(0, 32).map(({ deviceId, label }) => ({
@@ -467,6 +625,7 @@ function registerIpc() {
 app.whenReady().then(() => {
   app.dock?.hide()
   loadSettings()
+  applyLaunchAtLoginSetting()
   registerIpc()
 
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
@@ -480,6 +639,19 @@ app.whenReady().then(() => {
   createTray()
 
   globalShortcut.register('CommandOrControl+Shift+C', showController)
+  globalShortcut.register('CommandOrControl+Shift+H', () => {
+    updateSettings({ overlayVisible: !settings.overlayVisible })
+  })
+  globalShortcut.register('CommandOrControl+Shift+F', () => {
+    setOverlayFullscreen(!overlayFullscreen)
+  })
+  globalShortcut.register('CommandOrControl+Shift+P', cyclePreset)
+  for (let index = 0; index < 6; index += 1) {
+    globalShortcut.register(`CommandOrControl+Shift+${index + 1}`, () => {
+      const preset = settings.presets[index]
+      if (preset) applyPreset(preset.id)
+    })
+  }
 })
 
 app.on('before-quit', () => {

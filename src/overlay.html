@@ -19,9 +19,6 @@
         <button type="button" id="shape-button" aria-label="Change camera shape" title="Change camera shape">
           <i class="ph ph-circle" aria-hidden="true"></i>
         </button>
-        <button type="button" class="selected" id="mirror-button" aria-label="Mirror camera" title="Mirror camera">
-          <i class="ph ph-arrows-clockwise" aria-hidden="true"></i>
-        </button>
         <button type="button" id="position-button" aria-label="Position camera in frame" aria-pressed="false" title="Position camera in frame">
           <i class="ph ph-crosshair" aria-hidden="true"></i>
         </button>
@@ -30,18 +27,19 @@
         </button>
       </nav>
 
-      <section class="inline-settings" id="inline-settings" aria-label="Camera settings" hidden>
-        <div class="inline-setting">
+      <section class="inline-settings" id="inline-settings" aria-label="Camera settings" data-active-panel="camera" hidden>
+        <div class="settings-tabs" role="group" aria-label="Settings section">
+          <button type="button" data-settings-tab="camera" aria-pressed="true">Camera</button>
+          <button type="button" data-settings-tab="appearance" aria-pressed="false">Style</button>
+          <button type="button" data-settings-tab="presets" aria-pressed="false">Scenes</button>
+        </div>
+        <div class="inline-setting" data-settings-panel="camera">
           <label for="overlay-camera-select">Camera</label>
           <select id="overlay-camera-select" name="camera">
             <option value="">Finding cameras...</option>
           </select>
         </div>
-        <div class="inline-setting inline-range">
-          <div><label for="overlay-size-range">Size</label><output id="overlay-size-output">288 px</output></div>
-          <input id="overlay-size-range" name="size" type="range" min="180" max="640" step="4" value="288" />
-        </div>
-        <fieldset class="inline-setting inline-resolution-setting">
+        <fieldset class="inline-setting inline-resolution-setting" data-settings-panel="camera">
           <legend>Camera resolution</legend>
           <div class="inline-resolution-grid">
             <label for="overlay-resolution-select">
@@ -64,15 +62,110 @@
             </label>
           </div>
         </fieldset>
-        <div class="inline-setting inline-range">
+        <div class="inline-setting preset-manager" data-settings-panel="presets">
+          <label for="overlay-preset-name">Save current scene</label>
+          <div class="preset-save-row">
+            <input id="overlay-preset-name" name="preset-name" type="text" maxlength="40" autocomplete="off" placeholder="Scene name" />
+            <button type="button" id="overlay-save-preset" disabled>Save</button>
+          </div>
+          <select id="overlay-preset-select" name="preset" aria-label="Load saved scene">
+            <option value="">No saved scenes</option>
+          </select>
+          <details class="scene-manager">
+            <summary>Manage scenes</summary>
+            <div class="scene-order-row">
+              <button type="button" id="overlay-move-preset-up" disabled>Move up</button>
+              <button type="button" id="overlay-move-preset-down" disabled>Move down</button>
+              <button type="button" id="overlay-delete-preset" disabled>Delete</button>
+            </div>
+            <div class="scene-file-row">
+              <button type="button" id="overlay-import-presets">Import</button>
+              <button type="button" id="overlay-export-presets">Export</button>
+            </div>
+            <p class="scene-message" id="overlay-scene-message" aria-live="polite"></p>
+          </details>
+        </div>
+        <div class="inline-presentation" data-settings-panel="presets">
+          <label class="inline-toggle" for="overlay-launch-toggle">
+            <span>Start at login</span>
+            <input id="overlay-launch-toggle" name="launch-at-login" type="checkbox" />
+          </label>
+          <div class="shortcut-list" aria-label="Presentation shortcuts">
+            <div><span>Show or hide</span><kbd>Ctrl/Cmd Shift H</kbd></div>
+            <div><span>Full screen</span><kbd>Ctrl/Cmd Shift F</kbd></div>
+            <div><span>Next scene</span><kbd>Ctrl/Cmd Shift P</kbd></div>
+            <div><span>Scene 1–6</span><kbd>Ctrl/Cmd Shift 1–6</kbd></div>
+          </div>
+        </div>
+        <div class="inline-setting inline-range" data-settings-panel="camera">
+          <div><label for="overlay-size-range">Size</label><output id="overlay-size-output">288 px</output></div>
+          <input id="overlay-size-range" name="size" type="range" min="180" max="640" step="4" value="288" />
+        </div>
+        <div class="inline-setting" data-settings-panel="appearance">
+          <label for="overlay-effect-select">Frame effect</label>
+          <select id="overlay-effect-select" name="frame-effect">
+            <option value="none">None</option>
+            <option value="glow">Glow</option>
+            <option value="blur">Progressive blur</option>
+          </select>
+        </div>
+        <div class="inline-effect-color" id="overlay-effect-color-field" data-settings-panel="appearance" hidden>
+          <label for="overlay-effect-color">Effect color</label>
+          <div class="inline-effect-color-controls">
+            <input id="overlay-effect-color" name="effect-color" type="text" value="#fb923c" maxlength="7" autocomplete="off" spellcheck="false" />
+            <div class="effect-color-swatches" role="group" aria-label="Effect color presets">
+              <button type="button" data-effect-color="#fb923c" aria-label="Orange"></button>
+              <button type="button" data-effect-color="#22d3ee" aria-label="Cyan"></button>
+              <button type="button" data-effect-color="#8b5cf6" aria-label="Violet"></button>
+              <button type="button" data-effect-color="#ec4899" aria-label="Pink"></button>
+              <button type="button" data-effect-color="#22c55e" aria-label="Green"></button>
+              <button type="button" data-effect-color="#ffffff" aria-label="White"></button>
+            </div>
+          </div>
+        </div>
+        <div class="inline-effect-tuning" id="overlay-glow-controls" data-settings-panel="appearance" hidden>
+          <div class="inline-setting inline-range">
+            <div><label for="overlay-glow-strength">Glow strength</label><output id="overlay-glow-strength-output">90%</output></div>
+            <input id="overlay-glow-strength" name="glow-strength" type="range" min="10" max="100" step="1" value="90" />
+          </div>
+          <div class="inline-setting inline-range">
+            <div><label for="overlay-glow-spread">Glow spread</label><output id="overlay-glow-spread-output">13 px</output></div>
+            <input id="overlay-glow-spread" name="glow-spread" type="range" min="4" max="18" step="1" value="13" />
+          </div>
+        </div>
+        <div class="inline-effect-tuning" id="overlay-blur-controls" data-settings-panel="appearance" hidden>
+          <div class="inline-setting inline-range">
+            <div><label for="overlay-blur-amount">Blur</label><output id="overlay-blur-amount-output">12 px</output></div>
+            <input id="overlay-blur-amount" name="blur-amount" type="range" min="4" max="18" step="1" value="12" />
+          </div>
+          <div class="inline-setting inline-range">
+            <div><label for="overlay-blur-opacity">Opacity</label><output id="overlay-blur-opacity-output">72%</output></div>
+            <input id="overlay-blur-opacity" name="blur-opacity" type="range" min="10" max="100" step="1" value="72" />
+          </div>
+        </div>
+        <div class="inline-setting inline-range" data-settings-panel="appearance">
           <div><label for="overlay-frame-range">Frame</label><output id="overlay-frame-output">0 px</output></div>
           <input id="overlay-frame-range" name="frame" type="range" min="0" max="12" step="1" value="0" />
         </div>
-        <label class="inline-toggle" for="overlay-top-toggle">
-          <span>Always on top</span>
-          <input id="overlay-top-toggle" name="always-on-top" type="checkbox" checked />
-        </label>
+        <div class="inline-toggle-list" data-settings-panel="camera">
+          <label class="inline-toggle" for="overlay-mirror-toggle">
+            <span>Mirror camera</span>
+            <input id="overlay-mirror-toggle" name="mirror" type="checkbox" checked />
+          </label>
+          <label class="inline-toggle" for="overlay-top-toggle">
+            <span>Always on top</span>
+            <input id="overlay-top-toggle" name="always-on-top" type="checkbox" checked />
+          </label>
+        </div>
       </section>
+
+      <div class="presentation-toast" id="presentation-toast" role="status" aria-live="polite" hidden></div>
+
+      <div class="camera-effect-layer" id="camera-effect-layer" aria-hidden="true">
+        <div class="camera-effect-source">
+          <video id="effect-camera" autoplay muted playsinline></video>
+        </div>
+      </div>
 
       <section class="camera-surface" id="camera-surface" aria-label="Movable camera overlay">
         <video id="camera" autoplay muted playsinline aria-label="Live camera preview"></video>
