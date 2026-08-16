@@ -17,12 +17,13 @@ export const PRESET_SETTING_KEYS = Object.freeze([
   'borderWidth',
   'borderColor',
   'mirror',
+  'cameraZoom',
   'cameraPosition',
   'position',
 ])
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  schemaVersion: 10,
+  schemaVersion: 11,
   cameraId: '',
   cameraLabel: 'Default camera',
   shape: 'circle',
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   borderWidth: 0,
   borderColor: '#ffffff',
   mirror: true,
+  cameraZoom: 100,
   cameraPosition: Object.freeze({ x: 50, y: 50 }),
   alwaysOnTop: true,
   overlayVisible: true,
@@ -84,6 +86,9 @@ export function sanitizeSettings(input = {}, includePresets = true) {
   }
   if (/^#[0-9a-f]{6}$/i.test(input.borderColor ?? '')) settings.borderColor = input.borderColor
   if (typeof input.mirror === 'boolean') settings.mirror = input.mirror
+  if (Number.isFinite(input.cameraZoom)) {
+    settings.cameraZoom = Math.round(clamp(input.cameraZoom, 100, 250))
+  }
   if (input.cameraPosition) {
     if (Number.isFinite(input.cameraPosition.x)) {
       settings.cameraPosition.x = Math.round(clamp(input.cameraPosition.x, 0, 100) * 10) / 10
@@ -166,16 +171,36 @@ export function mergePresets(existingPresets, importedPresets) {
   return sanitizeSettings({ presets: next }).presets
 }
 
-export function cameraPositionAfterDrag(position, delta, surface, mirrored = false) {
+export function cameraPositionAfterDrag(
+  position,
+  delta,
+  surface,
+  mirrored = false,
+  zoom = 100,
+) {
   const width = Math.max(1, Number(surface?.width) || 1)
   const height = Math.max(1, Number(surface?.height) || 1)
+  const zoomOverflow = Number(zoom) / 100 - 1
+  const overflowScale = zoomOverflow > 0 ? zoomOverflow : 1
   return {
     x:
       Math.round(
-        clamp(position.x + ((mirrored ? delta.x : -delta.x) / width) * 100, 0, 100) * 10,
+        clamp(
+          position.x + ((mirrored ? delta.x : -delta.x) / (width * overflowScale)) * 100,
+          0,
+          100,
+        ) * 10,
       ) / 10,
-    y: Math.round(clamp(position.y - (delta.y / height) * 100, 0, 100) * 10) / 10,
+    y:
+      Math.round(clamp(position.y - (delta.y / (height * overflowScale)) * 100, 0, 100) * 10) /
+      10,
   }
+}
+
+export function cameraZoomAfterWheel(zoom, deltaY) {
+  const currentZoom = Number.isFinite(zoom) ? zoom : DEFAULT_SETTINGS.cameraZoom
+  if (!Number.isFinite(deltaY) || deltaY === 0) return currentZoom
+  return Math.round(clamp(currentZoom + (deltaY < 0 ? 5 : -5), 100, 250))
 }
 
 export function startupSettings(input = {}) {

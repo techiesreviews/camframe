@@ -10,8 +10,6 @@ const importPresetsButton = document.querySelector('#import-presets')
 const exportPresetsButton = document.querySelector('#export-presets')
 const sceneMessage = document.querySelector('#scene-message')
 const shapePreview = document.querySelector('#shape-preview')
-const sizeRange = document.querySelector('#size-range')
-const sizeOutput = document.querySelector('#size-output')
 const borderRange = document.querySelector('#border-range')
 const borderColor = document.querySelector('#border-color')
 const effectSelect = document.querySelector('#effect-select')
@@ -54,8 +52,6 @@ settingsTabs.forEach((button) => {
 
 function renderState(nextState) {
   state = nextState
-  sizeRange.value = String(state.size)
-  sizeOutput.textContent = `${state.size} px`
   borderRange.value = String(state.borderWidth)
   borderColor.value = state.borderColor
   effectSelect.value = state.frameEffect
@@ -167,11 +163,6 @@ deletePresetButton.addEventListener('click', () => {
 
 document.querySelectorAll("input[name='shape']").forEach((input) => {
   input.addEventListener('change', () => window.camFrame.updateState({ shape: input.value }))
-})
-
-sizeRange.addEventListener('input', () => {
-  sizeOutput.textContent = `${sizeRange.value} px`
-  window.camFrame.updateState({ size: Number(sizeRange.value) })
 })
 
 borderRange.addEventListener('input', () => {

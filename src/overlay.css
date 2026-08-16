@@ -203,6 +203,31 @@ button {
   cursor: grabbing;
 }
 
+.framing-support {
+  display: none;
+  min-width: 0;
+  flex: 1;
+  color: #a1a1aa;
+  font: 500 9px/12px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.framing-support strong {
+  display: block;
+  overflow: hidden;
+  color: #f4f4f5;
+  font: 600 11px/13px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.framing-support > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 video {
   width: 100%;
   height: 100%;
@@ -528,6 +553,20 @@ video {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.overlay[data-positioning='true'] .hover-toolbar {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-right: 10px;
+}
+
+.overlay[data-positioning='true'] .hover-toolbar > button:not(#position-button) {
+  display: none;
+}
+
+.overlay[data-positioning='true'] .framing-support {
+  display: block;
 }
 
 .preset-save-row,

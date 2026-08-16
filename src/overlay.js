@@ -6,7 +6,7 @@ import {
   configureCameraTrack,
 } from './cameras.js'
 import { fullscreenButtonCopy } from './fullscreen.js'
-import { cameraPositionAfterDrag } from './settings.js'
+import { cameraPositionAfterDrag, cameraZoomAfterWheel } from './settings.js'
 
 const overlay = document.querySelector('#overlay')
 const cameraSurface = document.querySelector('#camera-surface')
@@ -23,8 +23,6 @@ const movePresetDownButton = document.querySelector('#overlay-move-preset-down')
 const importPresetsButton = document.querySelector('#overlay-import-presets')
 const exportPresetsButton = document.querySelector('#overlay-export-presets')
 const sceneMessage = document.querySelector('#overlay-scene-message')
-const sizeRange = document.querySelector('#overlay-size-range')
-const sizeOutput = document.querySelector('#overlay-size-output')
 const overlayResolutionSelect = document.querySelector('#overlay-resolution-select')
 const fullscreenResolutionSelect = document.querySelector('#fullscreen-resolution-select')
 const effectSelect = document.querySelector('#overlay-effect-select')
@@ -53,6 +51,7 @@ const video = document.querySelector('#camera')
 const effectVideo = document.querySelector('#effect-camera')
 const cameraState = document.querySelector('#camera-state')
 const cameraStateLabel = document.querySelector('#camera-state-label')
+const framingZoom = document.querySelector('#framing-zoom')
 const isQaPreview = !window.camFrame
 let qaFullscreenListener
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
@@ -72,6 +71,7 @@ const camFrame = window.camFrame ?? {
     borderWidth: 0,
     borderColor: '#ffffff',
     mirror: true,
+    cameraZoom: 100,
     cameraPosition: { x: 50, y: 50 },
     alwaysOnTop: true,
     overlayVisible: true,
@@ -158,6 +158,17 @@ function showCameraState(message) {
 
 function hideCameraState() {
   cameraState.hidden = true
+}
+
+function applyCameraFraming() {
+  const cameraTransform = `${state.mirror ? 'scaleX(-1) ' : ''}scale(${state.cameraZoom / 100})`
+  const cameraOrigin = `${state.cameraPosition.x}% ${state.cameraPosition.y}%`
+  for (const camera of [video, effectVideo]) {
+    camera.style.transform = cameraTransform
+    camera.style.transformOrigin = cameraOrigin
+    camera.style.objectPosition = cameraOrigin
+  }
+  framingZoom.textContent = `${state.cameraZoom}%`
 }
 
 async function syncEffectVideo() {
@@ -334,13 +345,8 @@ function applyState(nextState) {
   overlay.style.setProperty('--effect-glow-opacity', String(state.glowStrength / 100))
   overlay.style.setProperty('--effect-blur-radius', `${state.blurAmount}px`)
   overlay.style.setProperty('--effect-blur-opacity', String(state.blurOpacity / 100))
-  video.style.transform = state.mirror ? 'scaleX(-1)' : 'none'
-  video.style.objectPosition = `${state.cameraPosition.x}% ${state.cameraPosition.y}%`
-  effectVideo.style.transform = state.mirror ? 'scaleX(-1)' : 'none'
-  effectVideo.style.objectPosition = `${state.cameraPosition.x}% ${state.cameraPosition.y}%`
+  applyCameraFraming()
   mirrorToggle.checked = state.mirror
-  sizeRange.value = String(state.size)
-  sizeOutput.textContent = `${state.size} px`
   overlayResolutionSelect.value = state.overlayResolution
   fullscreenResolutionSelect.value = state.fullscreenResolution
   effectSelect.value = state.frameEffect
@@ -426,6 +432,11 @@ function setPositioning(nextPositioning) {
   overlay.dataset.positioning = String(positioning)
   positionButton.classList.toggle('selected', positioning)
   positionButton.setAttribute('aria-pressed', String(positioning))
+  const positionButtonCopy = positioning
+    ? 'Finish framing'
+    : 'Frame camera: drag to pan, scroll to zoom'
+  positionButton.setAttribute('aria-label', positionButtonCopy)
+  positionButton.title = positionButtonCopy
   if (positioning) {
     setControlsOpen(false)
     setHovered(true)
@@ -478,8 +489,12 @@ cameraSurface.addEventListener('pointermove', (event) => {
     { x: event.clientX - cameraReposition.startX, y: event.clientY - cameraReposition.startY },
     bounds,
     state.mirror,
+    state.cameraZoom,
   )
   video.style.objectPosition = `${cameraReposition.position.x}% ${cameraReposition.position.y}%`
+  video.style.transformOrigin = `${cameraReposition.position.x}% ${cameraReposition.position.y}%`
+  effectVideo.style.objectPosition = `${cameraReposition.position.x}% ${cameraReposition.position.y}%`
+  effectVideo.style.transformOrigin = `${cameraReposition.position.x}% ${cameraReposition.position.y}%`
 })
 
 function finishCameraReposition(event) {
@@ -507,10 +522,24 @@ cameraSurface.addEventListener('pointercancel', finishCameraReposition)
 cameraSurface.addEventListener('dblclick', () => {
   if (!positioning) return
   const cameraPosition = { x: 50, y: 50 }
-  state = { ...state, cameraPosition }
-  video.style.objectPosition = '50% 50%'
-  camFrame.updateState({ cameraPosition })
+  state = { ...state, cameraPosition, cameraZoom: 100 }
+  applyCameraFraming()
+  camFrame.updateState({ cameraPosition, cameraZoom: 100 })
 })
+
+cameraSurface.addEventListener(
+  'wheel',
+  (event) => {
+    if (!positioning) return
+    event.preventDefault()
+    const cameraZoom = cameraZoomAfterWheel(state.cameraZoom, event.deltaY)
+    if (cameraZoom === state.cameraZoom) return
+    state = { ...state, cameraZoom }
+    applyCameraFraming()
+    camFrame.updateState({ cameraZoom })
+  },
+  { passive: false },
+)
 window.addEventListener('blur', stopDragging)
 
 document.querySelector('#close-button').addEventListener('click', () => {
@@ -624,11 +653,6 @@ deletePresetButton.addEventListener('click', () => {
   camFrame.deletePreset(selectedPresetId)
   selectedPresetId = ''
   setControlsOpen(false)
-})
-
-sizeRange.addEventListener('input', () => {
-  sizeOutput.textContent = `${sizeRange.value} px`
-  camFrame.updateState({ size: Number(sizeRange.value) })
 })
 
 overlayResolutionSelect.addEventListener('change', () => {

@@ -13,6 +13,7 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 - **Controller**: the separate CamFrame settings window.
 - **Inline settings**: settings opened directly over the camera overlay.
 - **Compositor mask**: the native window shape that determines which transparent overlay pixels Windows renders and accepts.
+- **Camera framing**: the zoom and crop origin of the video inside the overlay, independent from overlay size and position.
 
 ## Source map
 
