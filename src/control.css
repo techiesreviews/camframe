@@ -223,12 +223,6 @@ h2 {
   justify-content: space-between;
 }
 
-.numeric-label {
-  color: #71717a;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
 .field {
   display: grid;
   min-width: 0;

@@ -19,12 +19,16 @@
         <button type="button" id="shape-button" aria-label="Change camera shape" title="Change camera shape">
           <i class="ph ph-circle" aria-hidden="true"></i>
         </button>
-        <button type="button" id="position-button" aria-label="Position camera in frame" aria-pressed="false" title="Position camera in frame">
+        <button type="button" id="position-button" aria-label="Frame camera" aria-pressed="false" title="Frame camera: drag to pan, scroll to zoom">
           <i class="ph ph-crosshair" aria-hidden="true"></i>
         </button>
         <button type="button" id="controls-button" aria-label="Open camera controls" title="Open camera controls">
           <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>
         </button>
+        <div class="framing-support" role="status" aria-live="polite">
+          <strong>Zoom <span id="framing-zoom">100%</span></strong>
+          <span>Drag · Scroll · Double-click resets</span>
+        </div>
       </nav>
 
       <section class="inline-settings" id="inline-settings" aria-label="Camera settings" data-active-panel="camera" hidden>
@@ -96,10 +100,6 @@
             <div><span>Next scene</span><kbd>Ctrl/Cmd Shift P</kbd></div>
             <div><span>Scene 1–6</span><kbd>Ctrl/Cmd Shift 1–6</kbd></div>
           </div>
-        </div>
-        <div class="inline-setting inline-range" data-settings-panel="camera">
-          <div><label for="overlay-size-range">Size</label><output id="overlay-size-output">288 px</output></div>
-          <input id="overlay-size-range" name="size" type="range" min="180" max="640" step="4" value="288" />
         </div>
         <div class="inline-setting" data-settings-panel="appearance">
           <label for="overlay-effect-select">Frame effect</label>

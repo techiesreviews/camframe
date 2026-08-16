@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   DEFAULT_SETTINGS,
   cameraPositionAfterDrag,
+  cameraZoomAfterWheel,
   dimensionsFor,
   mergePresets,
   overlayDimensionsFor,
@@ -46,6 +47,7 @@ test('sanitizes untrusted settings and keeps safe values', () => {
     borderWidth: -4,
     borderColor: 'red',
     mirror: false,
+    cameraZoom: 999,
     cameraPosition: { x: -20, y: 138.42 },
     position: { x: 12, y: 34 },
   })
@@ -55,6 +57,7 @@ test('sanitizes untrusted settings and keeps safe values', () => {
   assert.equal(result.borderWidth, 0)
   assert.equal(result.borderColor, DEFAULT_SETTINGS.borderColor)
   assert.equal(result.mirror, false)
+  assert.equal(result.cameraZoom, 250)
   assert.deepEqual(result.cameraPosition, { x: 0, y: 100 })
   assert.deepEqual(result.position, { x: 12, y: 34 })
 })
@@ -125,6 +128,25 @@ test('camera positioning follows drag direction and respects mirroring', () => {
     x: 100,
     y: 0,
   })
+  assert.deepEqual(cameraPositionAfterDrag(center, { x: 20, y: -10 }, surface, false, 150), {
+    x: 30,
+    y: 60,
+  })
+})
+
+test('camera zoom is sanitized independently from overlay size', () => {
+  assert.equal(sanitizeSettings({ cameraZoom: 80 }).cameraZoom, 100)
+  assert.equal(sanitizeSettings({ cameraZoom: 175 }).cameraZoom, 175)
+  assert.equal(sanitizeSettings({ cameraZoom: 400 }).cameraZoom, 250)
+})
+
+test('camera wheel zoom uses stable steps and respects framing limits', () => {
+  assert.equal(cameraZoomAfterWheel(100, -120), 105)
+  assert.equal(cameraZoomAfterWheel(245, -120), 250)
+  assert.equal(cameraZoomAfterWheel(250, -120), 250)
+  assert.equal(cameraZoomAfterWheel(105, 120), 100)
+  assert.equal(cameraZoomAfterWheel(100, 120), 100)
+  assert.equal(cameraZoomAfterWheel(175, 0), 175)
 })
 
 test('corner resizing preserves aspect ratio and anchors the opposite corner', () => {
@@ -330,6 +352,7 @@ test('camera presets retain reusable settings but exclude transient window state
     frameEffect: 'glow',
     effectColor: '#22c55e',
     mirror: false,
+    cameraZoom: 175,
     cameraPosition: { x: 32, y: 68 },
     position: { x: 120, y: 80 },
     alwaysOnTop: false,
@@ -344,6 +367,7 @@ test('camera presets retain reusable settings but exclude transient window state
   assert.equal(preset.frameEffect, 'glow')
   assert.equal(preset.effectColor, '#22c55e')
   assert.equal(preset.mirror, false)
+  assert.equal(preset.cameraZoom, 175)
   assert.deepEqual(preset.cameraPosition, { x: 32, y: 68 })
   assert.deepEqual(preset.position, { x: 120, y: 80 })
   assert.equal(Object.hasOwn(preset, 'alwaysOnTop'), false)
@@ -442,6 +466,24 @@ test('settings use progressive disclosure instead of one long control stack', ()
   }
   assert.match(overlaySource, /inlineSettings\.dataset\.activePanel = panel/)
   assert.match(controlSource, /settingsRoot\.dataset\.activePanel = panel/)
+})
+
+test('smart framing uses the target tool without duplicate size or zoom controls', () => {
+  const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
+  const controlHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'control.html'), 'utf8')
+  const overlaySource = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
+
+  assert.match(overlayHtml, /id="position-button"[^>]*title="[^"]*scroll to zoom"/)
+  assert.match(overlayHtml, /class="framing-support"[^>]*aria-live="polite"/)
+  assert.match(overlayHtml, /Zoom <span id="framing-zoom">100%<\/span>/)
+  assert.match(overlayHtml, /Drag · Scroll · Double-click resets/)
+  assert.doesNotMatch(overlayHtml, /id="overlay-(?:size|zoom)-range"/)
+  assert.doesNotMatch(controlHtml, /id="(?:size|zoom)-range"/)
+  assert.match(overlaySource, /cameraSurface\.addEventListener\(\s*'wheel'/)
+  assert.match(overlaySource, /cameraZoomAfterWheel\(state\.cameraZoom, event\.deltaY\)/)
+  assert.match(overlaySource, /state\.cameraZoom \/ 100/)
+  assert.match(overlaySource, /camera\.style\.transformOrigin = cameraOrigin/)
+  assert.match(overlaySource, /camFrame\.updateState\(\{ cameraPosition, cameraZoom: 100 \}\)/)
 })
 
 test('presentation controls expose shortcuts, startup, tray presets, and notices', () => {
