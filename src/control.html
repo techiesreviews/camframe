@@ -26,13 +26,19 @@
         </div>
       </section>
 
-      <section class="settings" aria-labelledby="settings-heading">
+      <section class="settings" aria-labelledby="settings-heading" data-active-panel="camera">
         <div class="section-heading">
-          <h2 id="settings-heading">Appearance</h2>
-          <span id="size-output" class="numeric-label">320 px</span>
+          <h2 id="settings-heading">Settings</h2>
+          <span id="size-output" class="numeric-label" data-settings-panel="appearance">320 px</span>
         </div>
 
-        <div class="field">
+        <div class="settings-tabs" role="group" aria-label="Settings section">
+          <button type="button" data-settings-tab="camera" aria-pressed="true">Camera</button>
+          <button type="button" data-settings-tab="appearance" aria-pressed="false">Style</button>
+          <button type="button" data-settings-tab="presets" aria-pressed="false">Scenes</button>
+        </div>
+
+        <div class="field" data-settings-panel="camera">
           <label for="camera-select">Camera</label>
           <div class="select-wrap">
             <select id="camera-select" name="camera">
@@ -43,7 +49,47 @@
           <p id="camera-error" class="field-message" hidden></p>
         </div>
 
-        <fieldset class="field">
+        <div class="field preset-manager" data-settings-panel="presets">
+          <label for="preset-name">Save current scene</label>
+          <div class="preset-save-row">
+            <input id="preset-name" name="preset-name" type="text" maxlength="40" autocomplete="off" placeholder="Scene name" />
+            <button type="button" id="save-preset" disabled>Save</button>
+          </div>
+          <div class="select-wrap">
+            <select id="preset-select" name="preset" aria-label="Load saved scene">
+              <option value="">No saved scenes</option>
+            </select>
+            <span class="select-chevron" aria-hidden="true">⌄</span>
+          </div>
+          <details class="scene-manager">
+            <summary>Manage scenes</summary>
+            <div class="scene-order-row">
+              <button type="button" id="move-preset-up" disabled>Move up</button>
+              <button type="button" id="move-preset-down" disabled>Move down</button>
+              <button type="button" id="delete-preset" disabled>Delete</button>
+            </div>
+            <div class="scene-file-row">
+              <button type="button" id="import-presets">Import</button>
+              <button type="button" id="export-presets">Export</button>
+            </div>
+            <p class="scene-message" id="scene-message" aria-live="polite"></p>
+          </details>
+        </div>
+
+        <div class="presentation-settings" data-settings-panel="presets">
+          <label class="toggle-row" for="launch-toggle">
+            <span><strong>Start at login</strong><small>Launch CamFrame when you sign in.</small></span>
+            <span class="switch"><input id="launch-toggle" name="launch-at-login" type="checkbox" /><i></i></span>
+          </label>
+          <div class="shortcut-list" aria-label="Presentation shortcuts">
+            <div><span>Show or hide camera</span><kbd>Ctrl/Cmd Shift H</kbd></div>
+            <div><span>Enter or exit full screen</span><kbd>Ctrl/Cmd Shift F</kbd></div>
+            <div><span>Switch to next scene</span><kbd>Ctrl/Cmd Shift P</kbd></div>
+            <div><span>Switch directly to scene 1–6</span><kbd>Ctrl/Cmd Shift 1–6</kbd></div>
+          </div>
+        </div>
+
+        <fieldset class="field" data-settings-panel="appearance">
           <legend>Shape</legend>
           <div class="shape-options">
             <label><input type="radio" name="shape" value="circle" checked /><span>Circle</span></label>
@@ -53,12 +99,12 @@
           </div>
         </fieldset>
 
-        <div class="field range-field">
+        <div class="field range-field" data-settings-panel="appearance">
           <label for="size-range">Size</label>
           <input id="size-range" name="size" type="range" min="180" max="640" step="10" value="320" />
         </div>
 
-        <div class="field frame-row">
+        <div class="field frame-row" data-settings-panel="appearance">
           <div class="range-field compact">
             <label for="border-range">Frame</label>
             <input id="border-range" name="border-width" type="range" min="0" max="12" step="1" value="4" />
@@ -69,7 +115,56 @@
           </label>
         </div>
 
-        <div class="toggle-list">
+        <div class="field" data-settings-panel="appearance">
+          <label for="effect-select">Frame effect</label>
+          <div class="select-wrap">
+            <select id="effect-select" name="frame-effect">
+              <option value="none">None</option>
+              <option value="glow">Glow</option>
+              <option value="blur">Progressive blur</option>
+            </select>
+            <span class="select-chevron" aria-hidden="true">⌄</span>
+          </div>
+        </div>
+
+        <div class="effect-color-field" id="effect-color-field" data-settings-panel="appearance" hidden>
+          <label for="effect-color">Effect color</label>
+          <div class="effect-color-controls">
+            <input id="effect-color" name="effect-color" type="text" value="#fb923c" maxlength="7" autocomplete="off" spellcheck="false" />
+            <div class="effect-color-swatches" role="group" aria-label="Effect color presets">
+              <button type="button" data-effect-color="#fb923c" aria-label="Orange"></button>
+              <button type="button" data-effect-color="#22d3ee" aria-label="Cyan"></button>
+              <button type="button" data-effect-color="#8b5cf6" aria-label="Violet"></button>
+              <button type="button" data-effect-color="#ec4899" aria-label="Pink"></button>
+              <button type="button" data-effect-color="#22c55e" aria-label="Green"></button>
+              <button type="button" data-effect-color="#ffffff" aria-label="White"></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="effect-tuning" id="glow-controls" data-settings-panel="appearance" hidden>
+          <div class="range-field">
+            <div class="effect-range-label"><label for="glow-strength">Glow strength</label><output id="glow-strength-output">90%</output></div>
+            <input id="glow-strength" name="glow-strength" type="range" min="10" max="100" step="1" value="90" />
+          </div>
+          <div class="range-field">
+            <div class="effect-range-label"><label for="glow-spread">Glow spread</label><output id="glow-spread-output">13 px</output></div>
+            <input id="glow-spread" name="glow-spread" type="range" min="4" max="18" step="1" value="13" />
+          </div>
+        </div>
+
+        <div class="effect-tuning" id="blur-controls" data-settings-panel="appearance" hidden>
+          <div class="range-field">
+            <div class="effect-range-label"><label for="blur-amount">Blur</label><output id="blur-amount-output">12 px</output></div>
+            <input id="blur-amount" name="blur-amount" type="range" min="4" max="18" step="1" value="12" />
+          </div>
+          <div class="range-field">
+            <div class="effect-range-label"><label for="blur-opacity">Opacity</label><output id="blur-opacity-output">72%</output></div>
+            <input id="blur-opacity" name="blur-opacity" type="range" min="10" max="100" step="1" value="72" />
+          </div>
+        </div>
+
+        <div class="toggle-list" data-settings-panel="camera">
           <label class="toggle-row" for="mirror-toggle">
             <span><strong>Mirror camera</strong><small>Match the view you see in a mirror.</small></span>
             <span class="switch"><input id="mirror-toggle" name="mirror" type="checkbox" checked /><i></i></span>

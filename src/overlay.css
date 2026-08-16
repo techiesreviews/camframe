@@ -53,6 +53,13 @@ button {
   --target-corner-size: 28px;
   --frame-width: 0px;
   --frame-color: #ffffff;
+  --effect-color: #fb923c;
+  /* Frame effect tuning: these values can be changed without touching JavaScript. */
+  --effect-glow-near: 5px;
+  --effect-glow-far: 13px;
+  --effect-blur-radius: 12px;
+  --effect-glow-opacity: 0.9;
+  --effect-blur-opacity: 0.72;
   position: relative;
   width: 100%;
   height: 100%;
@@ -64,6 +71,7 @@ button {
   left: var(--camera-left);
   width: var(--camera-width);
   height: var(--camera-height);
+  z-index: 1;
   overflow: hidden;
   background: #18181b;
   box-shadow: inset 0 0 0 var(--frame-width) var(--frame-color);
@@ -78,6 +86,80 @@ button {
     border-radius 280ms cubic-bezier(0.65, 0, 0.35, 1),
     clip-path 280ms cubic-bezier(0.65, 0, 0.35, 1);
   -webkit-app-region: no-drag;
+}
+
+/* Effect recipes stay outside the frame because the camera surface covers their source. */
+.camera-effect-layer {
+  position: absolute;
+  top: var(--camera-top);
+  left: var(--camera-left);
+  display: none;
+  width: var(--camera-width);
+  height: var(--camera-height);
+  transition:
+    top 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    left 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    width 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    height 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    border-radius 280ms cubic-bezier(0.65, 0, 0.35, 1),
+    clip-path 280ms cubic-bezier(0.65, 0, 0.35, 1);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.camera-effect-source,
+.camera-effect-source video {
+  width: 100%;
+  height: 100%;
+}
+
+.camera-effect-source {
+  overflow: hidden;
+}
+
+.camera-effect-source video {
+  object-fit: cover;
+}
+
+.overlay:not([data-effect='none']) .camera-effect-layer {
+  display: block;
+}
+
+.overlay[data-shape='circle'] .camera-effect-source {
+  clip-path: inset(0 round 50%);
+}
+
+.overlay[data-shape='rounded'] .camera-effect-source {
+  clip-path: inset(0 round 16%);
+}
+
+.overlay[data-shape='portrait'] .camera-effect-source,
+.overlay[data-shape='landscape'] .camera-effect-source {
+  clip-path: inset(0 round 12%);
+}
+
+.overlay[data-effect='glow'] .camera-effect-layer {
+  filter:
+    drop-shadow(0 0 var(--effect-glow-near) color-mix(in srgb, var(--effect-color) 88%, transparent))
+    drop-shadow(0 0 var(--effect-glow-far) color-mix(in srgb, var(--effect-color) 58%, transparent));
+  opacity: var(--effect-glow-opacity);
+}
+
+.overlay[data-effect='glow'] .camera-effect-source {
+  background: var(--effect-color);
+}
+
+.overlay[data-effect='glow'] .camera-effect-source video {
+  opacity: 0;
+}
+
+.overlay[data-effect='blur'] .camera-effect-layer {
+  filter: blur(var(--effect-blur-radius)) saturate(1.18);
+  opacity: var(--effect-blur-opacity);
+}
+
+.overlay[data-fullscreen='true'] .camera-effect-layer {
+  display: none;
 }
 
 .camera-surface[data-dragging='true'] {
@@ -257,8 +339,8 @@ video {
   display: grid;
   width: var(--settings-width);
   max-height: calc(100% - 76px);
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   color: #e4e4e7;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 12px;
@@ -269,6 +351,45 @@ video {
 }
 
 .inline-settings[hidden] {
+  display: none;
+}
+
+.settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 5%);
+}
+
+.settings-tabs button {
+  min-width: 0;
+  height: 28px;
+  padding: 0 7px;
+  color: #71717a;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font: 600 11px/16px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  -webkit-app-region: no-drag;
+}
+
+.settings-tabs button[aria-pressed='true'] {
+  color: #fafafa;
+  background: #27272a;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 7%);
+}
+
+.settings-tabs button:focus-visible {
+  outline: 2px solid #fb923c;
+  outline-offset: 1px;
+}
+
+.inline-settings[data-active-panel='camera'] [data-settings-panel]:not([data-settings-panel='camera']),
+.inline-settings[data-active-panel='appearance'] [data-settings-panel]:not([data-settings-panel='appearance']),
+.inline-settings[data-active-panel='presets'] [data-settings-panel]:not([data-settings-panel='presets']) {
   display: none;
 }
 
@@ -309,10 +430,80 @@ video {
 
 .inline-setting > label,
 .inline-setting > div label,
-.inline-toggle {
+.inline-toggle,
+.inline-effect-color {
   color: #a1a1aa;
   font: 500 11px/16px 'Segoe UI Variable', 'Segoe UI', sans-serif;
 }
+
+.inline-effect-color {
+  display: grid;
+  gap: 6px;
+}
+
+.inline-effect-color[hidden] {
+  display: none;
+}
+
+.inline-effect-tuning {
+  display: grid;
+  gap: 10px;
+}
+
+.inline-effect-tuning[hidden] {
+  display: none;
+}
+
+.inline-effect-color-controls {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-effect-color input[type='text'] {
+  width: 68px;
+  height: 30px;
+  padding: 0 7px;
+  color: #f4f4f5;
+  border: 0;
+  border-radius: 7px;
+  outline: 1px solid rgb(255 255 255 / 12%);
+  outline-offset: -1px;
+  background: #202023;
+  font-family: ui-monospace, 'Cascadia Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.inline-effect-color .effect-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 18px);
+  justify-content: end;
+  gap: 4px;
+}
+
+.inline-effect-color .effect-color-swatches button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid #202023;
+  border-radius: 5px;
+  cursor: pointer;
+  outline: 1px solid rgb(255 255 255 / 14%);
+}
+
+.inline-effect-color .effect-color-swatches button[aria-pressed='true'] {
+  outline: 2px solid #fafafa;
+  outline-offset: 1px;
+}
+
+.effect-color-swatches [data-effect-color='#fb923c'] { background: #fb923c; }
+.effect-color-swatches [data-effect-color='#22d3ee'] { background: #22d3ee; }
+.effect-color-swatches [data-effect-color='#8b5cf6'] { background: #8b5cf6; }
+.effect-color-swatches [data-effect-color='#ec4899'] { background: #ec4899; }
+.effect-color-swatches [data-effect-color='#22c55e'] { background: #22c55e; }
+.effect-color-swatches [data-effect-color='#ffffff'] { background: #ffffff; }
 
 .inline-setting select {
   width: 100%;
@@ -337,6 +528,134 @@ video {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.preset-save-row,
+.preset-load-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.preset-manager input[type='text'] {
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  color: #f4f4f5;
+  border: 0;
+  border-radius: 7px;
+  outline: 1px solid rgb(255 255 255 / 12%);
+  outline-offset: -1px;
+  background: #202023;
+  font: 500 11px/1 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.preset-manager button {
+  height: 30px;
+  padding: 0 9px;
+  color: #d4d4d8;
+  border: 0;
+  border-radius: 7px;
+  outline: 1px solid rgb(255 255 255 / 12%);
+  outline-offset: -1px;
+  background: #202023;
+  cursor: pointer;
+  font: 600 10px/1 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.preset-manager button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.scene-manager {
+  color: #71717a;
+  font: 600 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.scene-manager summary {
+  width: max-content;
+  cursor: pointer;
+}
+
+.scene-manager[open] {
+  display: grid;
+  gap: 7px;
+}
+
+.scene-order-row,
+.scene-file-row {
+  display: grid;
+  gap: 6px;
+}
+
+.scene-order-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.scene-file-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scene-order-row button,
+.scene-file-row button {
+  width: 100%;
+  padding: 0 5px;
+}
+
+.scene-message {
+  margin: 0;
+  color: #a1a1aa;
+  font: 500 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.scene-message:empty {
+  display: none;
+}
+
+.inline-presentation {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.shortcut-list {
+  display: grid;
+  gap: 5px;
+  color: #71717a;
+  font: 500 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.shortcut-list > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.shortcut-list kbd {
+  flex: 0 0 auto;
+  padding: 1px 4px;
+  color: #a1a1aa;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 4px;
+  background: #202023;
+  font: inherit;
+}
+
+.inline-toggle-list {
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+
+.inline-toggle {
+  padding: 7px 0;
+}
+
+.inline-toggle + .inline-toggle {
+  border-top: 1px solid rgb(255 255 255 / 6%);
 }
 
 .inline-range output {
@@ -379,6 +698,38 @@ video {
   accent-color: #f97316;
 }
 
+.presentation-toast {
+  position: absolute;
+  top: calc(var(--camera-top) + var(--camera-height) - 46px);
+  left: calc(var(--active-camera-left) + var(--active-camera-width) / 2);
+  z-index: 5;
+  max-width: calc(var(--active-camera-width) - 32px);
+  padding: 7px 10px;
+  overflow: hidden;
+  color: #fafafa;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  background: rgb(12 12 13 / 88%);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 28%);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: presentation-toast-in 140ms ease-out;
+  font: 600 11px/16px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presentation-toast[hidden] {
+  display: none;
+}
+
+@keyframes presentation-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+}
+
 .camera-state {
   position: absolute;
   inset: 0;
@@ -416,9 +767,14 @@ video {
 @media (prefers-reduced-motion: reduce) {
   .spinner,
   .camera-surface,
+  .camera-effect-layer,
   .hover-toolbar,
   .selection-corner {
     animation: none;
     transition: none;
+  }
+
+  .presentation-toast {
+    animation: none;
   }
 }

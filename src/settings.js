@@ -1,27 +1,59 @@
 export const SHAPES = new Set(['circle', 'rounded', 'portrait', 'landscape'])
 export const CAPTURE_RESOLUTIONS = new Set(['480p', '720p', '1080p', '2160p'])
+export const FRAME_EFFECTS = new Set(['none', 'glow', 'blur'])
+export const PRESET_SETTING_KEYS = Object.freeze([
+  'cameraId',
+  'cameraLabel',
+  'shape',
+  'size',
+  'overlayResolution',
+  'fullscreenResolution',
+  'frameEffect',
+  'effectColor',
+  'glowStrength',
+  'glowSpread',
+  'blurAmount',
+  'blurOpacity',
+  'borderWidth',
+  'borderColor',
+  'mirror',
+  'cameraPosition',
+  'position',
+])
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  schemaVersion: 5,
+  schemaVersion: 10,
   cameraId: '',
   cameraLabel: 'Default camera',
   shape: 'circle',
   size: 288,
   overlayResolution: '720p',
   fullscreenResolution: '2160p',
+  frameEffect: 'none',
+  effectColor: '#fb923c',
+  glowStrength: 90,
+  glowSpread: 13,
+  blurAmount: 12,
+  blurOpacity: 72,
   borderWidth: 0,
   borderColor: '#ffffff',
   mirror: true,
   cameraPosition: Object.freeze({ x: 50, y: 50 }),
   alwaysOnTop: true,
   overlayVisible: true,
+  launchAtLogin: false,
   position: null,
+  presets: Object.freeze([]),
 })
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
-export function sanitizeSettings(input = {}) {
-  const settings = { ...DEFAULT_SETTINGS, cameraPosition: { ...DEFAULT_SETTINGS.cameraPosition } }
+export function sanitizeSettings(input = {}, includePresets = true) {
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    cameraPosition: { ...DEFAULT_SETTINGS.cameraPosition },
+    presets: [],
+  }
 
   if (typeof input.cameraId === 'string') settings.cameraId = input.cameraId.slice(0, 512)
   if (typeof input.cameraLabel === 'string') settings.cameraLabel = input.cameraLabel.slice(0, 120)
@@ -32,6 +64,20 @@ export function sanitizeSettings(input = {}) {
   }
   if (CAPTURE_RESOLUTIONS.has(input.fullscreenResolution)) {
     settings.fullscreenResolution = input.fullscreenResolution
+  }
+  if (FRAME_EFFECTS.has(input.frameEffect)) settings.frameEffect = input.frameEffect
+  if (/^#[0-9a-f]{6}$/i.test(input.effectColor ?? '')) settings.effectColor = input.effectColor
+  if (Number.isFinite(input.glowStrength)) {
+    settings.glowStrength = Math.round(clamp(input.glowStrength, 10, 100))
+  }
+  if (Number.isFinite(input.glowSpread)) {
+    settings.glowSpread = Math.round(clamp(input.glowSpread, 4, 18))
+  }
+  if (Number.isFinite(input.blurAmount)) {
+    settings.blurAmount = Math.round(clamp(input.blurAmount, 4, 18))
+  }
+  if (Number.isFinite(input.blurOpacity)) {
+    settings.blurOpacity = Math.round(clamp(input.blurOpacity, 10, 100))
   }
   if (Number.isFinite(input.borderWidth)) {
     settings.borderWidth = Math.round(clamp(input.borderWidth, 0, 12))
@@ -48,6 +94,7 @@ export function sanitizeSettings(input = {}) {
   }
   if (typeof input.alwaysOnTop === 'boolean') settings.alwaysOnTop = input.alwaysOnTop
   if (typeof input.overlayVisible === 'boolean') settings.overlayVisible = input.overlayVisible
+  if (typeof input.launchAtLogin === 'boolean') settings.launchAtLogin = input.launchAtLogin
   if (
     input.position &&
     Number.isInteger(input.position.x) &&
@@ -56,7 +103,67 @@ export function sanitizeSettings(input = {}) {
     settings.position = { x: input.position.x, y: input.position.y }
   }
 
+  if (includePresets && Array.isArray(input.presets)) {
+    settings.presets = input.presets.slice(0, 6).flatMap((preset) => {
+      const id = typeof preset?.id === 'string' ? preset.id.slice(0, 64) : ''
+      const name = typeof preset?.name === 'string' ? preset.name.trim().slice(0, 40) : ''
+      if (!id || !name || !preset.settings) return []
+      return [{ id, name, settings: settingsForPreset(preset.settings) }]
+    })
+  }
+
   return settings
+}
+
+export function settingsForPreset(input = {}) {
+  const settings = sanitizeSettings(input, false)
+  return Object.fromEntries(
+    PRESET_SETTING_KEYS.map((key) => {
+      const value = settings[key]
+      if (value && typeof value === 'object') return [key, { ...value }]
+      return [key, value]
+    }),
+  )
+}
+
+export function settingsWithLivePosition(input, windowBounds, fullscreen = false) {
+  if (
+    fullscreen ||
+    !Number.isInteger(windowBounds?.x) ||
+    !Number.isInteger(windowBounds?.y)
+  ) {
+    return input
+  }
+  return { ...input, position: { x: windowBounds.x, y: windowBounds.y } }
+}
+
+export function reorderPresets(presets, id, direction) {
+  const next = [...presets]
+  const index = next.findIndex((preset) => preset.id === id)
+  const target = index + Math.sign(direction)
+  if (index < 0 || target < 0 || target >= next.length) return next
+  ;[next[index], next[target]] = [next[target], next[index]]
+  return next
+}
+
+export function mergePresets(existingPresets, importedPresets) {
+  const next = [...existingPresets]
+  for (const imported of importedPresets) {
+    const match = next.findIndex(
+      (preset) =>
+        preset.id === imported.id ||
+        preset.name.toLocaleLowerCase() === imported.name.toLocaleLowerCase(),
+    )
+    if (match >= 0) {
+      next[match] = { ...imported, id: next[match].id }
+    } else if (next.length < 6) {
+      const id = next.some((preset) => preset.id === imported.id)
+        ? `imported-${next.length + 1}-${imported.id}`.slice(0, 64)
+        : imported.id
+      next.push({ ...imported, id })
+    }
+  }
+  return sanitizeSettings({ presets: next }).presets
 }
 
 export function cameraPositionAfterDrag(position, delta, surface, mirrored = false) {
@@ -80,7 +187,7 @@ export function startupSettings(input = {}) {
 }
 
 export function settingsPatchChangesOverlayGeometry(patch = {}) {
-  return ['shape', 'size', 'position'].some((key) => Object.hasOwn(patch, key))
+  return ['shape', 'size', 'position', 'frameEffect'].some((key) => Object.hasOwn(patch, key))
 }
 
 export function dimensionsFor(settings) {
@@ -183,7 +290,7 @@ export function overlayRegionsFor(settings, hovered = false, controlsOpen = fals
   const camera = dimensionsFor(settings)
   const left = OVERLAY_CHROME.left
   const top = OVERLAY_CHROME.top
-  const antialiasHalo = 3
+  const antialiasHalo = settings.frameEffect === 'none' ? 3 : 18
   const regions = offsetRegions(
     regionsFor(
       settings.shape,
@@ -214,7 +321,7 @@ export function overlayRegionsFor(settings, hovered = false, controlsOpen = fals
     const controlsWidth = Math.min(240, camera.width - 28)
     const controlsX = Math.round(left + (camera.width - controlsWidth) / 2)
     const overlayHeight = camera.height + OVERLAY_CHROME.top + OVERLAY_CHROME.bottom
-    const controlsHeight = Math.min(268, overlayHeight - 76)
+    const controlsHeight = Math.min(320, overlayHeight - 76)
     regions.push(
       ...offsetRegions(regionsFor('rounded', controlsWidth, controlsHeight, 1), controlsX, 76),
     )
