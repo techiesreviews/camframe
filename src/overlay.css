@@ -236,7 +236,7 @@ video {
 }
 
 .hover-toolbar {
-  --toolbar-width: min(240px, calc(var(--active-camera-width) - 8px));
+  --toolbar-width: min(196px, calc(var(--active-camera-width) - 8px));
   position: absolute;
   top: 22px;
   left: calc(
@@ -556,6 +556,7 @@ video {
 }
 
 .overlay[data-positioning='true'] .hover-toolbar {
+  --toolbar-width: min(240px, calc(var(--active-camera-width) - 8px));
   justify-content: flex-start;
   gap: 8px;
   padding-right: 10px;
