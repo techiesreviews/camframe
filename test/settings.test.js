@@ -28,11 +28,13 @@ import {
   configureCameraTrack,
 } from '../src/cameras.js'
 import {
+  FULLSCREEN_TOOLBAR_HIDE_DELAY_MS,
   alwaysOnTopLevelFor,
   fullscreenButtonCopy,
   fullscreenWindowPlan,
   interpolateWindowBounds,
   isFullscreenExitInput,
+  pointIsInToolbarHotspot,
 } from '../src/fullscreen.js'
 
 test('places the Windows camera above the taskbar without changing macOS layering', () => {
@@ -561,6 +563,16 @@ test('fullscreen copy and Escape behavior stay in sync', () => {
   assert.equal(isFullscreenExitInput({ type: 'keyDown', key: 'Escape' }), true)
   assert.equal(isFullscreenExitInput({ type: 'keyUp', key: 'Escape' }), false)
   assert.equal(isFullscreenExitInput({ type: 'keyDown', key: 'Enter' }), false)
+})
+
+test('fullscreen toolbar uses an inactivity delay and a padded hover hotspot', () => {
+  const toolbar = { left: 100, top: 20, right: 340, bottom: 64 }
+
+  assert.equal(FULLSCREEN_TOOLBAR_HIDE_DELAY_MS, 200)
+  assert.equal(pointIsInToolbarHotspot({ x: 220, y: 42 }, toolbar), true)
+  assert.equal(pointIsInToolbarHotspot({ x: 92, y: 42 }, toolbar), true)
+  assert.equal(pointIsInToolbarHotspot({ x: 80, y: 42 }, toolbar), false)
+  assert.equal(pointIsInToolbarHotspot({ x: 220, y: 80 }, toolbar), false)
 })
 
 test('leaving fullscreen restores the live topmost camera window', () => {
