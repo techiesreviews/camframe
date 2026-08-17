@@ -318,7 +318,7 @@ test('toolbar centering does not depend on the animated transform', () => {
   const css = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.css'), 'utf8')
   const toolbarRule = css.match(/(?:^|\n)\.hover-toolbar\s*\{([^}]+)\}/)?.[1] ?? ''
 
-  assert.match(toolbarRule, /--toolbar-width:/)
+  assert.match(toolbarRule, /--toolbar-width:\s*min\(196px,/)
   assert.match(toolbarRule, /var\(--active-camera-left\)/)
   assert.match(toolbarRule, /var\(--active-camera-width\)/)
   assert.doesNotMatch(toolbarRule, /translateX/)
