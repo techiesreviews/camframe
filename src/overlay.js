@@ -5,7 +5,11 @@ import {
   canReuseCameraStream,
   configureCameraTrack,
 } from './cameras.js'
-import { fullscreenButtonCopy } from './fullscreen.js'
+import {
+  FULLSCREEN_TOOLBAR_HIDE_DELAY_MS,
+  fullscreenButtonCopy,
+  pointIsInToolbarHotspot,
+} from './fullscreen.js'
 import { cameraPositionAfterDrag, cameraZoomAfterWheel } from './settings.js'
 
 const overlay = document.querySelector('#overlay')
@@ -393,15 +397,29 @@ function applyFullscreen(nextFullscreen) {
   if (fullscreen) {
     setControlsOpen(false)
     setHovered(true)
-  }
+    scheduleFullscreenToolbarHide()
+  } else setHovered(true)
+}
+
+function clearHoverTimer() {
+  clearTimeout(hoverTimer)
+  hoverTimer = undefined
 }
 
 function setHovered(hovered) {
-  clearTimeout(hoverTimer)
+  clearHoverTimer()
   overlay.dataset.hovered = String(hovered)
   setInteractive(
     hovered || controlsOpen || dragging || positioning || resizing || Boolean(cameraReposition),
   )
+}
+
+function scheduleFullscreenToolbarHide() {
+  if (!fullscreen || controlsOpen || positioning || resizing || hoverTimer) return
+  hoverTimer = setTimeout(() => {
+    hoverTimer = undefined
+    setHovered(false)
+  }, FULLSCREEN_TOOLBAR_HIDE_DELAY_MS)
 }
 
 function setInteractive(nextInteractive) {
@@ -411,8 +429,12 @@ function setInteractive(nextInteractive) {
 }
 
 function scheduleHideChrome() {
+  if (fullscreen) {
+    scheduleFullscreenToolbarHide()
+    return
+  }
   if (controlsOpen || positioning || resizing) return
-  clearTimeout(hoverTimer)
+  clearHoverTimer()
   hoverTimer = setTimeout(() => setHovered(false), 220)
 }
 
@@ -448,6 +470,18 @@ function setPositioning(nextPositioning) {
 }
 
 document.addEventListener('mousemove', (event) => {
+  if (fullscreen) {
+    if (
+      controlsOpen ||
+      pointIsInToolbarHotspot(
+        { x: event.clientX, y: event.clientY },
+        hoverToolbar.getBoundingClientRect(),
+      )
+    ) {
+      setHovered(true)
+    } else scheduleFullscreenToolbarHide()
+    return
+  }
   const overInteractiveSurface =
     event.target instanceof Element &&
     event.target.closest('.camera-surface, .hover-toolbar, .inline-settings')

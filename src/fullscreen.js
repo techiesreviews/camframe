@@ -2,6 +2,20 @@ export function fullscreenButtonCopy(fullscreen) {
   return fullscreen ? 'Exit full screen' : 'Enter full screen'
 }
 
+export const FULLSCREEN_TOOLBAR_HIDE_DELAY_MS = 200
+
+export function pointIsInToolbarHotspot(point, rect, padding = 12) {
+  if (![point?.x, point?.y, rect?.left, rect?.top, rect?.right, rect?.bottom].every(Number.isFinite)) {
+    return false
+  }
+  return (
+    point.x >= rect.left - padding &&
+    point.x <= rect.right + padding &&
+    point.y >= rect.top - padding &&
+    point.y <= rect.bottom + padding
+  )
+}
+
 export function isFullscreenExitInput(input = {}) {
   return input.type === 'keyDown' && input.key === 'Escape'
 }
