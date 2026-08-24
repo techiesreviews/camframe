@@ -21,7 +21,7 @@ export function isFullscreenExitInput(input = {}) {
 }
 
 export function alwaysOnTopLevelFor(platform) {
-  return platform === 'win32' ? 'pop-up-menu' : 'floating'
+  return platform === 'win32' ? 'screen-saver' : 'floating'
 }
 
 export function fullscreenWindowPlan({

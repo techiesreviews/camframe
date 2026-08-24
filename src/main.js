@@ -122,7 +122,7 @@ function applyOverlayWindow({ keepCenter = true, updateBounds = true } = {}) {
   if (updateBounds && !overlayFullscreen && !overlayTransitioning) {
     overlayWindow.setBounds(overlayBounds({ keepCenter }))
   }
-  overlayWindow.setAlwaysOnTop(overlayFullscreen || settings.alwaysOnTop, alwaysOnTopLevel)
+  applyOverlayZOrder()
 
   if (settings.overlayVisible) overlayWindow.showInactive()
   else {
@@ -142,6 +142,15 @@ function stopOverlayDrag() {
   clearInterval(dragTimer)
   dragTimer = undefined
   dragOffset = undefined
+}
+
+function applyOverlayZOrder({
+  raise = false,
+  stayOnTop = overlayFullscreen || settings.alwaysOnTop,
+} = {}) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  overlayWindow.setAlwaysOnTop(stayOnTop, alwaysOnTopLevel)
+  if (raise && stayOnTop) overlayWindow.moveTop()
 }
 
 function stopOverlayResize() {
@@ -252,7 +261,7 @@ function setOverlayFullscreen(fullscreen) {
       alwaysOnTop: settings.alwaysOnTop,
       visible: settings.overlayVisible,
     })
-    overlayWindow.setAlwaysOnTop(plan.alwaysOnTop, alwaysOnTopLevel)
+    applyOverlayZOrder({ stayOnTop: plan.alwaysOnTop })
     overlayWindow.show()
     setOverlayInteractive(true)
     emitFullscreen()
@@ -273,15 +282,15 @@ function setOverlayFullscreen(fullscreen) {
     alwaysOnTop: settings.alwaysOnTop,
     visible: settings.overlayVisible,
   })
-  overlayWindow.setAlwaysOnTop(true, alwaysOnTopLevel)
+  applyOverlayZOrder({ stayOnTop: true })
   overlayWindow.show()
   emitFullscreen()
   animateOverlayBounds(plan.bounds, () => {
     if (overlayFullscreen || !overlayWindow || overlayWindow.isDestroyed()) return
-    overlayWindow.setAlwaysOnTop(plan.alwaysOnTop, alwaysOnTopLevel)
+    applyOverlayZOrder({ stayOnTop: plan.alwaysOnTop })
     if (plan.visible) {
       overlayWindow.showInactive()
-      overlayWindow.moveTop()
+      applyOverlayZOrder({ raise: true })
     } else overlayWindow.hide()
     overlayNormalBounds = undefined
   })
@@ -388,7 +397,7 @@ function applyPreset(idInput) {
     overlayWindow && !overlayWindow.isDestroyed() && !overlayFullscreen && settings.overlayVisible
   if (animateScene) {
     const targetBounds = overlayBounds({ keepCenter: false })
-    overlayWindow.setAlwaysOnTop(settings.alwaysOnTop, alwaysOnTopLevel)
+    applyOverlayZOrder()
     overlayWindow.showInactive()
     emitState()
     animateOverlayBounds(targetBounds)
@@ -457,13 +466,17 @@ function createOverlayWindow() {
   })
 
   overlayWindow.loadFile(join(currentDirectory, 'overlay.html'))
-  overlayWindow.setAlwaysOnTop(settings.alwaysOnTop, alwaysOnTopLevel)
+  applyOverlayZOrder()
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
 
   overlayWindow.once('ready-to-show', () => {
     emitState()
     emitFullscreen()
     if (settings.overlayVisible) overlayWindow.showInactive()
+  })
+
+  overlayWindow.on('blur', () => {
+    setTimeout(() => applyOverlayZOrder({ raise: true }), 0)
   })
 
   overlayWindow.webContents.on('before-input-event', (event, input) => {

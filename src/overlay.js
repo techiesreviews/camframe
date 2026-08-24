@@ -398,7 +398,7 @@ function applyFullscreen(nextFullscreen) {
     setControlsOpen(false)
     setHovered(true)
     scheduleFullscreenToolbarHide()
-  } else setHovered(true)
+  } else setHovered(false)
 }
 
 function clearHoverTimer() {
@@ -489,7 +489,13 @@ document.addEventListener('mousemove', (event) => {
   else if (!dragging) scheduleHideChrome()
 })
 
-document.addEventListener('mouseleave', scheduleHideChrome)
+document.addEventListener('mouseleave', () => {
+  if (fullscreen || controlsOpen || positioning || resizing) {
+    scheduleHideChrome()
+    return
+  }
+  setHovered(false)
+})
 
 cameraSurface.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return
@@ -549,6 +555,13 @@ function stopDragging() {
   setInteractive(overlay.dataset.hovered === 'true' || controlsOpen)
 }
 
+function handleWindowBlur() {
+  stopDragging()
+  if (controlsOpen) setControlsOpen(false)
+  if (positioning) setPositioning(false)
+  setHovered(false)
+}
+
 cameraSurface.addEventListener('pointerup', stopDragging)
 cameraSurface.addEventListener('pointercancel', stopDragging)
 cameraSurface.addEventListener('pointerup', finishCameraReposition)
@@ -574,7 +587,7 @@ cameraSurface.addEventListener(
   },
   { passive: false },
 )
-window.addEventListener('blur', stopDragging)
+window.addEventListener('blur', handleWindowBlur)
 
 document.querySelector('#close-button').addEventListener('click', () => {
   setControlsOpen(false)

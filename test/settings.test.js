@@ -38,7 +38,7 @@ import {
 } from '../src/fullscreen.js'
 
 test('places the Windows camera above the taskbar without changing macOS layering', () => {
-  assert.equal(alwaysOnTopLevelFor('win32'), 'pop-up-menu')
+  assert.equal(alwaysOnTopLevelFor('win32'), 'screen-saver')
   assert.equal(alwaysOnTopLevelFor('darwin'), 'floating')
 })
 
@@ -216,6 +216,7 @@ test('overlay reserves room for hover controls without expanding on hover', () =
   const controlsOpen = overlayRegionsFor(settings, true, true)
 
   assert.deepEqual(bounds, { width: 356, height: 422 })
+  assert.deepEqual(dimensionsFor(settings), { width: 320, height: 320 })
   assert.ok(hovered.length > normal.length)
   assert.ok(controlsOpen.length > hovered.length)
   for (const region of controlsOpen) {
@@ -563,6 +564,25 @@ test('fullscreen copy and Escape behavior stay in sync', () => {
   assert.equal(isFullscreenExitInput({ type: 'keyDown', key: 'Escape' }), true)
   assert.equal(isFullscreenExitInput({ type: 'keyUp', key: 'Escape' }), false)
   assert.equal(isFullscreenExitInput({ type: 'keyDown', key: 'Enter' }), false)
+})
+
+test('leaving fullscreen hides compact chrome while the window shrinks', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
+  const applyFullscreenSource =
+    source.match(/function applyFullscreen\(nextFullscreen\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+
+  assert.match(applyFullscreenSource, /else setHovered\(false\)/)
+})
+
+test('window focus loss clears hover and transient overlay controls', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
+  const blurHandlerSource =
+    source.match(/function handleWindowBlur\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+
+  assert.match(blurHandlerSource, /if \(controlsOpen\) setControlsOpen\(false\)/)
+  assert.match(blurHandlerSource, /if \(positioning\) setPositioning\(false\)/)
+  assert.match(blurHandlerSource, /setHovered\(false\)/)
+  assert.match(source, /window\.addEventListener\('blur', handleWindowBlur\)/)
 })
 
 test('fullscreen toolbar uses an inactivity delay and a padded hover hotspot', () => {
