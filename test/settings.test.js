@@ -36,6 +36,149 @@ import {
   isFullscreenExitInput,
   pointIsInToolbarHotspot,
 } from '../src/fullscreen.js'
+import {
+  CURRENT_ONBOARDING_VERSION,
+  ONBOARDING_DEMO_START_DELAY_MS,
+  ONBOARDING_SETTINGS_REVEAL_DELAY_MS,
+  ONBOARDING_SHAPE_DEMO_CLICKS,
+  ONBOARDING_STEP_COUNT,
+  ONBOARDING_TOP_RESERVE,
+  completedOnboardingVersionForLoad,
+  onboardingStepAfter,
+  onboardingStepsFor,
+  permissionRecoveryCopyFor,
+  shouldShowOnboarding,
+} from '../src/onboarding.js'
+
+test('new installations receive onboarding while existing preferences migrate quietly', () => {
+  assert.equal(completedOnboardingVersionForLoad({}, false), 0)
+  assert.equal(
+    completedOnboardingVersionForLoad({ schemaVersion: 11 }, true),
+    CURRENT_ONBOARDING_VERSION,
+  )
+  assert.equal(completedOnboardingVersionForLoad({ completedOnboardingVersion: 0 }, true), 0)
+  assert.equal(
+    completedOnboardingVersionForLoad({ completedOnboardingVersion: 99 }, true),
+    CURRENT_ONBOARDING_VERSION,
+  )
+  assert.equal(shouldShowOnboarding(0), true)
+  assert.equal(shouldShowOnboarding(CURRENT_ONBOARDING_VERSION), false)
+})
+
+test('onboarding steps stay within the versioned walkthrough', () => {
+  assert.equal(ONBOARDING_STEP_COUNT, 4)
+  assert.equal(ONBOARDING_TOP_RESERVE, 220)
+  assert.equal(ONBOARDING_SETTINGS_REVEAL_DELAY_MS, 80)
+  assert.equal(ONBOARDING_DEMO_START_DELAY_MS, 320)
+  assert.equal(ONBOARDING_SHAPE_DEMO_CLICKS, 3)
+  assert.equal(onboardingStepAfter(0, -1), 0)
+  assert.equal(onboardingStepAfter(0, 1), 1)
+  assert.equal(onboardingStepAfter(ONBOARDING_STEP_COUNT - 1, 1), ONBOARDING_STEP_COUNT - 1)
+  assert.equal(onboardingStepAfter(3, -1), 2)
+})
+
+test('camera permission recovery copy matches the supported platform', () => {
+  assert.match(permissionRecoveryCopyFor('win32'), /Windows Settings/)
+  assert.match(permissionRecoveryCopyFor('win32'), /desktop apps/)
+  assert.match(permissionRecoveryCopyFor('darwin'), /System Settings/)
+  assert.match(permissionRecoveryCopyFor('darwin'), /CamFrame/)
+  assert.doesNotMatch(permissionRecoveryCopyFor('darwin'), /Windows/)
+})
+
+test('onboarding coach marks target user-activated controls and explain saved Scenes', () => {
+  const windowsSteps = onboardingStepsFor('win32')
+  const macSteps = onboardingStepsFor('darwin')
+  const windowsCopy = JSON.stringify(windowsSteps)
+  const macCopy = JSON.stringify(macSteps)
+
+  assert.equal(windowsSteps.length, ONBOARDING_STEP_COUNT)
+  assert.deepEqual(
+    windowsSteps.map(({ target }) => target),
+    [
+      '#controls-button',
+      '#shape-button',
+      '#position-button',
+      '#controls-button',
+    ],
+  )
+  assert.deepEqual(
+    windowsSteps.map(({ reveal }) => reveal),
+    ['camera-settings', 'shape-controls', 'framing', 'scene-settings'],
+  )
+  assert.match(windowsCopy, /Drag the picture/)
+  assert.match(windowsCopy, /Watch the mouse pan and zoom/)
+  assert.match(windowsCopy, /press Escape to exit/)
+  assert.match(windowsCopy, /Settings allow you to choose your camera and camera quality/)
+  assert.match(windowsCopy, /Hover it to stop/)
+  assert.match(windowsCopy, /Scenes/)
+  assert.match(windowsCopy, /Each Scene remembers its camera, screen position, shape, framing, and style/)
+  assert.doesNotMatch(macCopy, /Windows Settings/)
+})
+
+test('onboarding completion is global and excluded from Scenes', () => {
+  const settings = sanitizeSettings({ completedOnboardingVersion: CURRENT_ONBOARDING_VERSION })
+  const preset = settingsForPreset(settings)
+
+  assert.equal(settings.schemaVersion, 12)
+  assert.equal(settings.completedOnboardingVersion, CURRENT_ONBOARDING_VERSION)
+  assert.equal(Object.hasOwn(preset, 'completedOnboardingVersion'), false)
+})
+
+test('onboarding is reachable through the Overlay and tray Help contract', () => {
+  const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
+  const overlayCss = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.css'), 'utf8')
+  const overlaySource = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
+  const mainSource = readFileSync(join(import.meta.dirname, '..', 'src', 'main.js'), 'utf8')
+  const preloadSource = readFileSync(join(import.meta.dirname, '..', 'src', 'preload.cjs'), 'utf8')
+
+  assert.match(overlayHtml, /class="onboarding-coachmark"[^>]*id="onboarding-panel"[^>]*role="dialog"/)
+  assert.doesNotMatch(overlayHtml, /id="onboarding-panel"[^>]*aria-modal="true"/)
+  assert.match(overlayHtml, /id="onboarding-title"[^>]*tabindex="-1"/)
+  assert.match(overlayHtml, /id="onboarding-progress-label">Getting started<\/p>/)
+  assert.match(overlayHtml, /id="onboarding-progress"[^>]*role="progressbar"[^>]*aria-valuenow="1"/)
+  assert.match(overlayHtml, /id="onboarding-demo-mouse"[^>]*aria-hidden="true"[^>]*hidden/)
+  assert.equal((overlayHtml.match(/data-onboarding-progress=/g) ?? []).length, ONBOARDING_STEP_COUNT)
+  assert.match(overlaySource, /function prepareOnboardingStep\(content\)/)
+  assert.match(overlaySource, /function revealOnboardingSettings\(content, renderedStep\)/)
+  assert.match(overlaySource, /function resetOnboardingDemonstration\(\)/)
+  const prepareStep = overlaySource.match(/function prepareOnboardingStep\(content\) \{([\s\S]*?)\n\}/)?.[1] ?? ''
+  assert.doesNotMatch(prepareStep, /setControlsOpen|setPositioning/)
+  assert.match(overlaySource, /selectSettingsPanel\(content\.reveal === 'camera-settings' \? 'camera' : 'presets'\)/)
+  assert.match(overlaySource, /ONBOARDING_SETTINGS_REVEAL_DELAY_MS/)
+  assert.match(overlaySource, /ONBOARDING_DEMO_START_DELAY_MS/)
+  assert.match(overlaySource, /function startShapeOnboardingDemo\(\)/)
+  assert.match(overlaySource, /function startFramingOnboardingDemo\(\)/)
+  assert.match(overlaySource, /onboardingDemoSnapshot = \{ shape: state\.shape \}/)
+  assert.match(overlaySource, /restore && stoppedType === 'shape'/)
+  assert.match(overlaySource, /restore && stoppedType === 'framing'/)
+  assert.match(overlaySource, /onboardingMotionQuery\.matches/)
+  assert.match(overlaySource, /if \(onboardingDemoType === 'shape'\) stopOnboardingDemo\(\{ commit: false \}\)/)
+  assert.match(overlaySource, /if \(onboardingDemoType === 'framing'\) stopOnboardingDemo\(\)/)
+  assert.match(overlaySource, /onboardingReveal === 'scene-settings'\) selectSettingsPanel\('presets'\)/)
+  assert.match(overlaySource, /onboardingTarget\.dataset\.onboardingTarget = 'true'/)
+  assert.match(overlaySource, /positionOnboardingCoachmark\(\)/)
+  assert.match(overlaySource, /new ResizeObserver\(positionOnboardingCoachmark\)\.observe\(overlay\)/)
+  assert.match(overlaySource, /overlay\.style\.setProperty\('--onboarding-offset'/)
+  assert.match(overlaySource, /const toolbarTop = onboardingOffset \+ 22/)
+  assert.match(overlaySource, /onboardingPanel\.dataset\.placement = 'above'/)
+  assert.match(overlaySource, /onboardingProgressBar\.setAttribute\('aria-valuenow'/)
+  assert.match(overlaySource, /if \(positioning\) \{\s*setPositioning\(false\)\s*positionOnboardingCoachmark\(\)/s)
+  assert.doesNotMatch(overlaySource, /Getting started · Step/)
+  assert.match(overlayCss, /top:\s*calc\(22px \+ var\(--onboarding-offset\)\)/)
+  assert.match(overlayCss, /\.hover-toolbar button\[data-onboarding-target='true'\][^{]*\{[^}]*color:\s*#e5e5e5[^}]*outline:\s*2px solid #fb923c[^}]*background:\s*#19191b/s)
+  assert.match(overlayCss, /\.onboarding-progress\s*\{[^}]*display:\s*grid/s)
+  assert.match(overlayCss, /\.onboarding-demo-mouse\s*\{[^}]*pointer-events:\s*none/s)
+  assert.match(overlayCss, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.onboarding-demo-mouse\s*\{\s*display:\s*none/s)
+  assert.match(overlayCss, /\.overlay\[data-onboarding='true'\] \.hover-toolbar\s*\{[^}]*transform:\s*none[^}]*transition:\s*none/s)
+  assert.match(overlayCss, /top:\s*var\(--settings-top\)/)
+  assert.match(overlayCss, /max-height:\s*calc\(100% - var\(--settings-top\)\)/)
+  assert.doesNotMatch(overlaySource, /focusableOnboardingControls\(\)/)
+  assert.match(mainSource, /label: 'Help & onboarding', click: showOnboarding/)
+  assert.match(mainSource, /function setOverlayOnboardingLayout\(open\)/)
+  assert.match(preloadSource, /sendSync\('overlay:onboarding-open'/)
+  assert.match(preloadSource, /onShowOnboarding/)
+  assert.doesNotMatch(overlaySource, /blocked in Windows privacy settings/)
+})
 
 test('places the Windows camera above the taskbar without changing macOS layering', () => {
   assert.equal(alwaysOnTopLevelFor('win32'), 'screen-saver')

@@ -1,3 +1,5 @@
+import { sanitizeCompletedOnboardingVersion } from './onboarding.js'
+
 export const SHAPES = new Set(['circle', 'rounded', 'portrait', 'landscape'])
 export const CAPTURE_RESOLUTIONS = new Set(['480p', '720p', '1080p', '2160p'])
 export const FRAME_EFFECTS = new Set(['none', 'glow', 'blur'])
@@ -23,7 +25,7 @@ export const PRESET_SETTING_KEYS = Object.freeze([
 ])
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  schemaVersion: 11,
+  schemaVersion: 12,
   cameraId: '',
   cameraLabel: 'Default camera',
   shape: 'circle',
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   alwaysOnTop: true,
   overlayVisible: true,
   launchAtLogin: false,
+  completedOnboardingVersion: 0,
   position: null,
   presets: Object.freeze([]),
 })
@@ -100,6 +103,9 @@ export function sanitizeSettings(input = {}, includePresets = true) {
   if (typeof input.alwaysOnTop === 'boolean') settings.alwaysOnTop = input.alwaysOnTop
   if (typeof input.overlayVisible === 'boolean') settings.overlayVisible = input.overlayVisible
   if (typeof input.launchAtLogin === 'boolean') settings.launchAtLogin = input.launchAtLogin
+  settings.completedOnboardingVersion = sanitizeCompletedOnboardingVersion(
+    input.completedOnboardingVersion,
+  )
   if (
     input.position &&
     Number.isInteger(input.position.x) &&

@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('camFrame', {
+  platform: process.platform,
   getState: () => ipcRenderer.invoke('state:get'),
   updateState: (patch) => ipcRenderer.send('state:update', patch),
   savePreset: (name, id) => ipcRenderer.send('preset:save', name, id),
@@ -23,6 +24,8 @@ contextBridge.exposeInMainWorld('camFrame', {
   reportCameraError: (message) => ipcRenderer.send('overlay:error', message),
   setOverlayInteractive: (interactive) => ipcRenderer.send('overlay:interactive', interactive),
   setOverlaySettingsOpen: (open) => ipcRenderer.send('overlay:settings-open', open),
+  setOverlayOnboardingOpen: (open) => ipcRenderer.sendSync('overlay:onboarding-open', open),
+  completeOnboarding: () => ipcRenderer.send('onboarding:complete'),
   startOverlayDrag: () => ipcRenderer.send('overlay:drag-start'),
   stopOverlayDrag: () => ipcRenderer.send('overlay:drag-stop'),
   startOverlayResize: (handle) => ipcRenderer.send('overlay:resize-start', handle),
@@ -48,6 +51,11 @@ contextBridge.exposeInMainWorld('camFrame', {
     const listener = (_event, message) => callback(message)
     ipcRenderer.on('presentation:notice', listener)
     return () => ipcRenderer.removeListener('presentation:notice', listener)
+  },
+  onShowOnboarding: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('onboarding:show', listener)
+    return () => ipcRenderer.removeListener('onboarding:show', listener)
   },
   showController: () => ipcRenderer.send('controller:show'),
   centerOverlay: () => ipcRenderer.send('overlay:center'),

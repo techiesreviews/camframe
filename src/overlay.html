@@ -159,6 +159,34 @@
         </div>
       </section>
 
+      <section class="onboarding-coachmark" id="onboarding-panel" role="dialog" aria-labelledby="onboarding-title" hidden>
+        <header class="onboarding-header">
+          <p class="onboarding-kicker" id="onboarding-progress-label">Getting started</p>
+          <button type="button" class="onboarding-skip" id="onboarding-skip">Skip</button>
+        </header>
+        <div class="onboarding-progress" id="onboarding-progress" role="progressbar" aria-label="Onboarding progress" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1">
+          <span data-onboarding-progress="0"></span>
+          <span data-onboarding-progress="1"></span>
+          <span data-onboarding-progress="2"></span>
+          <span data-onboarding-progress="3"></span>
+        </div>
+        <div class="onboarding-copy" aria-live="polite" aria-atomic="true">
+          <h2 id="onboarding-title" tabindex="-1">Choose your camera</h2>
+          <p id="onboarding-description"></p>
+          <ul id="onboarding-items" role="list" hidden></ul>
+          <p class="onboarding-note" id="onboarding-note" hidden></p>
+        </div>
+        <footer class="onboarding-actions">
+          <button type="button" class="onboarding-back" id="onboarding-back" hidden>Back</button>
+          <button type="button" class="onboarding-next" id="onboarding-next">Next</button>
+        </footer>
+      </section>
+
+      <div class="onboarding-demo-mouse" id="onboarding-demo-mouse" aria-hidden="true" hidden>
+        <span class="onboarding-demo-wheel" id="onboarding-demo-wheel"></span>
+        <span class="onboarding-demo-click" id="onboarding-demo-click"></span>
+      </div>
+
       <div class="presentation-toast" id="presentation-toast" role="status" aria-live="polite" hidden></div>
 
       <div class="camera-effect-layer" id="camera-effect-layer" aria-hidden="true">

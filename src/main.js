@@ -28,6 +28,11 @@ import {
   startupSettings,
 } from './settings.js'
 import {
+  CURRENT_ONBOARDING_VERSION,
+  ONBOARDING_TOP_RESERVE,
+  completedOnboardingVersionForLoad,
+} from './onboarding.js'
+import {
   alwaysOnTopLevelFor,
   fullscreenWindowPlan,
   interpolateWindowBounds,
@@ -53,6 +58,7 @@ let overlayFullscreen = false
 let overlayNormalBounds
 let overlayBoundsAnimation
 let overlayTransitioning = false
+let overlayOnboardingOpen = false
 let activePresetId = ''
 
 const FULLSCREEN_ANIMATION_MS = 280
@@ -64,6 +70,7 @@ function loadSettings() {
       saved.borderWidth = 0
       saved.size = DEFAULT_SETTINGS.size
     }
+    saved.completedOnboardingVersion = completedOnboardingVersionForLoad(saved, true)
     settings = startupSettings(saved)
   } catch {
     settings = startupSettings()
@@ -92,9 +99,30 @@ function applyLaunchAtLoginSetting() {
   app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
 }
 
+function baseBoundsFromOverlayWindow(bounds) {
+  if (!overlayOnboardingOpen) return { ...bounds }
+  return {
+    ...bounds,
+    y: bounds.y + ONBOARDING_TOP_RESERVE,
+    height: Math.max(1, bounds.height - ONBOARDING_TOP_RESERVE),
+  }
+}
+
+function overlayWindowBoundsFromBase(bounds) {
+  if (!overlayOnboardingOpen) return { ...bounds }
+  return {
+    ...bounds,
+    y: bounds.y - ONBOARDING_TOP_RESERVE,
+    height: bounds.height + ONBOARDING_TOP_RESERVE,
+  }
+}
+
 function overlayBounds({ keepCenter = true } = {}) {
   const nextSize = overlayDimensionsFor(settings)
-  const current = overlayWindow?.getBounds()
+  const currentWindowBounds = overlayWindow?.getBounds()
+  const current = currentWindowBounds
+    ? baseBoundsFromOverlayWindow(currentWindowBounds)
+    : undefined
   const primary = screen.getPrimaryDisplay().workArea
 
   if (!current) {
@@ -102,18 +130,45 @@ function overlayBounds({ keepCenter = true } = {}) {
       x: primary.x + primary.width - nextSize.width - 36,
       y: primary.y + primary.height - nextSize.height - 36,
     }
-    return { ...nextSize, ...(settings.position ?? fallbackPosition) }
+    return overlayWindowBoundsFromBase({
+      ...nextSize,
+      ...(settings.position ?? fallbackPosition),
+    })
   }
 
   if (!keepCenter) {
     const position = settings.position ?? { x: current.x, y: current.y }
-    return { ...nextSize, ...position }
+    return overlayWindowBoundsFromBase({ ...nextSize, ...position })
   }
-  return {
+  return overlayWindowBoundsFromBase({
     x: Math.round(current.x + (current.width - nextSize.width) / 2),
     y: Math.round(current.y + (current.height - nextSize.height) / 2),
     ...nextSize,
+  })
+}
+
+function setOverlayOnboardingLayout(open) {
+  if (!overlayWindow || overlayWindow.isDestroyed() || overlayFullscreen || overlayTransitioning) {
+    return 0
   }
+  const nextOpen = Boolean(open)
+  if (nextOpen === overlayOnboardingOpen) {
+    return nextOpen ? ONBOARDING_TOP_RESERVE : 0
+  }
+
+  if (nextOpen) {
+    const baseBounds = overlayWindow.getBounds()
+    overlayOnboardingOpen = true
+    overlayWindow.setBounds(overlayWindowBoundsFromBase(baseBounds))
+    return ONBOARDING_TOP_RESERVE
+  }
+
+  const baseBounds = baseBoundsFromOverlayWindow(overlayWindow.getBounds())
+  overlayOnboardingOpen = false
+  settings.position = { x: baseBounds.x, y: baseBounds.y }
+  overlayWindow.setBounds({ ...baseBounds, ...overlayDimensionsFor(settings) })
+  saveSettings()
+  return 0
 }
 
 function applyOverlayWindow({ keepCenter = true, updateBounds = true } = {}) {
@@ -169,7 +224,7 @@ function startOverlayResize(handle) {
   resizeStart = {
     handle,
     cursor: screen.getCursorScreenPoint(),
-    bounds: overlayWindow.getBounds(),
+    bounds: baseBoundsFromOverlayWindow(overlayWindow.getBounds()),
     settings: { ...settings },
   }
   resizeTimer = setInterval(() => {
@@ -311,7 +366,12 @@ function savePreset(nameInput, idInput = '') {
   const name = String(nameInput ?? '').trim().slice(0, 40)
   if (!name) return
 
-  settings = settingsWithLivePosition(settings, overlayWindow?.getBounds(), overlayFullscreen)
+  const liveBounds = overlayWindow?.getBounds()
+  settings = settingsWithLivePosition(
+    settings,
+    liveBounds ? baseBoundsFromOverlayWindow(liveBounds) : undefined,
+    overlayFullscreen,
+  )
 
   const requestedId = String(idInput ?? '')
   const existing =
@@ -441,6 +501,28 @@ function showController() {
   saveSettings()
 }
 
+function showOnboarding() {
+  settings.overlayVisible = true
+  applyOverlayWindow()
+  emitState()
+  setOverlayInteractive(true)
+  overlayWindow?.show()
+  overlayWindow?.focus()
+  overlayWindow?.webContents.send('onboarding:show')
+  setTrayMenu()
+  saveSettings()
+}
+
+function completeOnboarding() {
+  if (settings.completedOnboardingVersion >= CURRENT_ONBOARDING_VERSION) return
+  settings = sanitizeSettings({
+    ...settings,
+    completedOnboardingVersion: CURRENT_ONBOARDING_VERSION,
+  })
+  emitState()
+  saveSettings()
+}
+
 function createOverlayWindow() {
   const bounds = overlayBounds({ keepCenter: false })
   overlayWindow = new BrowserWindow({
@@ -486,7 +568,7 @@ function createOverlayWindow() {
   })
 
   overlayWindow.on('moved', () => {
-    if (overlayFullscreen || overlayTransitioning) return
+    if (overlayFullscreen || overlayTransitioning || overlayOnboardingOpen) return
     const [x, y] = overlayWindow.getPosition()
     settings.position = { x, y }
     controlWindow?.webContents.send('state:changed', settings)
@@ -498,6 +580,7 @@ function createOverlayWindow() {
     stopOverlayResize()
     stopOverlayBoundsAnimation()
     overlayFullscreen = false
+    overlayOnboardingOpen = false
     overlayNormalBounds = undefined
     overlayWindow = undefined
   })
@@ -564,6 +647,7 @@ function setTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Open controls', click: showController },
+      { label: 'Help & onboarding', click: showOnboarding },
       {
         label: 'Show camera',
         type: 'checkbox',
@@ -610,6 +694,16 @@ function registerIpc() {
   ipcMain.on('overlay:settings-open', (_event, open) => {
     if (open) setOverlayInteractive(true)
   })
+  ipcMain.on('overlay:onboarding-open', (event, open) => {
+    const topReserve = setOverlayOnboardingLayout(Boolean(open))
+    if (open) {
+      setOverlayInteractive(true)
+      overlayWindow?.show()
+      overlayWindow?.focus()
+    }
+    event.returnValue = topReserve
+  })
+  ipcMain.on('onboarding:complete', completeOnboarding)
   ipcMain.on('overlay:drag-start', startOverlayDrag)
   ipcMain.on('overlay:drag-stop', stopOverlayDrag)
   ipcMain.on('overlay:resize-start', (_event, handle) => startOverlayResize(handle))

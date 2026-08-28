@@ -11,6 +11,18 @@ import {
   pointIsInToolbarHotspot,
 } from './fullscreen.js'
 import { cameraPositionAfterDrag, cameraZoomAfterWheel } from './settings.js'
+import {
+  CURRENT_ONBOARDING_VERSION,
+  ONBOARDING_DEMO_START_DELAY_MS,
+  ONBOARDING_SETTINGS_REVEAL_DELAY_MS,
+  ONBOARDING_SHAPE_DEMO_CLICKS,
+  ONBOARDING_STEP_COUNT,
+  ONBOARDING_TOP_RESERVE,
+  onboardingStepAfter,
+  onboardingStepsFor,
+  permissionRecoveryCopyFor,
+  shouldShowOnboarding,
+} from './onboarding.js'
 
 const overlay = document.querySelector('#overlay')
 const cameraSurface = document.querySelector('#camera-surface')
@@ -50,6 +62,7 @@ const topToggle = document.querySelector('#overlay-top-toggle')
 const launchToggle = document.querySelector('#overlay-launch-toggle')
 const presentationToast = document.querySelector('#presentation-toast')
 const fullscreenButton = document.querySelector('#fullscreen-button')
+const shapeButton = document.querySelector('#shape-button')
 const positionButton = document.querySelector('#position-button')
 const video = document.querySelector('#camera')
 const effectVideo = document.querySelector('#effect-camera')
@@ -57,9 +70,27 @@ const cameraState = document.querySelector('#camera-state')
 const cameraStateLabel = document.querySelector('#camera-state-label')
 const framingZoom = document.querySelector('#framing-zoom')
 const isQaPreview = !window.camFrame
+const qaPreviewParams = new URLSearchParams(window.location.search)
+const onboardingPanel = document.querySelector('#onboarding-panel')
+const onboardingProgressLabel = document.querySelector('#onboarding-progress-label')
+const onboardingProgressBar = document.querySelector('#onboarding-progress')
+const onboardingProgress = document.querySelectorAll('[data-onboarding-progress]')
+const onboardingTitle = document.querySelector('#onboarding-title')
+const onboardingDescription = document.querySelector('#onboarding-description')
+const onboardingItems = document.querySelector('#onboarding-items')
+const onboardingNote = document.querySelector('#onboarding-note')
+const onboardingSkip = document.querySelector('#onboarding-skip')
+const onboardingBack = document.querySelector('#onboarding-back')
+const onboardingNext = document.querySelector('#onboarding-next')
+const onboardingDemoMouse = document.querySelector('#onboarding-demo-mouse')
+const onboardingDemoWheel = document.querySelector('#onboarding-demo-wheel')
+const onboardingDemoClick = document.querySelector('#onboarding-demo-click')
 let qaFullscreenListener
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
+const ONBOARDING_SHAPES = Object.freeze(['circle', 'rounded', 'portrait', 'landscape'])
+const onboardingMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
 const camFrame = window.camFrame ?? {
+  platform: navigator.userAgent.includes('Mac') ? 'darwin' : 'win32',
   getState: async () => ({
     cameraId: '',
     shape: 'circle',
@@ -79,6 +110,8 @@ const camFrame = window.camFrame ?? {
     cameraPosition: { x: 50, y: 50 },
     alwaysOnTop: true,
     overlayVisible: true,
+    completedOnboardingVersion:
+      qaPreviewParams.get('state') === 'onboarding' ? 0 : CURRENT_ONBOARDING_VERSION,
     presets: [],
   }),
   updateState: (patch) => applyState({ ...state, ...patch }),
@@ -93,6 +126,8 @@ const camFrame = window.camFrame ?? {
   reportCameraError: () => {},
   setOverlayInteractive: () => {},
   setOverlaySettingsOpen: () => {},
+  setOverlayOnboardingOpen: (open) => (open ? ONBOARDING_TOP_RESERVE : 0),
+  completeOnboarding: () => {},
   startOverlayDrag: () => {},
   stopOverlayDrag: () => {},
   startOverlayResize: () => {},
@@ -103,6 +138,7 @@ const camFrame = window.camFrame ?? {
     qaFullscreenListener = callback
   },
   onShowControls: () => {},
+  onShowOnboarding: () => {},
   onPresentationNotice: () => {},
   quit: () => {},
 }
@@ -124,6 +160,507 @@ let cameraReposition
 let resizing = false
 let cameraQualityUpdates = Promise.resolve()
 let presentationToastTimer
+let onboardingOpen = false
+let onboardingStep = 0
+let onboardingCameraKnown = false
+let onboardingAutoOffered = false
+let onboardingReturnFocus
+let onboardingTarget
+let onboardingTargetDescription
+let onboardingReveal
+let onboardingDemoType
+let onboardingDemoSnapshot
+let onboardingDemoFramingChanged = false
+const onboardingDemoTimeouts = new Set()
+const onboardingDemoIntervals = new Set()
+const onboardingDemoAnimations = new Set()
+const onboardingSteps = onboardingStepsFor(camFrame.platform)
+
+function clearOnboardingTarget() {
+  if (!onboardingTarget) return
+  delete onboardingTarget.dataset.onboardingTarget
+  if (onboardingTargetDescription) {
+    onboardingTarget.setAttribute('aria-describedby', onboardingTargetDescription)
+  } else onboardingTarget.removeAttribute('aria-describedby')
+  onboardingTarget = undefined
+  onboardingTargetDescription = undefined
+}
+
+function prepareOnboardingStep(content) {
+  onboardingReveal = content.reveal
+  setHovered(true)
+}
+
+function revealOnboardingSettings(content, renderedStep) {
+  if (
+    !onboardingOpen ||
+    onboardingStep !== renderedStep ||
+    onboardingReveal !== content.reveal ||
+    (content.reveal !== 'camera-settings' && content.reveal !== 'scene-settings')
+  ) return
+
+  selectSettingsPanel(content.reveal === 'camera-settings' ? 'camera' : 'presets')
+  setControlsOpen(true)
+  positionOnboardingCoachmark()
+  requestAnimationFrame(positionOnboardingCoachmark)
+}
+
+function scheduleOnboardingDemo(callback, delay) {
+  const timeout = setTimeout(() => {
+    onboardingDemoTimeouts.delete(timeout)
+    callback()
+  }, delay)
+  onboardingDemoTimeouts.add(timeout)
+  return timeout
+}
+
+function trackOnboardingDemoAnimation(animation) {
+  onboardingDemoAnimations.add(animation)
+  animation.finished
+    .catch(() => {})
+    .finally(() => onboardingDemoAnimations.delete(animation))
+  return animation
+}
+
+function placeOnboardingDemoMouse(target, offset = { x: 0, y: 0 }) {
+  const overlayBounds = overlay.getBoundingClientRect()
+  const targetBounds = target.getBoundingClientRect()
+  onboardingDemoMouse.style.left = `${Math.round(
+    targetBounds.left - overlayBounds.left + targetBounds.width / 2 - 9 + offset.x,
+  )}px`
+  onboardingDemoMouse.style.top = `${Math.round(
+    targetBounds.top - overlayBounds.top + targetBounds.height / 2 - 13 + offset.y,
+  )}px`
+}
+
+function showOnboardingDemoMouse(target, offset) {
+  placeOnboardingDemoMouse(target, offset)
+  onboardingDemoMouse.hidden = false
+}
+
+function hideOnboardingDemoMouse() {
+  onboardingDemoMouse.hidden = true
+  onboardingDemoMouse.style.opacity = ''
+  onboardingDemoMouse.style.transform = ''
+  onboardingDemoMouse.removeAttribute('data-action')
+}
+
+function stopOnboardingDemo({ commit = true, restore = false } = {}) {
+  const stoppedType = onboardingDemoType
+  const snapshot = onboardingDemoSnapshot
+  onboardingDemoType = undefined
+  onboardingDemoSnapshot = undefined
+  overlay.removeAttribute('data-onboarding-demo')
+  onboardingDemoTimeouts.forEach(clearTimeout)
+  onboardingDemoTimeouts.clear()
+  onboardingDemoIntervals.forEach(clearInterval)
+  onboardingDemoIntervals.clear()
+  onboardingDemoAnimations.forEach((animation) => animation.cancel())
+  onboardingDemoAnimations.clear()
+  hideOnboardingDemoMouse()
+
+  if (restore && stoppedType === 'shape' && snapshot?.shape) {
+    camFrame.updateState({ shape: snapshot.shape })
+  } else if (restore && stoppedType === 'framing' && snapshot?.cameraPosition) {
+    const cameraPosition = { ...snapshot.cameraPosition }
+    state = { ...state, cameraPosition, cameraZoom: snapshot.cameraZoom }
+    applyCameraFraming()
+    camFrame.updateState({ cameraPosition, cameraZoom: snapshot.cameraZoom })
+  } else if (commit && stoppedType === 'framing' && onboardingDemoFramingChanged && state) {
+    camFrame.updateState({
+      cameraPosition: { ...state.cameraPosition },
+      cameraZoom: state.cameraZoom,
+    })
+  }
+  onboardingDemoFramingChanged = false
+}
+
+function playOnboardingMouseClick(target, onActivate) {
+  if (!onboardingDemoType) return
+  showOnboardingDemoMouse(target)
+  onboardingDemoMouse.dataset.action = 'click'
+  trackOnboardingDemoAnimation(
+    onboardingDemoMouse.animate(
+      [
+        { opacity: 0, transform: 'translate(22px, 24px)' },
+        { opacity: 1, transform: 'translate(22px, 24px)', offset: 0.18 },
+        { opacity: 1, transform: 'translate(0, 0)', offset: 0.55 },
+        { opacity: 1, transform: 'scale(0.88)', offset: 0.64 },
+        { opacity: 1, transform: 'scale(1)', offset: 0.74 },
+        { opacity: 0, transform: 'translate(-4px, -4px)' },
+      ],
+      { duration: 920, easing: 'ease-in-out', fill: 'forwards' },
+    ),
+  )
+  trackOnboardingDemoAnimation(
+    onboardingDemoClick.animate(
+      [
+        { opacity: 0, transform: 'scale(0.45)' },
+        { opacity: 0.9, transform: 'scale(0.65)', offset: 0.35 },
+        { opacity: 0, transform: 'scale(1)' },
+      ],
+      { duration: 320, delay: 500, easing: 'ease-out' },
+    ),
+  )
+  scheduleOnboardingDemo(() => {
+    if (onboardingDemoType) onActivate()
+  }, 560)
+  scheduleOnboardingDemo(() => {
+    if (onboardingDemoType) hideOnboardingDemoMouse()
+  }, 920)
+}
+
+function cycleCameraShape() {
+  const currentIndex = ONBOARDING_SHAPES.indexOf(state.shape)
+  camFrame.updateState({
+    shape: ONBOARDING_SHAPES[(currentIndex + 1) % ONBOARDING_SHAPES.length],
+  })
+}
+
+function startShapeOnboardingDemo() {
+  stopOnboardingDemo({ restore: true })
+  onboardingDemoType = 'shape'
+  onboardingDemoSnapshot = { shape: state.shape }
+  overlay.dataset.onboardingDemo = 'shape'
+  let clicks = 0
+
+  const playNextClick = () => {
+    if (onboardingDemoType !== 'shape') return
+    playOnboardingMouseClick(shapeButton, cycleCameraShape)
+    clicks += 1
+    if (clicks < ONBOARDING_SHAPE_DEMO_CLICKS) {
+      scheduleOnboardingDemo(playNextClick, 1280)
+    } else {
+      scheduleOnboardingDemo(() => {
+        if (onboardingDemoType !== 'shape') return
+        hideOnboardingDemoMouse()
+        overlay.dataset.onboardingDemo = 'shape-ready'
+      }, 980)
+    }
+  }
+
+  playNextClick()
+}
+
+function setDemoFraming(cameraPosition, cameraZoom = state.cameraZoom) {
+  state = { ...state, cameraPosition, cameraZoom }
+  onboardingDemoFramingChanged = true
+  applyCameraFraming()
+}
+
+function startDemoInterval(update) {
+  const interval = setInterval(() => {
+    if (!onboardingDemoType) {
+      clearInterval(interval)
+      onboardingDemoIntervals.delete(interval)
+      return
+    }
+    update(interval)
+  }, 16)
+  onboardingDemoIntervals.add(interval)
+  return interval
+}
+
+function finishDemoInterval(interval) {
+  clearInterval(interval)
+  onboardingDemoIntervals.delete(interval)
+}
+
+function playFramingResetDemo() {
+  if (onboardingDemoType !== 'framing') return
+  showOnboardingDemoMouse(cameraSurface)
+  onboardingDemoMouse.dataset.action = 'double-click'
+  trackOnboardingDemoAnimation(
+    onboardingDemoMouse.animate(
+      [
+        { opacity: 0, transform: 'translate(16px, 18px)' },
+        { opacity: 1, transform: 'translate(0, 0)', offset: 0.35 },
+        { opacity: 1, transform: 'scale(0.88)', offset: 0.5 },
+        { opacity: 1, transform: 'scale(1)', offset: 0.62 },
+        { opacity: 1, transform: 'scale(0.88)', offset: 0.72 },
+        { opacity: 1, transform: 'scale(1)', offset: 0.82 },
+        { opacity: 0, transform: 'translate(-4px, -4px)' },
+      ],
+      { duration: 1000, easing: 'ease-in-out', fill: 'forwards' },
+    ),
+  )
+  trackOnboardingDemoAnimation(
+    onboardingDemoClick.animate(
+      [
+        { opacity: 0, transform: 'scale(0.45)' },
+        { opacity: 0.9, transform: 'scale(0.65)', offset: 0.35 },
+        { opacity: 0, transform: 'scale(1)' },
+      ],
+      { duration: 260, delay: 470, iterations: 2, easing: 'ease-out' },
+    ),
+  )
+  scheduleOnboardingDemo(() => {
+    if (onboardingDemoType !== 'framing') return
+    const cameraPosition = { x: 50, y: 50 }
+    setDemoFraming(cameraPosition, 100)
+    camFrame.updateState({ cameraPosition, cameraZoom: 100 })
+  }, 760)
+  scheduleOnboardingDemo(() => {
+    if (onboardingDemoType !== 'framing') return
+    hideOnboardingDemoMouse()
+    playFramingPanDemo()
+  }, 1650)
+}
+
+function playFramingZoomDemo() {
+  if (onboardingDemoType !== 'framing') return
+  showOnboardingDemoMouse(cameraSurface, { x: 42, y: 0 })
+  onboardingDemoMouse.dataset.action = 'scroll'
+  trackOnboardingDemoAnimation(
+    onboardingDemoMouse.animate(
+      [
+        { opacity: 0, transform: 'translateY(12px)' },
+        { opacity: 1, transform: 'translateY(0)', offset: 0.2 },
+        { opacity: 1, transform: 'translateY(0)', offset: 0.82 },
+        { opacity: 0, transform: 'translateY(-6px)' },
+      ],
+      { duration: 1100, easing: 'ease-in-out', fill: 'forwards' },
+    ),
+  )
+  trackOnboardingDemoAnimation(
+    onboardingDemoWheel.animate(
+      [
+        { transform: 'translateY(-2px)' },
+        { transform: 'translateY(2px)' },
+        { transform: 'translateY(-2px)' },
+      ],
+      { duration: 260, iterations: 4, easing: 'ease-in-out' },
+    ),
+  )
+
+  const startedAt = performance.now()
+  const duration = 1000
+  const startZoom = state.cameraZoom
+  const targetZoom = startZoom >= 220 ? Math.max(100, startZoom - 30) : Math.min(250, startZoom + 30)
+  startDemoInterval((interval) => {
+    const progress = Math.min(1, (performance.now() - startedAt) / duration)
+    const eased = progress * (2 - progress)
+    const cameraZoom = Math.round(startZoom + (targetZoom - startZoom) * eased)
+    setDemoFraming({ ...state.cameraPosition }, cameraZoom)
+    if (progress < 1) return
+    finishDemoInterval(interval)
+    camFrame.updateState({ cameraZoom })
+    scheduleOnboardingDemo(playFramingResetDemo, 520)
+  })
+}
+
+function playFramingPanDemo() {
+  if (onboardingDemoType !== 'framing') return
+  showOnboardingDemoMouse(cameraSurface)
+  onboardingDemoMouse.dataset.action = 'drag'
+  trackOnboardingDemoAnimation(
+    onboardingDemoMouse.animate(
+      [
+        { opacity: 0, transform: 'translate(-40px, 20px)' },
+        { opacity: 1, transform: 'translate(-40px, 20px)', offset: 0.15 },
+        { opacity: 1, transform: 'translate(40px, -18px)', offset: 0.84 },
+        { opacity: 0, transform: 'translate(44px, -20px)' },
+      ],
+      { duration: 1400, easing: 'ease-in-out', fill: 'forwards' },
+    ),
+  )
+
+  const startedAt = performance.now()
+  const duration = 1400
+  const startPosition = { ...state.cameraPosition }
+  const surface = cameraSurface.getBoundingClientRect()
+  startDemoInterval((interval) => {
+    const progress = Math.min(1, (performance.now() - startedAt) / duration)
+    const eased = progress * (2 - progress)
+    const cameraPosition = cameraPositionAfterDrag(
+      startPosition,
+      { x: 80 * eased, y: -38 * eased },
+      surface,
+      state.mirror,
+      state.cameraZoom,
+    )
+    setDemoFraming(cameraPosition)
+    if (progress < 1) return
+    finishDemoInterval(interval)
+    camFrame.updateState({ cameraPosition })
+    scheduleOnboardingDemo(playFramingZoomDemo, 420)
+  })
+}
+
+function startFramingOnboardingDemo() {
+  stopOnboardingDemo({ restore: true })
+  onboardingDemoType = 'framing'
+  onboardingDemoSnapshot = {
+    cameraPosition: { ...state.cameraPosition },
+    cameraZoom: state.cameraZoom,
+  }
+  overlay.dataset.onboardingDemo = 'framing'
+  setPositioning(true)
+  positionOnboardingCoachmark()
+  playFramingPanDemo()
+}
+
+function startOnboardingDemonstration(content, renderedStep) {
+  if (
+    !onboardingOpen ||
+    onboardingStep !== renderedStep ||
+    onboardingReveal !== content.reveal ||
+    onboardingMotionQuery.matches
+  ) return
+
+  if (content.reveal === 'shape-controls') startShapeOnboardingDemo()
+  if (content.reveal === 'framing') startFramingOnboardingDemo()
+}
+
+function resetOnboardingDemonstration() {
+  stopOnboardingDemo({ restore: true })
+  if (positioning) setPositioning(false)
+  if (controlsOpen) setControlsOpen(false)
+  inlineSettings.style.removeProperty('--settings-top')
+}
+
+function positionOnboardingCoachmark() {
+  if (!onboardingOpen || !onboardingTarget) return
+  const panelBounds = onboardingPanel.getBoundingClientRect()
+  const overlayBounds = overlay.getBoundingClientRect()
+  const margin = 8
+  const gap = 12
+  const viewportWidth = overlayBounds.width
+  const onboardingOffset =
+    Number.parseFloat(getComputedStyle(overlay).getPropertyValue('--onboarding-offset')) || 0
+  const toolbarTop = onboardingOffset + 22
+  const top = Math.max(margin, toolbarTop - panelBounds.height - gap)
+  const targetBounds = onboardingTarget.getBoundingClientRect()
+  const targetCenter = targetBounds.left - overlayBounds.left + targetBounds.width / 2
+  const left = Math.min(
+    viewportWidth - panelBounds.width - margin,
+    Math.max(margin, targetCenter - panelBounds.width / 2),
+  )
+  const arrowLeft = Math.min(panelBounds.width - 18, Math.max(18, targetCenter - left))
+
+  onboardingPanel.style.setProperty('--coachmark-left', `${Math.round(left)}px`)
+  onboardingPanel.style.setProperty('--coachmark-top', `${Math.round(top)}px`)
+  onboardingPanel.style.setProperty('--coachmark-arrow-left', `${Math.round(arrowLeft)}px`)
+  onboardingPanel.dataset.placement = 'above'
+  if (
+    controlsOpen &&
+    (onboardingReveal === 'camera-settings' || onboardingReveal === 'scene-settings')
+  ) {
+    inlineSettings.style.setProperty('--settings-top', `${Math.round(toolbarTop + 44 + gap)}px`)
+  } else inlineSettings.style.removeProperty('--settings-top')
+}
+
+new ResizeObserver(positionOnboardingCoachmark).observe(overlay)
+
+function renderOnboardingStep({ focus = true } = {}) {
+  const content = onboardingSteps[onboardingStep]
+  const renderedStep = onboardingStep
+  clearOnboardingTarget()
+  onboardingReveal = undefined
+  inlineSettings.style.removeProperty('--settings-top')
+  prepareOnboardingStep(content)
+  onboardingProgressLabel.textContent = 'Getting started'
+  onboardingProgressBar.setAttribute('aria-valuenow', String(onboardingStep + 1))
+  onboardingTitle.textContent = content.title
+  onboardingDescription.textContent = content.description
+  const items = content.items ?? []
+  onboardingItems.replaceChildren(...items.map((item) => {
+    const row = document.createElement('li')
+    row.textContent = item
+    return row
+  }))
+  onboardingItems.hidden = items.length === 0
+  onboardingNote.textContent = content.note ?? ''
+  onboardingNote.hidden = !content.note
+  onboardingProgress.forEach((segment, index) => {
+    segment.dataset.current = String(index <= onboardingStep)
+  })
+  onboardingBack.hidden = onboardingStep === 0
+  onboardingNext.textContent =
+    onboardingStep === ONBOARDING_STEP_COUNT - 1 ? 'Done' : 'Next'
+  onboardingTarget = document.querySelector(content.target)
+  if (onboardingTarget) {
+    onboardingTarget.dataset.onboardingTarget = 'true'
+    onboardingTargetDescription = onboardingTarget.getAttribute('aria-describedby')
+    onboardingTarget.setAttribute(
+      'aria-describedby',
+      [onboardingTargetDescription, 'onboarding-description'].filter(Boolean).join(' '),
+    )
+  }
+  positionOnboardingCoachmark()
+  setTimeout(
+    () => revealOnboardingSettings(content, renderedStep),
+    ONBOARDING_SETTINGS_REVEAL_DELAY_MS,
+  )
+  setTimeout(
+    () => startOnboardingDemonstration(content, renderedStep),
+    ONBOARDING_DEMO_START_DELAY_MS,
+  )
+  requestAnimationFrame(() => {
+    if (!onboardingOpen || onboardingStep !== renderedStep) return
+    positionOnboardingCoachmark()
+    if (focus) onboardingTitle.focus()
+  })
+}
+
+function openOnboarding({ invoker } = {}) {
+  if (onboardingOpen) {
+    renderOnboardingStep()
+    return
+  }
+  if (
+    invoker instanceof HTMLElement &&
+    invoker !== document.body &&
+    !onboardingPanel.contains(invoker)
+  ) {
+    onboardingReturnFocus = invoker
+  }
+  onboardingOpen = true
+  onboardingStep = 0
+  const onboardingOffset = Math.max(0, Number(camFrame.setOverlayOnboardingOpen(true)) || 0)
+  overlay.style.setProperty('--onboarding-offset', `${onboardingOffset}px`)
+  overlay.dataset.onboarding = 'true'
+  onboardingPanel.hidden = false
+  setHovered(true)
+  renderOnboardingStep()
+}
+
+function closeOnboarding({ complete = true } = {}) {
+  if (!onboardingOpen) return
+  onboardingOpen = false
+  onboardingPanel.hidden = true
+  overlay.dataset.onboarding = 'false'
+  clearOnboardingTarget()
+  onboardingReveal = undefined
+  stopOnboardingDemo({ restore: true })
+  inlineSettings.style.removeProperty('--settings-top')
+  if (positioning) setPositioning(false)
+  if (controlsOpen) setControlsOpen(false)
+  camFrame.setOverlayOnboardingOpen(false)
+  overlay.style.removeProperty('--onboarding-offset')
+  if (complete && shouldShowOnboarding(state?.completedOnboardingVersion)) {
+    state = { ...state, completedOnboardingVersion: CURRENT_ONBOARDING_VERSION }
+    camFrame.completeOnboarding()
+  }
+  setInteractive(
+    overlay.dataset.hovered === 'true' || controlsOpen || dragging || positioning || resizing,
+  )
+  const returnFocus = onboardingReturnFocus
+  onboardingReturnFocus = undefined
+  if (returnFocus?.isConnected) returnFocus.focus()
+  scheduleHideChrome()
+}
+
+function maybeOfferOnboarding() {
+  if (!state || !onboardingCameraKnown || onboardingAutoOffered) return
+  onboardingAutoOffered = true
+  if (shouldShowOnboarding(state.completedOnboardingVersion)) openOnboarding()
+}
+
+function markCameraKnownForOnboarding() {
+  onboardingCameraKnown = true
+  maybeOfferOnboarding()
+}
 
 function selectSettingsPanel(panel) {
   inlineSettings.dataset.activePanel = panel
@@ -254,6 +791,7 @@ function renderPresets() {
 async function startCamera(cameraId = '') {
   if (isQaPreview) {
     hideCameraState()
+    markCameraKnownForOnboarding()
     return
   }
   const activeDeviceId = activeStream?.getVideoTracks()[0]?.getSettings().deviceId
@@ -305,6 +843,7 @@ async function startCamera(cameraId = '') {
     await syncEffectVideo()
     await reportDevices()
     hideCameraState()
+    markCameraKnownForOnboarding()
   } catch (error) {
     if (request !== startRequest) return
     if (cameraId && (error.name === 'OverconstrainedError' || error.name === 'NotFoundError')) {
@@ -313,12 +852,13 @@ async function startCamera(cameraId = '') {
     }
     const friendlyMessage =
       error.name === 'NotAllowedError'
-        ? 'Camera access is blocked in Windows privacy settings.'
+        ? permissionRecoveryCopyFor(camFrame.platform)
         : error.name === 'NotReadableError'
           ? 'This camera is already in use by another app.'
           : 'CamFrame could not start this camera.'
     showCameraState(friendlyMessage)
     camFrame.reportCameraError(`${friendlyMessage} ${error.message ?? ''}`)
+    markCameraKnownForOnboarding()
   }
 }
 
@@ -330,6 +870,7 @@ function applyState(nextState) {
     (state?.overlayResolution !== nextState.overlayResolution ||
       state?.fullscreenResolution !== nextState.fullscreenResolution)
   state = nextState
+  maybeOfferOnboarding()
   const cameraWidth = state.shape === 'portrait' ? state.size * 0.75 : state.size
   const cameraHeight = state.shape === 'landscape' ? state.size * 0.5625 : state.size
   const cameraWidthValue = `${Math.round(cameraWidth)}px`
@@ -410,12 +951,18 @@ function setHovered(hovered) {
   clearHoverTimer()
   overlay.dataset.hovered = String(hovered)
   setInteractive(
-    hovered || controlsOpen || dragging || positioning || resizing || Boolean(cameraReposition),
+    hovered ||
+      controlsOpen ||
+      onboardingOpen ||
+      dragging ||
+      positioning ||
+      resizing ||
+      Boolean(cameraReposition),
   )
 }
 
 function scheduleFullscreenToolbarHide() {
-  if (!fullscreen || controlsOpen || positioning || resizing || hoverTimer) return
+  if (!fullscreen || controlsOpen || onboardingOpen || positioning || resizing || hoverTimer) return
   hoverTimer = setTimeout(() => {
     hoverTimer = undefined
     setHovered(false)
@@ -433,7 +980,7 @@ function scheduleHideChrome() {
     scheduleFullscreenToolbarHide()
     return
   }
-  if (controlsOpen || positioning || resizing) return
+  if (controlsOpen || onboardingOpen || positioning || resizing) return
   clearHoverTimer()
   hoverTimer = setTimeout(() => setHovered(false), 220)
 }
@@ -446,7 +993,9 @@ function setControlsOpen(open) {
   if (open) {
     setHovered(true)
     if (!isQaPreview) reportDevices()
-  } else setInteractive(overlay.dataset.hovered === 'true' || dragging || positioning)
+  } else {
+    setInteractive(overlay.dataset.hovered === 'true' || onboardingOpen || dragging || positioning)
+  }
 }
 
 function setPositioning(nextPositioning) {
@@ -484,21 +1033,26 @@ document.addEventListener('mousemove', (event) => {
   }
   const overInteractiveSurface =
     event.target instanceof Element &&
-    event.target.closest('.camera-surface, .hover-toolbar, .inline-settings')
+    event.target.closest('.camera-surface, .hover-toolbar, .inline-settings, .onboarding-coachmark')
   if (overInteractiveSurface) setHovered(true)
   else if (!dragging) scheduleHideChrome()
 })
 
 document.addEventListener('mouseleave', () => {
-  if (fullscreen || controlsOpen || positioning || resizing) {
+  if (fullscreen || controlsOpen || onboardingOpen || positioning || resizing) {
     scheduleHideChrome()
     return
   }
   setHovered(false)
 })
 
+cameraSurface.addEventListener('pointerenter', () => {
+  if (onboardingDemoType === 'framing') stopOnboardingDemo()
+})
+
 cameraSurface.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return
+  if (onboardingDemoType === 'framing') stopOnboardingDemo()
   if (positioning) {
     cameraReposition = {
       pointerId: event.pointerId,
@@ -557,9 +1111,11 @@ function stopDragging() {
 
 function handleWindowBlur() {
   stopDragging()
-  if (controlsOpen) setControlsOpen(false)
-  if (positioning) setPositioning(false)
-  setHovered(false)
+  if (!onboardingOpen) {
+    if (controlsOpen) setControlsOpen(false)
+    if (positioning) setPositioning(false)
+    setHovered(false)
+  }
 }
 
 cameraSurface.addEventListener('pointerup', stopDragging)
@@ -567,6 +1123,7 @@ cameraSurface.addEventListener('pointercancel', stopDragging)
 cameraSurface.addEventListener('pointerup', finishCameraReposition)
 cameraSurface.addEventListener('pointercancel', finishCameraReposition)
 cameraSurface.addEventListener('dblclick', () => {
+  if (onboardingDemoType === 'framing') stopOnboardingDemo()
   if (!positioning) return
   const cameraPosition = { x: 50, y: 50 }
   state = { ...state, cameraPosition, cameraZoom: 100 }
@@ -577,6 +1134,7 @@ cameraSurface.addEventListener('dblclick', () => {
 cameraSurface.addEventListener(
   'wheel',
   (event) => {
+    if (onboardingDemoType === 'framing') stopOnboardingDemo()
     if (!positioning) return
     event.preventDefault()
     const cameraZoom = cameraZoomAfterWheel(state.cameraZoom, event.deltaY)
@@ -588,6 +1146,7 @@ cameraSurface.addEventListener(
   { passive: false },
 )
 window.addEventListener('blur', handleWindowBlur)
+window.addEventListener('resize', () => requestAnimationFrame(positionOnboardingCoachmark))
 
 document.querySelector('#close-button').addEventListener('click', () => {
   setControlsOpen(false)
@@ -595,16 +1154,38 @@ document.querySelector('#close-button').addEventListener('click', () => {
 })
 
 fullscreenButton.addEventListener('click', () => {
+  if (onboardingOpen) closeOnboarding()
   camFrame.toggleFullscreen()
 })
 
-document.querySelector('#shape-button').addEventListener('click', () => {
-  const shapes = ['circle', 'rounded', 'portrait', 'landscape']
-  camFrame.updateState({ shape: shapes[(shapes.indexOf(state.shape) + 1) % shapes.length] })
+shapeButton.addEventListener('pointerenter', () => {
+  if (onboardingDemoType === 'shape') stopOnboardingDemo({ commit: false })
+})
+
+shapeButton.addEventListener('focus', () => {
+  if (onboardingDemoType === 'shape') stopOnboardingDemo({ commit: false })
+})
+
+shapeButton.addEventListener('click', () => {
+  if (onboardingDemoType === 'shape') stopOnboardingDemo({ commit: false })
+  cycleCameraShape()
+})
+
+positionButton.addEventListener('pointerenter', () => {
+  if (onboardingDemoType === 'framing') stopOnboardingDemo()
+})
+
+positionButton.addEventListener('focus', () => {
+  if (onboardingDemoType === 'framing') stopOnboardingDemo()
 })
 
 positionButton.addEventListener('click', () => {
+  if (onboardingDemoType === 'framing') stopOnboardingDemo()
   setPositioning(!positioning)
+  if (onboardingOpen) {
+    positionOnboardingCoachmark()
+    requestAnimationFrame(positionOnboardingCoachmark)
+  }
 })
 
 document.querySelectorAll('[data-resize-handle]').forEach((handle) => {
@@ -635,6 +1216,32 @@ document.querySelectorAll('[data-resize-handle]').forEach((handle) => {
 
 document.querySelector('#controls-button').addEventListener('click', () => {
   setControlsOpen(!controlsOpen)
+  if (onboardingOpen && controlsOpen) {
+    if (onboardingReveal === 'camera-settings') selectSettingsPanel('camera')
+    if (onboardingReveal === 'scene-settings') selectSettingsPanel('presets')
+  }
+  if (onboardingOpen) {
+    positionOnboardingCoachmark()
+    requestAnimationFrame(positionOnboardingCoachmark)
+  }
+})
+
+onboardingSkip.addEventListener('click', () => closeOnboarding())
+
+onboardingBack.addEventListener('click', () => {
+  resetOnboardingDemonstration()
+  onboardingStep = onboardingStepAfter(onboardingStep, -1)
+  renderOnboardingStep()
+})
+
+onboardingNext.addEventListener('click', () => {
+  if (onboardingStep === ONBOARDING_STEP_COUNT - 1) {
+    closeOnboarding()
+    return
+  }
+  resetOnboardingDemonstration()
+  onboardingStep = onboardingStepAfter(onboardingStep, 1)
+  renderOnboardingStep()
 })
 
 cameraSelect.addEventListener('change', () => {
@@ -760,8 +1367,13 @@ launchToggle.addEventListener('change', () => {
 })
 
 camFrame.onShowControls(() => {
+  if (onboardingOpen) closeOnboarding({ complete: false })
   setHovered(true)
   setControlsOpen(true)
+})
+
+camFrame.onShowOnboarding(() => {
+  openOnboarding({ invoker: document.activeElement })
 })
 
 camFrame.onStateChanged(applyState)
@@ -770,11 +1382,23 @@ camFrame.getState().then((initialState) => {
   applyState(initialState)
   if (isQaPreview) {
     document.documentElement.classList.add('qa-preview')
-    setHovered(new URLSearchParams(window.location.search).get('state') === 'hover')
+    setHovered(qaPreviewParams.get('state') === 'hover')
+    positionOnboardingCoachmark()
   } else reportDevices()
 })
 
 window.addEventListener('keydown', (event) => {
+  if (onboardingOpen) {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    if (positioning) {
+      setPositioning(false)
+      positionOnboardingCoachmark()
+      return
+    }
+    closeOnboarding()
+    return
+  }
   if (event.key !== 'Escape') return
   if (positioning && !fullscreen) {
     event.preventDefault()
