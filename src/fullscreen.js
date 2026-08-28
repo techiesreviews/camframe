@@ -3,6 +3,7 @@ export function fullscreenButtonCopy(fullscreen) {
 }
 
 export const FULLSCREEN_TOOLBAR_HIDE_DELAY_MS = 200
+export const OVERLAY_BOUNDS_TRANSITION_MS = 280
 
 export function pointIsInToolbarHotspot(point, rect, padding = 12) {
   if (![point?.x, point?.y, rect?.left, rect?.top, rect?.right, rect?.bottom].every(Number.isFinite)) {
@@ -51,4 +52,11 @@ export function interpolateWindowBounds(from, to, progress) {
       Math.round(from[key] + (to[key] - from[key]) * eased),
     ]),
   )
+}
+
+export function overlayBoundsTransitionPlan(bounds, reducedMotion = false) {
+  return {
+    bounds: { ...bounds },
+    durationMs: reducedMotion ? 0 : OVERLAY_BOUNDS_TRANSITION_MS,
+  }
 }

@@ -10,8 +10,8 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 - **Frame effect**: an optional visual treatment rendered outside the camera surface.
 - **Compact mode**: the normal movable camera overlay.
 - **Full screen**: the camera expanded to the active display bounds.
-- **Controller**: the separate CamFrame settings window.
 - **Inline settings**: settings opened directly over the camera overlay.
+- **Camera quality**: the single capture-resolution preference used unchanged in Compact mode and Full screen. Its persisted compatibility key is `overlayResolution`.
 - **Onboarding**: the versioned four-step contextual coach-mark tour rendered inside the Overlay and reopenable from tray Help.
 - **Scene**: a named, ordered snapshot of reusable camera, appearance, framing, size, and compact-position settings. The persisted field remains `presets` for compatibility.
 - **Preferences**: the sanitized settings document stored as `preferences.json` in Electron's per-user data directory.
@@ -22,7 +22,6 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 
 - `src/main.js`: Electron lifecycle, native window bounds, IPC, persistence, tray, shortcuts, and presentation state.
 - `src/overlay.*`: camera overlay markup, presentation, and renderer behavior.
-- `src/control.*`: dormant separate Controller implementation; v0.4.3 does not instantiate it.
 - `src/settings.js`: settings defaults, sanitization, geometry, Scene helpers, and currently unused native-region calculations.
 - `src/cameras.js`: capture constraints and camera-track configuration.
 - `src/onboarding.js`: onboarding version/migration rules, bounded step navigation, platform permission copy, and coach-mark targets/reveal actions.

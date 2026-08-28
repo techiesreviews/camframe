@@ -9,7 +9,6 @@ export const PRESET_SETTING_KEYS = Object.freeze([
   'shape',
   'size',
   'overlayResolution',
-  'fullscreenResolution',
   'frameEffect',
   'effectColor',
   'glowStrength',
@@ -31,7 +30,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   shape: 'circle',
   size: 288,
   overlayResolution: '720p',
-  fullscreenResolution: '2160p',
   frameEffect: 'none',
   effectColor: '#fb923c',
   glowStrength: 90,
@@ -66,9 +64,6 @@ export function sanitizeSettings(input = {}, includePresets = true) {
   if (Number.isFinite(input.size)) settings.size = Math.round(clamp(input.size, 180, 640))
   if (CAPTURE_RESOLUTIONS.has(input.overlayResolution)) {
     settings.overlayResolution = input.overlayResolution
-  }
-  if (CAPTURE_RESOLUTIONS.has(input.fullscreenResolution)) {
-    settings.fullscreenResolution = input.fullscreenResolution
   }
   if (FRAME_EFFECTS.has(input.frameEffect)) settings.frameEffect = input.frameEffect
   if (/^#[0-9a-f]{6}$/i.test(input.effectColor ?? '')) settings.effectColor = input.effectColor

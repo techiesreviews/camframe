@@ -11,28 +11,23 @@ global shortcuts / tray
   Electron main process ───── preferences.json
   src/main.js                  per-user local file
      │        ▲
- IPC │        │ state/devices/errors/fullscreen/onboarding/notices
+ IPC │        │ state/fullscreen/onboarding/accessibility/notices
      ▼        │
   preload.cjs bridge
      │
      ▼
   Overlay renderer ───────── navigator.mediaDevices
   overlay.html/js/css          one MediaStream, one or two <video>s
-
-  Dormant Controller renderer
-  control.html/js/css          implemented but never instantiated in v0.4.3
 ```
 
 ## Module and caller map
 
 | Module | Owns | Direct callers / consumers |
 | --- | --- | --- |
-| `src/main.js` | App lifecycle, Preferences I/O, Overlay/Controller definitions, tray/Help, global shortcuts, native bounds/z-order, drag/resize/fullscreen animations, onboarding completion, Scene operations, IPC | Electron entry point from `package.json` |
-| `src/preload.cjs` | `window.camFrame` API and event subscriptions | Loaded by both BrowserWindow definitions; live use is Overlay only |
+| `src/main.js` | App lifecycle, Preferences I/O, Overlay definition, tray/Help, global shortcuts, native bounds/z-order, reduced-motion-aware drag/resize/fullscreen animations, onboarding completion, Scene operations, IPC | Electron entry point from `package.json` |
+| `src/preload.cjs` | `window.camFrame` API and event subscriptions | Loaded by the Overlay BrowserWindow |
 | `src/overlay.js` | Camera acquisition, device enumeration, render state, hover/interactivity, direct camera framing, onboarding, Inline settings and Scene UI | `overlay.html`; imports `cameras.js`, `fullscreen.js`, `onboarding.js`, and selected `settings.js` helpers |
 | `src/overlay.html` / `.css` | Reachable UI semantics and visual implementation | Loaded by the Overlay BrowserWindow; can render in a browser with the QA fallback |
-| `src/control.js` | Dormant Controller rendering and controls | `control.html` only; requires preload API |
-| `src/control.html` / `.css` | Dormant separate settings UI | Defined for `createControlWindow()`, which has no caller |
 | `src/settings.js` | Defaults, sanitization, Scene snapshots/merge/reorder, camera and window geometry, region calculations | Main imports most state/geometry helpers; Overlay imports pan/zoom helpers; tests import pure contracts |
 | `src/cameras.js` | Capture constraints, track profile application, device option normalization, stream reuse check | Overlay and tests |
 | `src/fullscreen.js` | Fullscreen copy/input, toolbar hotspot, z-order level, transition plan/interpolation | Main, Overlay, and tests |
@@ -52,11 +47,10 @@ global shortcuts / tray
 
 ### Main-process transient state
 
-- Overlay/Controller/Tray object references.
-- Discovered camera list relayed from Overlay.
+- Overlay/Tray object references.
 - Mouse interactivity flag.
 - Global-cursor drag/resize timers and start snapshots.
-- Full screen flag, remembered compact bounds, bounds-animation timer, and transition flag.
+- Full screen flag, remembered compact bounds, bounds-animation target/callback/timer, transition flag, and live renderer-reported reduced-motion boolean.
 - Onboarding-layout flag used to normalize the temporary 220 px native top reserve back to compact-base coordinates.
 - Preferences write timer.
 
@@ -68,6 +62,7 @@ global shortcuts / tray
 - Serialized Promise chain for camera-quality updates.
 - Selected Scene ID and notice/hover timers.
 - Onboarding open/step/camera-known/auto-offered state, current highlighted target, dynamic coach-mark placement, optional focus-return element, and live-demo type/snapshot/timers/intervals/animations.
+- Live reduced-motion, forced-colors, and increased-contrast media queries reflected as Overlay data attributes.
 
 ## Startup sequence
 
@@ -75,10 +70,10 @@ global shortcuts / tray
 2. Main loads JSON Preferences, applies the one legacy migration, sanitizes, then forces startup visibility and topmost to `true`.
 3. Packaged builds apply Start at login.
 4. IPC handlers and Overlay-only media permission handlers are registered.
-5. Main creates the transparent Overlay and tray; it does not create the Controller.
+5. Main creates the transparent Overlay and tray.
 6. Global shortcuts are registered without checking or reporting registration success.
 7. When Overlay is ready, main emits state/fullscreen state and shows it without focus.
-8. Overlay requests state, starts the saved/default camera, enumerates devices, and reports the device list to main.
+8. Overlay reflects live accessibility media queries, reports reduced motion to main, requests state, starts the saved/default camera, and enumerates devices locally.
 9. After camera startup reaches a working or error state, Overlay offers onboarding when the persisted completed version is older than the current onboarding version.
 
 Existing Preferences documents without the schema-12 onboarding field are treated as completed. Missing/invalid Preferences use the default incomplete version and follow the new-install path.
@@ -86,7 +81,7 @@ Existing Preferences documents without the schema-12 onboarding field are treate
 ## State update flow
 
 ```text
-control interaction
+Overlay interaction
   → preload `state:update` send
   → main merges patch and sanitizes the entire Preferences object
   → native bounds/z-order/visibility update as needed
@@ -103,19 +98,25 @@ Onboarding step rendering is contextual. Opening the guide performs a synchronou
 
 Shape and framing schedule guarded live demonstrations after 320 ms unless reduced motion is requested. The renderer owns an `aria-hidden`, pointer-transparent ghost mouse plus all demo timers, intervals, and Web Animations. Shape invokes three normal state patches. Framing updates local crop/zoom continuously and commits at phase boundaries or handoff. Hover/focus/interaction clears automation and its starting snapshot, adopting the current state. Back/Next/dismissal restores the snapshot only when the user did not take over, then clears all demo resources. Escape exits active framing before a subsequent Escape may dismiss the guide.
 
+## Accessibility preference coordination
+
+Overlay owns the browser media-query listeners. It combines `forced-colors: active` and `prefers-contrast: more` into `data-high-contrast`, reflects `prefers-reduced-motion: reduce` as `data-reduced-motion`, and sends the two booleans through the preload bridge. CSS responds directly to those attributes, so changes do not wait for a main-process round trip.
+
+Main accepts accessibility messages only from a known CamFrame renderer and retains only reduced motion. The pure Overlay-bounds transition plan returns 280 ms normally or zero duration under reduced motion. A zero-duration request sets exact final bounds and runs the normal completion path synchronously; a live switch to reduced motion finishes any current target/callback. This single path covers Full screen and visible compact Scene applications. Nothing is persisted or added to Scene snapshots.
+
 Main normalizes transient enlarged bounds before centering, resizing, saving a Scene, or deriving new Overlay geometry. Closing onboarding synchronously shrinks the native window and removes the renderer offset without persisting the reserve. Camera geometry and persisted Camera/Scene values are not patched by tour transitions.
 
 ## Camera flow
 
-1. Overlay computes constraints from camera ID, current mode, and the corresponding resolution setting.
+1. Overlay computes constraints from camera ID and the single Camera quality resolution setting.
 2. `getUserMedia()` requests one video stream and no audio.
-3. `OverconstrainedError` retries with no compact-mode minimum frame rate.
+3. `OverconstrainedError` retries with no 30 fps minimum.
 4. A stale async result is stopped instead of installed.
 5. The primary `<video>` receives the stream and begins playback. The track receives `contentHint = 'motion'` where supported.
 6. Progressive blur conditionally attaches the same stream to the second video; other effects detach and pause it.
-7. Enumeration after capture obtains permission-revealed labels and reports normalized devices to main.
+7. Enumeration after capture obtains permission-revealed labels and renders normalized device options locally.
 
-Mode/resolution changes do not recreate the stream. They append an `applyConstraints()` operation to a Promise chain so rapid changes settle in order. Failures are swallowed and preserve the working profile.
+Mode changes do not touch the track profile. A Camera quality change appends one `applyConstraints()` operation to a Promise chain so rapid user changes settle in order. Failures are swallowed and preserve the working profile.
 
 ## Native Overlay interaction
 
@@ -133,14 +134,14 @@ Dragging and resizing are main-process operations because the renderer cannot di
 
 Main and Overlay coordinate, but neither uses Electron native fullscreen:
 
-- Main remembers compact bounds, derives the matching display bounds, forces visible/topmost/focus, emits the mode, and interpolates `x/y/width/height` every 16 ms for 280 ms.
-- Overlay receives the mode, queues the matching camera track profile, switches CSS data attributes, updates button copy, closes settings, and controls toolbar visibility.
+- Main remembers compact bounds, derives the matching display bounds, forces visible/topmost/focus, emits the mode, and interpolates `x/y/width/height` every 16 ms for 280 ms, or applies final bounds immediately under reduced motion.
+- Overlay receives the mode, switches CSS data attributes, updates button copy, closes settings, controls toolbar visibility, and disables geometry transitions under reduced motion. It does not renegotiate the camera track.
 - Exit reverses the bounds animation and only then restores requested visibility and topmost behavior.
 - `before-input-event` in main and renderer key handling both recognize Escape, providing a native-side fallback.
 
 ## Scene flow
 
-Scene writes and imports run in main so file dialogs and Preferences remain privileged. Renderers only send IDs/names or invoke import/export. Applying a visible compact Scene emits visual state before animating native bounds, allowing CSS surface geometry and BrowserWindow movement to transition together.
+Scene writes and imports run in main so file dialogs and Preferences remain privileged. Renderers only send IDs/names or invoke import/export. Applying a visible compact Scene emits visual state before transitioning native bounds, allowing CSS surface geometry and BrowserWindow movement to change together; both complete immediately under reduced motion.
 
 ## Packaging and release flow
 
@@ -151,7 +152,7 @@ Scene writes and imports run in main so file dialogs and Preferences remain priv
 - Main owns all native and filesystem capabilities.
 - Renderer input is untrusted and sanitized as a full settings snapshot.
 - Camera frames stay in native video elements; no canvas/frame-copy loop is part of the retained design.
-- Full screen and Scene transitions reuse the camera stream.
+- Compact and Full screen use one stable Camera quality profile; Full screen and Scene transitions reuse the camera stream without applying track constraints.
 - Temporary presentation state is distinct from reusable Scene state.
 - Direct manipulation owns Overlay size/position and camera framing; settings do not duplicate Size/Zoom sliders.
 - `presets` remains the storage key even though the product term is Scene.

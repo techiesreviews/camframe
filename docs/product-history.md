@@ -6,7 +6,7 @@ This ledger answers four different questions that a changelog usually mixes toge
 
 | Version | Retained outcome | Historical validation recorded at the time |
 | --- | --- | --- |
-| Unreleased | Versioned four-step contextual Overlay onboarding, tray Help entry, schema-12 completion migration, and platform-specific permission recovery copy | 46 tests and syntax/diff checks; visual/focus verification pending human review |
+| Unreleased | Contextual Overlay onboarding; live high-contrast/reduced-motion behavior; removal of the unreachable Controller; one stable Camera quality across Compact and Full screen | 50 tests and syntax checks; native accessibility, camera-hardware, packaging, and durable visual verification remain open |
 | 0.2.12 | Initial Windows Electron Overlay: camera selection, four shapes, mirror/frame, direct drag/resize/crop, hover controls, Full screen, persistence | 13 tests; Windows unpacked build |
 | 0.2.13 | macOS arm64/x64 packaging, camera permission copy, hidden Dock icon, smaller English-only packages and exact font assets | 13 tests; Windows packages; ASAR/locale inspection; package size ~86.8–87.0 MB |
 | 0.2.14 | Electron Builder publishing disabled so the workflow owns GitHub release publication | 13 tests |
@@ -37,6 +37,9 @@ Historical validation is evidence about those revisions, not proof that the curr
 | Full screen chrome | Toolbar hides after 200 ms and returns over padded hotspot | ADR 0011 |
 | Camera pipeline | Native video elements and one stream, no ongoing canvas copies | README, architecture, issue 5 out-of-scope statement |
 | Onboarding | New-install contextual coach marks use transient native space above a screen-stable Toolbar and Camera, persistent hover treatment, segmented progress, automatic post-paint Camera/Scenes panels, live Shape/framing demonstrations with reversible handoff, and local Escape handling; existing users migrate complete; Help can reopen | ADR 0012, ADR 0016–0023, GitHub issue 13 |
+| Accessibility preferences | Live OS contrast/motion signals become explicit Overlay attributes; reduced motion finishes native bounds immediately; contrast uses system colors and non-color-only state indicators | ADR 0013, ADR 0024, GitHub issue 14 |
+| Settings surface | Overlay Inline settings are the only settings UI; open-controls entry points reveal them | ADR 0025 |
+| Camera quality | One chosen capture profile remains unchanged across Compact and Full screen geometry | ADR 0026, GitHub issue 5 |
 
 ## Removed or replaced behavior
 
@@ -51,6 +54,8 @@ Historical validation is evidence about those revisions, not proof that the curr
 | Size and Zoom settings sliders | Duplicated direct manipulation and crowded settings | Corner resize plus target framing tool | ADR 0009 |
 | Always-visible Full screen toolbar | Distracted from presentation | Timed auto-hide/hotspot | ADR 0011 |
 | Windows `pop-up-menu` topmost level | Current v0.4.3 commit prioritizes reliable controls/taskbar layering | `screen-saver` plus z-order re-raise | Commit `fe8e6c6` |
+| Separate dormant Controller, its privileged relays, and Inter assets | It was unreachable and duplicated the live settings surface | Inline settings only; persisted `borderColor` remains accepted for compatibility | ADR 0025 |
+| Separate Full screen quality and mode-change track renegotiation | Hardware reports showed stale, black, or wrong frames during renegotiation | One Camera quality used unchanged in both modes; old `fullscreenResolution` is ignored | ADR 0026, GitHub issue 5 |
 
 ## Tried and not successful
 
@@ -60,9 +65,8 @@ Historical validation is evidence about those revisions, not proof that the curr
 
 ## Uncertain historical outcomes
 
-- GitHub issue 5 is closed, but has no comments or linked resolution and its acceptance checklist remains unchecked. Current source retains dynamic renegotiation. Treat the underlying visual continuity problem as unresolved until a new hardware run proves otherwise.
+- GitHub issue 5's original canvas-held-frame attempt did not succeed. The current source removes the mode-change renegotiation trigger under ADR 0026; repeat the hardware matrix before treating continuity as manually verified.
 - Historical PR 6 says `pop-up-menu` was manually verified over the Windows taskbar. v0.4.3 later changes to `screen-saver` without an ADR. Both facts are preserved; current code is authoritative for reconstruction.
-- The dormant Controller has remained in source and static tests but is not reachable. Its intended long-term disposition is undocumented.
 
 ## Adding a history entry
 

@@ -11,8 +11,7 @@ Preferences are the only durable application state. `sanitizeSettings()` always 
 | `cameraLabel` | `"Default camera"` | String, first 120 characters | Yes | Yes |
 | `shape` | `"circle"` | `circle`, `rounded`, `portrait`, `landscape` | Yes | Yes |
 | `size` | `288` | Finite number, rounded/clamped 180–640 | Yes | Yes |
-| `overlayResolution` | `"720p"` | `480p`, `720p`, `1080p`, `2160p` | Yes | Yes |
-| `fullscreenResolution` | `"2160p"` | Same set | Yes | Yes |
+| `overlayResolution` | `"720p"` | `480p`, `720p`, `1080p`, `2160p`; compatibility key for the single Camera quality used in both modes | Yes | Yes |
 | `frameEffect` | `"none"` | `none`, `glow`, `blur` | Yes | Yes |
 | `effectColor` | `"#fb923c"` | Six-digit hex with leading `#` | Yes | Yes |
 | `glowStrength` | `90` | Integer 10–100 | Yes | Yes |
@@ -39,7 +38,7 @@ Colors retain input case in persisted state when accepted. The live hex text edi
 
 ### Legacy migration
 
-Before sanitization, a loaded document with `schemaVersion < 3` receives `borderWidth = 0` and `size = 288`. A successfully loaded Preferences document without `completedOnboardingVersion` receives the current onboarding version so existing users are not interrupted. A missing or invalid Preferences document retains the default version 0. Explicit saved version 0 remains incomplete across restart. Other fields continue to rely on defaults and sanitization for forward compatibility.
+Before sanitization, a loaded document with `schemaVersion < 3` receives `borderWidth = 0` and `size = 288`. A successfully loaded Preferences document without `completedOnboardingVersion` receives the current onboarding version so existing users are not interrupted. A missing or invalid Preferences document retains the default version 0. Explicit saved version 0 remains incomplete across restart. Legacy `fullscreenResolution` values are ignored; `overlayResolution` becomes the one retained Camera quality. Other fields continue to rely on defaults and sanitization for forward compatibility.
 
 ## Scene record
 
@@ -53,7 +52,6 @@ Before sanitization, a loaded document with `schemaVersion < 3` receives `border
     "shape": "circle",
     "size": 288,
     "overlayResolution": "720p",
-    "fullscreenResolution": "2160p",
     "frameEffect": "none",
     "effectColor": "#fb923c",
     "glowStrength": 90,
@@ -110,7 +108,7 @@ Resolution mapping:
 | `1080p` | 1920×1080 |
 | `2160p` | 3840×2160 |
 
-`cameraConstraintsFor(id, options)` returns `{audio:false, video:{...}}`; non-empty IDs become `{deviceId:{exact:id}}`. Compact mode requests ideal 60/minimum 30/maximum 60 fps unless retrying slower. Full screen requests ideal/maximum 30 fps. These dimensions are preferences, not guarantees; browsers and drivers may choose another supported profile.
+`cameraConstraintsFor(id, options)` returns `{audio:false, video:{...}}`; non-empty IDs become `{deviceId:{exact:id}}`. The chosen Camera quality is used in Compact mode and Full screen with ideal 60/minimum 30/maximum 60 fps unless retrying slower. These dimensions are preferences, not guarantees; browsers and drivers may choose another supported profile. Mode changes never apply new track constraints.
 
 ## Geometry contracts
 
@@ -136,6 +134,7 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 | --- | --- | --- | --- |
 | `getState()` | `state:get` | invoke → handle | Full Preferences plus runtime `activePresetId` |
 | `updateState(patch)` | `state:update` | send → on | Partial untrusted settings patch |
+| `reportAccessibilityPreferences(preferences)` | `accessibility:preferences` | send → on | Live `{reducedMotion,highContrast}` booleans; main accepts known CamFrame renderers and retains reduced motion only; not persisted |
 | `onStateChanged(cb)` | `state:changed` | main → renderer | Full state snapshot |
 | `savePreset(name,id)` | `preset:save` | send → on | Name and optional Scene ID |
 | `applyPreset(id)` | `preset:apply` | send → on | Scene ID |
@@ -143,10 +142,6 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 | `reorderPreset(id,direction)` | `preset:reorder` | send → on | Scene ID and numeric direction |
 | `exportPresets()` | `preset:export` | invoke → handle | `{canceled}` or `{canceled:false,count}` |
 | `importPresets()` | `preset:import` | invoke → handle | `{canceled}`, count, or error string |
-| `reportDevices(devices)` | `overlay:devices` | send → on | Up to 32 `{deviceId,label}` records, string-truncated |
-| `onDevicesChanged(cb)` | `devices:changed` | main → renderer | Relayed camera list; intended for Controller |
-| `reportCameraError(message)` | `overlay:error` | send → on | Error truncated in main to 300 chars |
-| `onCameraError(cb)` | `camera:error` | main → renderer | Relayed error; intended for Controller |
 | `setOverlayInteractive(bool)` | `overlay:interactive` | send → on | Whole-window mouse acceptance |
 | `setOverlaySettingsOpen(bool)` | `overlay:settings-open` | send → on | `true` forces interactivity; `false` has no main-side action |
 | `setOverlayOnboardingOpen(bool)` | `overlay:onboarding-open` | synchronous send → on | Opens/closes the transient native top reserve; returns applied reserve px (`220` or `0`). `true` also shows/focuses the Overlay and forces interactivity |
@@ -158,8 +153,6 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 | `onShowControls(cb)` | `controls:show` | main → renderer | No payload |
 | `onShowOnboarding(cb)` | `onboarding:show` | main → renderer | No payload; tray Help requests the guide |
 | `onPresentationNotice(cb)` | `presentation:notice` | main → renderer | Message string, max 80 chars |
-| `showController()` | `controller:show` | send → on | Despite name, invokes Inline settings behavior |
-| `centerOverlay()` | `overlay:center` | send → on | Centers on nearest display |
 | `quit()` | `app:quit` | send → on | Marks quitting and exits |
 
 Callback registration returns an unsubscribe function. Current renderer code registers these for the page lifetime and relies on page destruction rather than invoking the returned functions.
@@ -173,11 +166,4 @@ Callback registration returns an unsubscribe function. Current renderer code reg
 - Transparent background and disabled background throttling.
 - Context isolation and sandbox enabled; Node integration disabled.
 
-### Dormant Controller BrowserWindow
-
-- 404×720 px; minimum 360×620 px.
-- Normal framed window, hidden until ready, auto-hidden menu, dark background.
-- Closing hides it unless the app is quitting.
-- Same sandbox/preload security options.
-
-No Controller instance is created by the current startup or show-controls flows.
+There is no separate settings BrowserWindow. Tray and shortcut control entry points show the Overlay and emit `controls:show` so Inline settings opens there.

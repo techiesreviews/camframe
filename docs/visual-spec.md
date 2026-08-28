@@ -1,6 +1,6 @@
 # Visual specification
 
-This file records the reachable visual system based on v0.4.3 at commit `fe8e6c6`, plus the unreleased onboarding surface. CSS remains the pixel-level implementation evidence; these values are the minimum contract for a source-independent reconstruction. The dormant Controller is summarized separately so it is not confused with the live UI.
+This file records the reachable visual system based on v0.4.3 at commit `fe8e6c6`, plus the current unreleased Overlay behavior. CSS remains the pixel-level implementation evidence; these values are the minimum contract for a source-independent reconstruction.
 
 ## Reachable Overlay coordinate system
 
@@ -24,7 +24,6 @@ In Full screen, the camera surface becomes `inset:0`, width/height 100%, square 
 - Labels are generally 500 weight at 11/16 px; controls use 10–11 px; icons are 20 px.
 - Phosphor is embedded as `Phosphor.woff2` with ligature-style glyph mappings. Toolbar glyphs, in order: `x-circle`, `corners-out`, `circle`, `crosshair`, `sliders-horizontal`.
 - The framing status uses 9/12 px secondary copy and 600 weight 11/13 px for the live Zoom line.
-- The dormant Controller uses embedded Inter Variable with OpenType features `cv02`, `cv03`, `cv04`, `cv11`, `ss01`, and `ss03`.
 
 ## Core palette
 
@@ -68,6 +67,7 @@ In Full screen, the camera surface becomes `inset:0`, width/height 100%, square 
 - Sliders have a 3 px `#3f3f46` pill track and 12 px `#f4f4f5` circular thumb. Output uses tabular 10 px numerals.
 - Scene action buttons are 30 px high; management grids use three equal columns for order/delete and two for import/export. Disabled controls use opacity 0.42.
 - Toggle rows have 7 px vertical padding and subtle separators. Checkboxes use the browser control with orange accent.
+- Camera quality uses one full-width resolution select; there is no separate Full screen quality column.
 - Scene keyboard hints are muted 10/14 px; `<kbd>` chips have 1×4 px padding, 4 px radius, hairline border, and `#202023` background.
 
 ## Onboarding
@@ -109,11 +109,9 @@ The notice has 7×10 px padding, 8 px radius, 10%-white border, 88%-opaque `#0c0
 | Scene notice entrance/lifetime | 140 ms / 1600 ms |
 | Drag/resize/native animation polling | ~16 ms interval |
 
-`prefers-reduced-motion: reduce` removes spinner animation, camera/effect/toolbar/handle transitions, and notice animation. Native main-process bounds interpolation does not inspect the CSS media preference and therefore still runs.
+`prefers-reduced-motion: reduce` is reflected as `data-reduced-motion='true'` and removes animation and transitions from every Overlay descendant, including current/future scoped effect content. The ghost onboarding pointer remains hidden. Full screen and visible compact Scene native bounds use zero duration and apply exact final geometry; enabling reduced motion during an active native transition finishes its current target immediately.
 
-## Dormant Controller visual reference
-
-If preserving source parity, the dormant Controller is a dark 404×720 px window (minimum 360×620) with `#09090b` background, 20×24 px shell padding, Inter Variable typography, a 22 px “CamFrame” heading, green Live badge, shape preview, and the same Camera/Style/Scenes grouping. Orange is the focus/primary-action accent. It is not part of the reachable v0.4.3 visual acceptance set unless a later ADR activates it.
+Forced colors or increased contrast set `data-high-contrast='true'`. Toolbar, Inline settings, onboarding, camera status, and Scene notice use system Canvas/Button/Highlight colors with explicit borders and no shadow dependency. Selection uses a border plus Highlight fill, keyboard focus uses a separate 3 px outline, onboarding progress segments gain borders, and the selected effect swatch gains a visible check mark so Glow/effect color is never the only state cue.
 
 ## Visual evidence still missing
 

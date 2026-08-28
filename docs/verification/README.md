@@ -15,11 +15,11 @@ Every execution gets a dated file under `runs/`; never overwrite the last known 
 
 ## Current automated suite
 
-Command: `npm test` (`node --test`). Current count: 46 tests in `test/settings.test.js`.
+Command: `npm test` (`node --test`). Current count: 50 tests in `test/settings.test.js`.
 
 | Coverage area | Tests demonstrate | Important limitation |
 | --- | --- | --- |
-| Settings safety | Defaults, whitelists, clamps, camera crop/zoom, resolutions, startup override | Does not read/write a real Preferences directory |
+| Settings safety | Defaults, whitelists, clamps, camera crop/zoom, single Camera quality, startup override | Does not read/write a real Preferences directory |
 | Geometry | Shape dimensions, outer chrome, resize anchoring, region bounds, pan direction | Native BrowserWindow shape/input is not exercised |
 | Camera | Device filtering, stream reuse predicate, constraints, motion hint, profile apply/failure | No real camera, driver, frame, permission, or Chromium pipeline |
 | Scenes | Snapshot inclusion/exclusion, live position capture, cap/sanitize, reorder, merge | No dialogs/filesystem round trip or UI interaction |
@@ -27,13 +27,13 @@ Command: `npm test` (`node --test`). Current count: 46 tests in `test/settings.t
 | Presentation | Shortcut/tray/notice implementation text exists | Shortcuts/tray are not registered or clicked in a test runtime |
 | Full screen | Copy, Escape predicate, plan, interpolation, toolbar timing/hotspot, blur-handler text | No native window animation, display, focus, z-order, or video continuity |
 | Onboarding | New/existing Preferences decision, bounded steps, target/reveal mapping, platform copy, schema/Scene exclusion | No automated BrowserWindow focus, tray click, or visual/layout observation |
+| Accessibility preferences | Pure zero/280 ms bounds plan plus static live-query, IPC, reduced-motion blanket, system-color, selection/focus/status contracts | Does not toggle real Windows/macOS accessibility settings or observe assistive technology |
 
 Also run:
 
 ```powershell
 node --check src/main.js
 node --check src/overlay.js
-node --check src/control.js
 node --check src/settings.js
 node --check src/cameras.js
 node --check src/fullscreen.js
@@ -51,7 +51,7 @@ Record Windows version/build, GPU, display topology/scaling, camera models/drive
 | W-02 | Deny permission, then enable desktop camera permission | Helpful blocked state; relaunch/retry works after OS permission change |
 | W-03 | One camera, then attach/remove another | Device list updates; unlabeled devices have stable fallback labels |
 | W-04 | Saved camera missing on launch | Selection clears and default camera starts |
-| W-05 | Camera already used exclusively elsewhere | “already in use” state is visible and Controller relay is not assumed |
+| W-05 | Camera already used exclusively elsewhere | “already in use” state is visible in the Overlay |
 | W-06 | Drag Overlay on each display/scaling factor | Pointer offset remains stable; final position persists after relaunch |
 | W-07 | Resize all four corners for all shapes | Aspect ratio holds, opposite corner anchors, limits are 180–640 |
 | W-08 | Hover then leave Overlay | Toolbar/handles appear; compact chrome clears without leaving a blocking rectangle |
@@ -62,9 +62,9 @@ Record Windows version/build, GPU, display topology/scaling, camera models/drive
 | W-13 | Framing scroll/reset | 5% steps, 100–250%; double-click returns 100%/center only |
 | W-14 | Enter/exit Full screen on every display | Correct display bounds, 280 ms transition, no stale compact chrome, compact bounds restore |
 | W-15 | Full screen toolbar inactivity/recovery | Hides after ~200 ms; returns in padded hotspot; stays for settings/framing |
-| W-16 | Rapid Full screen toggles | Final UI/profile agree; no stuck animation or wrong bounds |
-| W-17 | Multiple cameras including Elgato during W-14/W-16 | Never shows another device, stale/unrelated frame, or black frame; log frame/profile telemetry |
-| W-18 | Camera without requested 4K profile | Working feed remains stable; no stream loss |
+| W-16 | Rapid Full screen toggles | Final UI and bounds agree; the track profile is unchanged; no stuck animation |
+| W-17 | Multiple cameras including Elgato during W-14/W-16 | Never shows another device, stale/unrelated frame, or black frame; confirm no mode-change constraint application |
+| W-18 | Camera quality choices, including unsupported high profiles | Working feed remains stable; a rejected user quality change preserves the current profile |
 | W-19 | Save/update/rename/reorder/delete six Scenes | Live position captured; ordering/numbering accurate; seventh-save behavior understood |
 | W-20 | Scene apply in compact and Full screen | Compact transition animates; Full screen remains transient; notice appears 1.6 s |
 | W-21 | Export/import canonical, bare array, legacy `presets`, invalid JSON, duplicate name/ID, over-capacity | Merge/error behavior matches data contracts; unrelated local Scenes remain |
@@ -72,9 +72,10 @@ Record Windows version/build, GPU, display topology/scaling, camera models/drive
 | W-23 | Toggle Always on top and overlap taskbar/other topmost apps | Current `screen-saver` behavior is recorded; controls remain recoverable after focus loss |
 | W-24 | Hide via shortcut/tray, then relaunch | Hides during session; relaunch forces visible/topmost |
 | W-25 | Packaged Start at login on/off | Registration changes only packaged app and survives sign-out/sign-in |
-| W-26 | Tray open/double-click/Scene/show/quit | “Open controls” reveals Inline settings; no separate Controller appears |
+| W-26 | Tray open/double-click/Scene/show/quit | “Open controls” reveals Inline settings; the Overlay remains the only window |
 | W-27 | Quit from toolbar and tray | Camera tracks stop and Preferences are synchronously flushed |
 | W-28 | Fresh profile onboarding, Skip/completion, restart, and tray Help | Four coach marks appear above the unchanged five-button Toolbar with four visible progress segments and the target in its hover treatment; opening/closing the guide does not move the Toolbar, Camera, handles, or normal settings on screen; Camera and Scenes open to the matching section only after the coach mark paints; Shape cycles three times and framing demonstrates pan/zoom/reset with a ghost mouse; hover/interaction stops automation and adopts the current state; navigation without takeover restores starting state; reduced motion suppresses demos; framing exits via Crosshair or Escape without dismissing the guide; completion persists; existing profile does not auto-open; Help reopens |
+| W-29 | Toggle Windows contrast themes and Animation effects while CamFrame is running; repeat Full screen and visible compact Scene apply with NVDA | Controls/status remain readable with explicit boundaries, selection, and focus; selected swatch has a check; turning motion off suppresses renderer motion and finishes native bounds immediately at exact final geometry; NVDA state/name announcements remain usable |
 
 ## Manual macOS matrix
 
@@ -87,11 +88,12 @@ Run on both Apple Silicon and Intel artifacts where supported.
 | M-03 | Overlay/Dock/tray lifecycle | Dock icon stays hidden; tray anchors process; no orphan normal window |
 | M-04 | Always on top and spaces/full-screen apps | `floating` level behavior and limitations are recorded |
 | M-05 | Drag/resize/multi-display/Retina | Geometry, saved logical coordinates, and hit behavior remain stable |
-| M-06 | Full screen/profile/camera continuity | Same checks as W-14–W-18 |
+| M-06 | Full screen/camera continuity | Same checks as W-14–W-18 |
 | M-07 | `Cmd` shortcut variants | All documented shortcuts and collision fallback work |
 | M-08 | Packaged Start at login | Login item targets CamFrame and toggles correctly |
 | M-09 | DMG/ZIP Gatekeeper behavior | Unsigned warning is expected and documented; app launches after user approval |
 | M-10 | Fresh profile onboarding, keyboard focus, Skip/completion, and tray Help | Same contextual behavior as W-28 with `Cmd` shortcut copy and VoiceOver announcements |
+| M-11 | Toggle Increase contrast and Reduce motion while CamFrame is running; repeat Full screen and visible compact Scene apply with VoiceOver | Boundaries/selection/focus/status remain distinct; renderer motion stops; native bounds complete immediately at exact final geometry; VoiceOver state/name announcements remain usable |
 
 ## Renderer visual-state set
 
@@ -105,7 +107,7 @@ Capture at minimum:
 - Camera starting, permission blocked, busy, no devices, and generic error states.
 - Scene notice and six-Scene management state.
 - Onboarding coach marks 1–4 at default Circle and minimum Wide dimensions, including target alignment and keyboard focus states.
-- Reduced-motion mode.
+- Reduced-motion and high-contrast modes, including selected controls, keyboard focus, status, Scene notice, onboarding progress, and selected effect swatch.
 
 Browser-only QA is useful for markup/CSS, but it does not represent native transparency, media permissions, Electron IPC, or z-order.
 
@@ -118,7 +120,7 @@ For every release candidate, record:
 - artifact filenames, architecture, byte size, and SHA-256;
 - ASAR contents limited to `src/**/*` and `package.json`;
 - only `en-US.pak` under locales;
-- Inter/Phosphor font files and license files included;
+- Phosphor font and license files included; removed Controller-only Inter assets absent;
 - macOS `NSCameraUsageDescription` present;
 - Windows NSIS and portable launch results;
 - macOS DMG and ZIP launch results;

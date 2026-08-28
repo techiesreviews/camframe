@@ -12,9 +12,9 @@ For an implementation-level product specification, architecture map, data contra
 - Resize from any corner while preserving the selected shape's aspect ratio.
 - Reposition the live image inside its crop and double-click to recenter it.
 - Animated fullscreen mode with `Esc` to restore the previous size and position.
-- Adjustable frame width, frame color, and mirroring.
+- Adjustable frame width, camera quality, and mirroring.
 - Optional always-on-top behavior, including above the Windows taskbar.
-- Hover toolbar with inline camera, size, frame, and always-on-top settings.
+- Hover toolbar with Inline settings for Camera, Style, and Scenes.
 - Tray controls and `Ctrl+Shift+C` to reveal the inline controls.
 - Four contextual first-run coach marks that reveal camera, placement, framing, and Scene controls, reopenable from tray Help.
 - Remembers the selected camera, crop position, appearance, and screen position.
@@ -46,6 +46,6 @@ Native Apple Silicon and Intel builds are produced by the GitHub Actions desktop
 
 ## Performance and download size
 
-The overlay uses one native Chromium video element and one camera stream. It does not copy frames through canvas or JavaScript. Normal overlay capture prefers 1280x720 at 60 fps. Fullscreen capture switches the same track to a preferred 3840x2160 at 30 fps, then returns it to 720p when fullscreen closes. Unsupported 4K cameras keep their current working stream. CamFrame uses a motion-first content hint, leaves GPU acceleration enabled, and disables background throttling only for the overlay window. Transparent areas stay click-through, while forwarded pointer movement reveals the controls without clipping the antialiased camera edge.
+The Overlay uses one camera stream and native Chromium video elements; Progressive blur's optional second video shares that stream. It does not copy frames through canvas or JavaScript. Camera quality defaults to 1280x720 at 60 fps and remains unchanged when entering or leaving Full screen, avoiding mode-change track renegotiation. Unsupported quality changes keep the current working stream. CamFrame uses a motion-first content hint, leaves GPU acceleration enabled, and disables background throttling only for the Overlay window. Transparent areas stay click-through, while forwarded pointer movement reveals the controls without clipping the antialiased camera edge.
 
 Release builds include only the English Chromium locale and the exact font assets used by the interface. Electron still provides the browser, camera, GPU, and window runtime, so it imposes a larger baseline than a fully native application.

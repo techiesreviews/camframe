@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('camFrame', {
   platform: process.platform,
   getState: () => ipcRenderer.invoke('state:get'),
   updateState: (patch) => ipcRenderer.send('state:update', patch),
+  reportAccessibilityPreferences: (preferences) =>
+    ipcRenderer.send('accessibility:preferences', preferences),
   savePreset: (name, id) => ipcRenderer.send('preset:save', name, id),
   applyPreset: (id) => ipcRenderer.send('preset:apply', id),
   deletePreset: (id) => ipcRenderer.send('preset:delete', id),
@@ -15,13 +17,6 @@ contextBridge.exposeInMainWorld('camFrame', {
     ipcRenderer.on('state:changed', listener)
     return () => ipcRenderer.removeListener('state:changed', listener)
   },
-  reportDevices: (devices) => ipcRenderer.send('overlay:devices', devices),
-  onDevicesChanged: (callback) => {
-    const listener = (_event, devices) => callback(devices)
-    ipcRenderer.on('devices:changed', listener)
-    return () => ipcRenderer.removeListener('devices:changed', listener)
-  },
-  reportCameraError: (message) => ipcRenderer.send('overlay:error', message),
   setOverlayInteractive: (interactive) => ipcRenderer.send('overlay:interactive', interactive),
   setOverlaySettingsOpen: (open) => ipcRenderer.send('overlay:settings-open', open),
   setOverlayOnboardingOpen: (open) => ipcRenderer.sendSync('overlay:onboarding-open', open),
@@ -36,11 +31,6 @@ contextBridge.exposeInMainWorld('camFrame', {
     const listener = (_event, fullscreen) => callback(fullscreen)
     ipcRenderer.on('fullscreen:changed', listener)
     return () => ipcRenderer.removeListener('fullscreen:changed', listener)
-  },
-  onCameraError: (callback) => {
-    const listener = (_event, message) => callback(message)
-    ipcRenderer.on('camera:error', listener)
-    return () => ipcRenderer.removeListener('camera:error', listener)
   },
   onShowControls: (callback) => {
     const listener = () => callback()
@@ -57,7 +47,5 @@ contextBridge.exposeInMainWorld('camFrame', {
     ipcRenderer.on('onboarding:show', listener)
     return () => ipcRenderer.removeListener('onboarding:show', listener)
   },
-  showController: () => ipcRenderer.send('controller:show'),
-  centerOverlay: () => ipcRenderer.send('overlay:center'),
   quit: () => ipcRenderer.send('app:quit'),
 })

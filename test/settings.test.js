@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   DEFAULT_SETTINGS,
@@ -34,6 +34,7 @@ import {
   fullscreenWindowPlan,
   interpolateWindowBounds,
   isFullscreenExitInput,
+  overlayBoundsTransitionPlan,
   pointIsInToolbarHotspot,
 } from '../src/fullscreen.js'
 import {
@@ -207,10 +208,9 @@ test('sanitizes untrusted settings and keeps safe values', () => {
   assert.deepEqual(result.position, { x: 12, y: 34 })
 })
 
-test('sanitizes compact and fullscreen capture resolutions independently', () => {
+test('sanitizes one capture resolution for compact and Full screen', () => {
   const valid = sanitizeSettings({
     overlayResolution: '1080p',
-    fullscreenResolution: '720p',
     frameEffect: 'blur',
     effectColor: '#22c55e',
     glowStrength: 64,
@@ -220,7 +220,6 @@ test('sanitizes compact and fullscreen capture resolutions independently', () =>
   })
   const invalid = sanitizeSettings({
     overlayResolution: '12k',
-    fullscreenResolution: 'automatic',
     frameEffect: 'edge',
     effectColor: 'green',
     glowStrength: 1000,
@@ -230,7 +229,7 @@ test('sanitizes compact and fullscreen capture resolutions independently', () =>
   })
 
   assert.equal(valid.overlayResolution, '1080p')
-  assert.equal(valid.fullscreenResolution, '720p')
+  assert.equal(Object.hasOwn(valid, 'fullscreenResolution'), false)
   assert.equal(valid.frameEffect, 'blur')
   assert.equal(valid.effectColor, '#22c55e')
   assert.equal(valid.glowStrength, 64)
@@ -238,7 +237,6 @@ test('sanitizes compact and fullscreen capture resolutions independently', () =>
   assert.equal(valid.blurAmount, 8)
   assert.equal(valid.blurOpacity, 55)
   assert.equal(invalid.overlayResolution, DEFAULT_SETTINGS.overlayResolution)
-  assert.equal(invalid.fullscreenResolution, DEFAULT_SETTINGS.fullscreenResolution)
   assert.equal(invalid.frameEffect, DEFAULT_SETTINGS.frameEffect)
   assert.equal(invalid.effectColor, DEFAULT_SETTINGS.effectColor)
   assert.equal(invalid.glowStrength, 100)
@@ -249,7 +247,6 @@ test('sanitizes compact and fullscreen capture resolutions independently', () =>
 
 test('capture quality changes do not reapply native overlay bounds', () => {
   assert.equal(settingsPatchChangesOverlayGeometry({ overlayResolution: '2160p' }), false)
-  assert.equal(settingsPatchChangesOverlayGeometry({ fullscreenResolution: '1080p' }), false)
   assert.equal(settingsPatchChangesOverlayGeometry({ mirror: false }), false)
   assert.equal(settingsPatchChangesOverlayGeometry({ alwaysOnTop: false }), false)
   assert.equal(settingsPatchChangesOverlayGeometry({ size: 420 }), true)
@@ -405,57 +402,55 @@ test('uses the verified low-latency camera profile', () => {
   assert.equal(track.contentHint, 'motion')
 })
 
-test('switches between 4K fullscreen and 720p overlay capture profiles', async () => {
-  assert.deepEqual(cameraTrackConstraintsFor(true), {
-    width: { ideal: 3840 },
-    height: { ideal: 2160 },
-    frameRate: { ideal: 30, max: 30 },
-  })
-  assert.deepEqual(cameraTrackConstraintsFor(false), {
+test('keeps one stable capture profile across compact and Full screen', async () => {
+  assert.deepEqual(cameraTrackConstraintsFor(), {
     width: { ideal: 1280 },
     height: { ideal: 720 },
     frameRate: { ideal: 60, min: 30, max: 60 },
   })
-  assert.deepEqual(cameraConstraintsFor('cam-link', { fullscreen: true }), {
+  assert.deepEqual(cameraConstraintsFor('cam-link'), {
     audio: false,
     video: {
       deviceId: { exact: 'cam-link' },
-      width: { ideal: 3840 },
-      height: { ideal: 2160 },
-      frameRate: { ideal: 30, max: 30 },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 60, min: 30, max: 60 },
     },
   })
 
   const applied = []
   const track = { applyConstraints: async (constraints) => applied.push(constraints) }
-  assert.equal(await applyCameraTrackProfile(track, true), true)
-  assert.equal(await applyCameraTrackProfile(track, false), true)
-  assert.deepEqual(applied, [cameraTrackConstraintsFor(true), cameraTrackConstraintsFor(false)])
+  assert.equal(await applyCameraTrackProfile(track, '1080p'), true)
+  assert.deepEqual(applied, [cameraTrackConstraintsFor({ resolution: '1080p' })])
 
   const unsupportedTrack = {
     applyConstraints: async () => {
       throw new DOMException('Unsupported profile', 'OverconstrainedError')
     },
   }
-  assert.equal(await applyCameraTrackProfile(unsupportedTrack, true), false)
+  assert.equal(await applyCameraTrackProfile(unsupportedTrack, '2160p'), false)
 })
 
-test('uses the selected capture resolution for each camera mode', async () => {
-  assert.deepEqual(cameraTrackConstraintsFor(false, { resolution: '1080p' }), {
+test('uses the selected Camera quality without a mode-specific profile', async () => {
+  assert.deepEqual(cameraTrackConstraintsFor({ resolution: '1080p' }), {
     width: { ideal: 1920 },
     height: { ideal: 1080 },
     frameRate: { ideal: 60, min: 30, max: 60 },
   })
-  assert.deepEqual(cameraTrackConstraintsFor(true, { resolution: '720p' }), {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    frameRate: { ideal: 30, max: 30 },
-  })
 
   const applied = []
   const track = { applyConstraints: async (constraints) => applied.push(constraints) }
-  assert.equal(await applyCameraTrackProfile(track, false, '1080p'), true)
-  assert.deepEqual(applied, [cameraTrackConstraintsFor(false, { resolution: '1080p' })])
+  assert.equal(await applyCameraTrackProfile(track, '1080p'), true)
+  assert.deepEqual(applied, [cameraTrackConstraintsFor({ resolution: '1080p' })])
+
+  const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
+  const overlaySource = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
+  const fullscreenHandler =
+    overlaySource.match(/function applyFullscreen\(nextFullscreen\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+  assert.match(overlayHtml, /<legend>Camera quality<\/legend>/)
+  assert.equal((overlayHtml.match(/id="overlay-resolution-select"/g) ?? []).length, 1)
+  assert.doesNotMatch(overlayHtml, /fullscreen-resolution-select/)
+  assert.doesNotMatch(fullscreenHandler, /queueCameraQualityUpdate/)
 })
 
 test('toolbar centering does not depend on the animated transform', () => {
@@ -494,7 +489,6 @@ test('camera presets retain reusable settings but exclude transient window state
     shape: 'landscape',
     size: 420,
     overlayResolution: '1080p',
-    fullscreenResolution: '2160p',
     frameEffect: 'glow',
     effectColor: '#22c55e',
     mirror: false,
@@ -509,7 +503,7 @@ test('camera presets retain reusable settings but exclude transient window state
   assert.equal(preset.shape, 'landscape')
   assert.equal(preset.size, 420)
   assert.equal(preset.overlayResolution, '1080p')
-  assert.equal(preset.fullscreenResolution, '2160p')
+  assert.equal(Object.hasOwn(preset, 'fullscreenResolution'), false)
   assert.equal(preset.frameEffect, 'glow')
   assert.equal(preset.effectColor, '#22c55e')
   assert.equal(preset.mirror, false)
@@ -586,37 +580,28 @@ test('imported scenes merge by name and respect the six-scene limit', () => {
   assert.equal(mergePresets(full, [scene('extra', 'Extra', 300)]).length, 6)
 })
 
-test('preset controls are available in both settings surfaces', () => {
+test('preset controls are available in the reachable Overlay', () => {
   const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
-  const controlHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'control.html'), 'utf8')
 
   assert.match(overlayHtml, /id="overlay-preset-name"/)
   assert.match(overlayHtml, /id="overlay-preset-select"/)
-  assert.match(controlHtml, /id="preset-name"/)
-  assert.match(controlHtml, /id="preset-select"/)
 })
 
 test('settings use progressive disclosure instead of one long control stack', () => {
   const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
-  const controlHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'control.html'), 'utf8')
   const overlaySource = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
-  const controlSource = readFileSync(join(import.meta.dirname, '..', 'src', 'control.js'), 'utf8')
 
-  for (const html of [overlayHtml, controlHtml]) {
-    assert.match(html, /data-settings-tab="camera" aria-pressed="true"/)
-    assert.match(html, /data-settings-tab="appearance" aria-pressed="false"/)
-    assert.match(html, /data-settings-tab="presets" aria-pressed="false"/)
-    assert.match(html, /data-settings-panel="camera"/)
-    assert.match(html, /data-settings-panel="appearance"/)
-    assert.match(html, /data-settings-panel="presets"/)
-  }
+  assert.match(overlayHtml, /data-settings-tab="camera" aria-pressed="true"/)
+  assert.match(overlayHtml, /data-settings-tab="appearance" aria-pressed="false"/)
+  assert.match(overlayHtml, /data-settings-tab="presets" aria-pressed="false"/)
+  assert.match(overlayHtml, /data-settings-panel="camera"/)
+  assert.match(overlayHtml, /data-settings-panel="appearance"/)
+  assert.match(overlayHtml, /data-settings-panel="presets"/)
   assert.match(overlaySource, /inlineSettings\.dataset\.activePanel = panel/)
-  assert.match(controlSource, /settingsRoot\.dataset\.activePanel = panel/)
 })
 
 test('smart framing uses the target tool without duplicate size or zoom controls', () => {
   const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
-  const controlHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'control.html'), 'utf8')
   const overlaySource = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
 
   assert.match(overlayHtml, /id="position-button"[^>]*title="[^"]*scroll to zoom"/)
@@ -624,7 +609,6 @@ test('smart framing uses the target tool without duplicate size or zoom controls
   assert.match(overlayHtml, /Zoom <span id="framing-zoom">100%<\/span>/)
   assert.match(overlayHtml, /Drag · Scroll · Double-click resets/)
   assert.doesNotMatch(overlayHtml, /id="overlay-(?:size|zoom)-range"/)
-  assert.doesNotMatch(controlHtml, /id="(?:size|zoom)-range"/)
   assert.match(overlaySource, /cameraSurface\.addEventListener\(\s*'wheel'/)
   assert.match(overlaySource, /cameraZoomAfterWheel\(state\.cameraZoom, event\.deltaY\)/)
   assert.match(overlaySource, /state\.cameraZoom \/ 100/)
@@ -634,13 +618,11 @@ test('smart framing uses the target tool without duplicate size or zoom controls
 
 test('presentation controls expose shortcuts, startup, tray presets, and notices', () => {
   const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
-  const controlHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'control.html'), 'utf8')
   const mainSource = readFileSync(join(import.meta.dirname, '..', 'src', 'main.js'), 'utf8')
   const preloadSource = readFileSync(join(import.meta.dirname, '..', 'src', 'preload.cjs'), 'utf8')
 
   assert.match(overlayHtml, /id="overlay-launch-toggle"/)
   assert.match(overlayHtml, /id="presentation-toast"[^>]*aria-live="polite"/)
-  assert.match(controlHtml, /id="launch-toggle"/)
   assert.match(mainSource, /label: 'Scenes', submenu: presetMenu/)
   assert.match(mainSource, /CommandOrControl\+Shift\+H/)
   assert.match(mainSource, /CommandOrControl\+Shift\+F/)
@@ -679,14 +661,22 @@ test('frame effects expose CSS tuning variables and outside-only recipes', () =>
 
 test('effect colors stay in-app instead of opening a native color dialog', () => {
   const overlayHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.html'), 'utf8')
-  const controlHtml = readFileSync(join(import.meta.dirname, '..', 'src', 'control.html'), 'utf8')
 
   assert.match(overlayHtml, /id="overlay-effect-color"[^>]+type="text"/)
-  assert.match(controlHtml, /id="effect-color"[^>]+type="text"/)
   assert.match(overlayHtml, /data-effect-color="#fb923c"/)
-  assert.match(controlHtml, /data-effect-color="#22d3ee"/)
   assert.doesNotMatch(overlayHtml, /id="overlay-effect-color"[^>]+type="color"/)
-  assert.doesNotMatch(controlHtml, /id="effect-color"[^>]+type="color"/)
+})
+
+test('the unreachable separate Controller and its privileged bridge are removed', () => {
+  const sourceRoot = join(import.meta.dirname, '..', 'src')
+  const mainSource = readFileSync(join(sourceRoot, 'main.js'), 'utf8')
+  const preloadSource = readFileSync(join(sourceRoot, 'preload.cjs'), 'utf8')
+
+  assert.equal(existsSync(join(sourceRoot, 'control.html')), false)
+  assert.equal(existsSync(join(sourceRoot, 'control.css')), false)
+  assert.equal(existsSync(join(sourceRoot, 'control.js')), false)
+  assert.doesNotMatch(mainSource, /createControlWindow|controlWindow|controller:show|overlay:center/)
+  assert.doesNotMatch(preloadSource, /onDevicesChanged|onCameraError|showController|centerOverlay/)
 })
 
 test('effect tuning controls are contextual and drive CSS variables', () => {
@@ -771,4 +761,58 @@ test('fullscreen bounds animate smoothly in either direction', () => {
   })
   assert.deepEqual(interpolateWindowBounds(small, large, 1), large)
   assert.deepEqual(interpolateWindowBounds(large, small, 1), small)
+})
+
+test('reduced motion completes native Overlay transitions at their final bounds', () => {
+  const bounds = { x: 0, y: 0, width: 1920, height: 1080 }
+
+  assert.deepEqual(overlayBoundsTransitionPlan(bounds, false), {
+    bounds,
+    durationMs: 280,
+  })
+  assert.deepEqual(overlayBoundsTransitionPlan(bounds, true), {
+    bounds,
+    durationMs: 0,
+  })
+})
+
+test('live accessibility preferences reach native transitions and future effects', () => {
+  const overlayCss = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.css'), 'utf8')
+  const overlaySource = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.js'), 'utf8')
+  const mainSource = readFileSync(join(import.meta.dirname, '..', 'src', 'main.js'), 'utf8')
+  const preloadSource = readFileSync(join(import.meta.dirname, '..', 'src', 'preload.cjs'), 'utf8')
+
+  assert.match(overlaySource, /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/)
+  assert.match(overlaySource, /matchMedia\('\(forced-colors: active\)'\)/)
+  assert.match(overlaySource, /matchMedia\('\(prefers-contrast: more\)'\)/)
+  assert.match(overlaySource, /dataset\.reducedMotion = String\(preferences\.reducedMotion\)/)
+  assert.match(overlaySource, /dataset\.highContrast = String\(preferences\.highContrast\)/)
+  assert.match(overlaySource, /reportAccessibilityPreferences\(preferences\)/)
+  assert.match(overlaySource, /addEventListener\('change', syncAccessibilityPreferences\)/)
+  assert.match(preloadSource, /send\('accessibility:preferences'/)
+  assert.match(mainSource, /ipcMain\.on\('accessibility:preferences'/)
+  assert.match(mainSource, /if \(reducedMotion\) finishOverlayBoundsAnimation\(\)/)
+  assert.match(mainSource, /overlayBoundsTransitionPlan\(targetBounds, reducedMotion\)/)
+  assert.match(
+    overlayCss,
+    /\.overlay\[data-reduced-motion='true'\] \*[\s\S]*animation:\s*none !important;[\s\S]*transition:\s*none !important;/,
+  )
+})
+
+test('high contrast preserves boundaries, selection, focus, and status without effect colors', () => {
+  const overlayCss = readFileSync(join(import.meta.dirname, '..', 'src', 'overlay.css'), 'utf8')
+  const highContrast =
+    overlayCss.match(/\.overlay\[data-high-contrast='true'\][\s\S]*?@media \(prefers-reduced-motion: reduce\)/)?.[0] ??
+    ''
+
+  assert.match(highContrast, /CanvasText/)
+  assert.match(highContrast, /ButtonFace/)
+  assert.match(highContrast, /HighlightText/)
+  assert.match(highContrast, /\.hover-toolbar button\.selected/)
+  assert.match(highContrast, /\.settings-tabs button\[aria-pressed='true'\]/)
+  assert.match(highContrast, /\.effect-color-swatches button\[aria-pressed='true'\]::after/)
+  assert.match(highContrast, /:focus-visible/)
+  assert.match(highContrast, /\.camera-state/)
+  assert.match(highContrast, /\.presentation-toast/)
+  assert.doesNotMatch(highContrast, /var\(--effect-color\)/)
 })

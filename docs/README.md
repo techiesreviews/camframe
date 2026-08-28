@@ -50,6 +50,6 @@ Documentation-only wording corrections do not require an ADR. They still require
 - Git baseline inspected: `fe8e6c6` (`main`, tag `v0.4.3`)
 - Settings schema: `12`
 - Documentation audit date: `2026-08-29`
-- Audit scope: the v0.4.3 reconstruction baseline plus the versioned contextual Overlay onboarding tracked by GitHub issue 13, ADR 0012, and ADR 0016–0023.
+- Audit scope: the v0.4.3 reconstruction baseline plus contextual Overlay onboarding, live contrast/reduced-motion behavior, removal of the unreachable Controller, and one stable Camera quality tracked by GitHub issues 5, 13–14, and 21–22, ADR 0012, and ADR 0016–0026.
 
 Generated packages, dependencies, ignored logs, and T3 checkpoint refs are not product source. They were used only as supporting local evidence where explicitly recorded.

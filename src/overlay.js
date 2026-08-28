@@ -40,7 +40,6 @@ const importPresetsButton = document.querySelector('#overlay-import-presets')
 const exportPresetsButton = document.querySelector('#overlay-export-presets')
 const sceneMessage = document.querySelector('#overlay-scene-message')
 const overlayResolutionSelect = document.querySelector('#overlay-resolution-select')
-const fullscreenResolutionSelect = document.querySelector('#fullscreen-resolution-select')
 const effectSelect = document.querySelector('#overlay-effect-select')
 const effectColorField = document.querySelector('#overlay-effect-color-field')
 const effectColor = document.querySelector('#overlay-effect-color')
@@ -89,6 +88,8 @@ let qaFullscreenListener
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
 const ONBOARDING_SHAPES = Object.freeze(['circle', 'rounded', 'portrait', 'landscape'])
 const onboardingMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+const forcedColorsQuery = window.matchMedia('(forced-colors: active)')
+const increasedContrastQuery = window.matchMedia('(prefers-contrast: more)')
 const camFrame = window.camFrame ?? {
   platform: navigator.userAgent.includes('Mac') ? 'darwin' : 'win32',
   getState: async () => ({
@@ -96,7 +97,6 @@ const camFrame = window.camFrame ?? {
     shape: 'circle',
     size: 288,
     overlayResolution: '720p',
-    fullscreenResolution: '2160p',
     frameEffect: 'none',
     effectColor: '#fb923c',
     glowStrength: 90,
@@ -115,6 +115,7 @@ const camFrame = window.camFrame ?? {
     presets: [],
   }),
   updateState: (patch) => applyState({ ...state, ...patch }),
+  reportAccessibilityPreferences: () => {},
   savePreset: () => {},
   applyPreset: () => {},
   deletePreset: () => {},
@@ -122,8 +123,6 @@ const camFrame = window.camFrame ?? {
   exportPresets: async () => ({ canceled: false, count: 0 }),
   importPresets: async () => ({ canceled: false, count: 0 }),
   onStateChanged: () => {},
-  reportDevices: () => {},
-  reportCameraError: () => {},
   setOverlayInteractive: () => {},
   setOverlaySettingsOpen: () => {},
   setOverlayOnboardingOpen: (open) => (open ? ONBOARDING_TOP_RESERVE : 0),
@@ -175,6 +174,24 @@ const onboardingDemoTimeouts = new Set()
 const onboardingDemoIntervals = new Set()
 const onboardingDemoAnimations = new Set()
 const onboardingSteps = onboardingStepsFor(camFrame.platform)
+
+function syncAccessibilityPreferences() {
+  const preferences = {
+    reducedMotion: onboardingMotionQuery.matches,
+    highContrast: forcedColorsQuery.matches || increasedContrastQuery.matches,
+  }
+  overlay.dataset.reducedMotion = String(preferences.reducedMotion)
+  overlay.dataset.highContrast = String(preferences.highContrast)
+  if (preferences.reducedMotion && onboardingDemoType) {
+    stopOnboardingDemo({ commit: false, restore: true })
+  }
+  camFrame.reportAccessibilityPreferences(preferences)
+}
+
+onboardingMotionQuery.addEventListener('change', syncAccessibilityPreferences)
+forcedColorsQuery.addEventListener('change', syncAccessibilityPreferences)
+increasedContrastQuery.addEventListener('change', syncAccessibilityPreferences)
+syncAccessibilityPreferences()
 
 function clearOnboardingTarget() {
   if (!onboardingTarget) return
@@ -682,13 +699,12 @@ settingsTabs.forEach((button) => {
   button.addEventListener('click', () => selectSettingsPanel(button.dataset.settingsTab))
 })
 
-function queueCameraQualityUpdate(nextFullscreen = fullscreen) {
+function queueCameraQualityUpdate() {
   if (isQaPreview) return
   cameraQualityUpdates = cameraQualityUpdates.then(async () => {
     const track = activeStream?.getVideoTracks()[0]
     if (!track || track.readyState === 'ended') return
-    const resolution = nextFullscreen ? state.fullscreenResolution : state.overlayResolution
-    await applyCameraTrackProfile(track, nextFullscreen, resolution)
+    await applyCameraTrackProfile(track, state.overlayResolution)
   })
 }
 
@@ -737,12 +753,10 @@ async function reportDevices() {
 
     const cameras = cameraOptionsFrom(allDevices)
     renderDevices(cameras)
-    camFrame.reportDevices(cameras)
   } catch (error) {
     if (request !== deviceRequest) return
     cameraSelect.replaceChildren(new Option('Camera scan failed', ''))
     cameraSelect.disabled = true
-    camFrame.reportCameraError(`CamFrame could not scan cameras. ${error.message ?? ''}`)
   }
 }
 
@@ -816,8 +830,7 @@ async function startCamera(cameraId = '') {
     try {
       nextStream = await navigator.mediaDevices.getUserMedia(
         cameraConstraintsFor(cameraId, {
-          fullscreen,
-          resolution: fullscreen ? state.fullscreenResolution : state.overlayResolution,
+          resolution: state.overlayResolution,
         }),
       )
     } catch (error) {
@@ -825,8 +838,7 @@ async function startCamera(cameraId = '') {
       nextStream = await navigator.mediaDevices.getUserMedia(
         cameraConstraintsFor(cameraId, {
           allowSlowerFrameRate: true,
-          fullscreen,
-          resolution: fullscreen ? state.fullscreenResolution : state.overlayResolution,
+          resolution: state.overlayResolution,
         }),
       )
     }
@@ -857,7 +869,6 @@ async function startCamera(cameraId = '') {
           ? 'This camera is already in use by another app.'
           : 'CamFrame could not start this camera.'
     showCameraState(friendlyMessage)
-    camFrame.reportCameraError(`${friendlyMessage} ${error.message ?? ''}`)
     markCameraKnownForOnboarding()
   }
 }
@@ -866,9 +877,7 @@ function applyState(nextState) {
   const cameraChanged = !cameraStateInitialized || state?.cameraId !== nextState.cameraId
   const effectChanged = cameraStateInitialized && state?.frameEffect !== nextState.frameEffect
   const qualityChanged =
-    cameraStateInitialized &&
-    (state?.overlayResolution !== nextState.overlayResolution ||
-      state?.fullscreenResolution !== nextState.fullscreenResolution)
+    cameraStateInitialized && state?.overlayResolution !== nextState.overlayResolution
   state = nextState
   maybeOfferOnboarding()
   const cameraWidth = state.shape === 'portrait' ? state.size * 0.75 : state.size
@@ -893,7 +902,6 @@ function applyState(nextState) {
   applyCameraFraming()
   mirrorToggle.checked = state.mirror
   overlayResolutionSelect.value = state.overlayResolution
-  fullscreenResolutionSelect.value = state.fullscreenResolution
   effectSelect.value = state.frameEffect
   effectColor.value = state.effectColor.toUpperCase()
   effectColorSwatches.forEach((swatch) => {
@@ -922,14 +930,13 @@ function applyState(nextState) {
     cameraStateInitialized = true
     startCamera(state.cameraId)
   } else {
-    if (qualityChanged) queueCameraQualityUpdate(fullscreen)
+    if (qualityChanged) queueCameraQualityUpdate()
     if (effectChanged) syncEffectVideo()
   }
 }
 
 function applyFullscreen(nextFullscreen) {
   fullscreen = Boolean(nextFullscreen)
-  queueCameraQualityUpdate(fullscreen)
   overlay.dataset.fullscreen = String(fullscreen)
   fullscreenButton.classList.toggle('selected', fullscreen)
   const label = fullscreenButtonCopy(fullscreen)
@@ -1311,10 +1318,6 @@ deletePresetButton.addEventListener('click', () => {
 
 overlayResolutionSelect.addEventListener('change', () => {
   camFrame.updateState({ overlayResolution: overlayResolutionSelect.value })
-})
-
-fullscreenResolutionSelect.addEventListener('change', () => {
-  camFrame.updateState({ fullscreenResolution: fullscreenResolutionSelect.value })
 })
 
 effectSelect.addEventListener('change', () => {

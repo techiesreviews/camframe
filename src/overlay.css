@@ -451,7 +451,7 @@ video {
 
 .inline-resolution-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -1034,6 +1034,143 @@ video {
   to {
     transform: rotate(360deg);
   }
+}
+
+.overlay[data-reduced-motion='true'] *,
+.overlay[data-reduced-motion='true'] *::before,
+.overlay[data-reduced-motion='true'] *::after {
+  animation: none !important;
+  scroll-behavior: auto !important;
+  transition: none !important;
+}
+
+.overlay[data-reduced-motion='true'] .onboarding-demo-mouse {
+  display: none;
+}
+
+.overlay[data-high-contrast='true'] :is(
+  .hover-toolbar,
+  .inline-settings,
+  .onboarding-coachmark,
+  .presentation-toast,
+  .camera-state
+) {
+  color: CanvasText;
+  border: 2px solid CanvasText;
+  background: Canvas;
+  box-shadow: none;
+}
+
+.overlay[data-high-contrast='true'] .onboarding-coachmark::before {
+  border-color: CanvasText;
+  background: Canvas;
+}
+
+.overlay[data-high-contrast='true'] :is(
+  .hover-toolbar button,
+  .settings-tabs button,
+  .preset-manager button,
+  .onboarding-coachmark button,
+  .inline-setting select,
+  .inline-effect-color input[type='text'],
+  .preset-manager input[type='text'],
+  .shortcut-list kbd
+) {
+  color: ButtonText;
+  border: 1px solid ButtonText;
+  outline: 0;
+  background: ButtonFace;
+  box-shadow: none;
+}
+
+.overlay[data-high-contrast='true'] :is(
+  .hover-toolbar button.selected,
+  .settings-tabs button[aria-pressed='true']
+) {
+  color: HighlightText;
+  border: 2px solid Highlight;
+  background: Highlight;
+}
+
+.overlay[data-high-contrast='true'] .hover-toolbar button[data-onboarding-target='true'] {
+  color: HighlightText;
+  outline: 3px solid Highlight;
+  outline-offset: 2px;
+  background: Highlight;
+}
+
+.overlay[data-high-contrast='true'] :is(button, input, select, summary):focus-visible {
+  outline: 3px solid CanvasText;
+  outline-offset: 2px;
+}
+
+.overlay[data-high-contrast='true'] :is(
+  .framing-support,
+  .framing-support strong,
+  .inline-setting > label,
+  .inline-setting > div label,
+  .inline-toggle,
+  .inline-effect-color,
+  .inline-resolution-setting legend,
+  .inline-resolution-grid span,
+  .scene-manager,
+  .scene-message,
+  .shortcut-list,
+  .onboarding-kicker,
+  .onboarding-copy h2,
+  .onboarding-copy > p,
+  .onboarding-copy ul,
+  .onboarding-copy .onboarding-note
+) {
+  color: CanvasText;
+}
+
+.overlay[data-high-contrast='true'] :is(
+  .settings-tabs,
+  .inline-presentation,
+  .inline-toggle-list,
+  .inline-toggle + .inline-toggle,
+  .onboarding-copy .onboarding-note
+) {
+  border-color: CanvasText;
+}
+
+.overlay[data-high-contrast='true'] .selection-corner {
+  border-color: CanvasText;
+  background: Canvas;
+}
+
+.overlay[data-high-contrast='true'] .onboarding-progress span {
+  border: 1px solid CanvasText;
+  background: Canvas;
+}
+
+.overlay[data-high-contrast='true'] .onboarding-progress span[data-current='true'] {
+  border-color: Highlight;
+  background: Highlight;
+}
+
+.overlay[data-high-contrast='true'] .effect-color-swatches button[aria-pressed='true'] {
+  position: relative;
+  border: 2px solid Highlight;
+  outline: 2px solid CanvasText;
+  outline-offset: 1px;
+}
+
+.overlay[data-high-contrast='true'] .effect-color-swatches button[aria-pressed='true']::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: HighlightText;
+  background: Highlight;
+  content: '✓';
+  font: 700 11px/1 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.overlay[data-high-contrast='true'] .spinner {
+  border-color: CanvasText;
+  border-top-color: Highlight;
 }
 
 @media (prefers-reduced-motion: reduce) {

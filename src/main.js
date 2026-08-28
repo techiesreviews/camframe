@@ -15,9 +15,7 @@ import {
 } from 'electron'
 import {
   DEFAULT_SETTINGS,
-  dimensionsFor,
   overlayDimensionsFor,
-  OVERLAY_CHROME,
   mergePresets,
   reorderPresets,
   resizeOverlayFromCorner,
@@ -37,17 +35,16 @@ import {
   fullscreenWindowPlan,
   interpolateWindowBounds,
   isFullscreenExitInput,
+  overlayBoundsTransitionPlan,
 } from './fullscreen.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const preferencesPath = () => join(app.getPath('userData'), 'preferences.json')
 const alwaysOnTopLevel = alwaysOnTopLevelFor(process.platform)
 
-let controlWindow
 let overlayWindow
 let tray
 let saveTimer
-let devices = []
 let settings = { ...DEFAULT_SETTINGS }
 let overlayInteractive = false
 let dragTimer
@@ -57,11 +54,12 @@ let resizeStart
 let overlayFullscreen = false
 let overlayNormalBounds
 let overlayBoundsAnimation
+let overlayBoundsAnimationTarget
+let overlayBoundsAnimationComplete
 let overlayTransitioning = false
 let overlayOnboardingOpen = false
 let activePresetId = ''
-
-const FULLSCREEN_ANIMATION_MS = 280
+let reducedMotion = false
 
 function loadSettings() {
   try {
@@ -86,7 +84,6 @@ function saveSettings() {
 
 function emitState() {
   const state = { ...settings, activePresetId }
-  controlWindow?.webContents.send('state:changed', state)
   overlayWindow?.webContents.send('state:changed', state)
 }
 
@@ -270,14 +267,34 @@ function emitFullscreen() {
 function stopOverlayBoundsAnimation() {
   clearInterval(overlayBoundsAnimation)
   overlayBoundsAnimation = undefined
+  overlayBoundsAnimationTarget = undefined
+  overlayBoundsAnimationComplete = undefined
   overlayTransitioning = false
+}
+
+function finishOverlayBoundsAnimation() {
+  const targetBounds = overlayBoundsAnimationTarget
+  const onComplete = overlayBoundsAnimationComplete
+  stopOverlayBoundsAnimation()
+  if (!targetBounds || !overlayWindow || overlayWindow.isDestroyed()) return
+  overlayWindow.setBounds(targetBounds)
+  onComplete?.()
 }
 
 function animateOverlayBounds(targetBounds, onComplete) {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
   stopOverlayBoundsAnimation()
+  const plan = overlayBoundsTransitionPlan(targetBounds, reducedMotion)
+  if (plan.durationMs === 0) {
+    overlayWindow.setBounds(plan.bounds)
+    onComplete?.()
+    return
+  }
+
   const startBounds = overlayWindow.getBounds()
   const startedAt = Date.now()
+  overlayBoundsAnimationTarget = plan.bounds
+  overlayBoundsAnimationComplete = onComplete
   overlayTransitioning = true
 
   const updateFrame = () => {
@@ -285,12 +302,10 @@ function animateOverlayBounds(targetBounds, onComplete) {
       stopOverlayBoundsAnimation()
       return
     }
-    const progress = Math.min(1, (Date.now() - startedAt) / FULLSCREEN_ANIMATION_MS)
-    overlayWindow.setBounds(interpolateWindowBounds(startBounds, targetBounds, progress))
+    const progress = Math.min(1, (Date.now() - startedAt) / plan.durationMs)
+    overlayWindow.setBounds(interpolateWindowBounds(startBounds, plan.bounds, progress))
     if (progress < 1) return
-
-    stopOverlayBoundsAnimation()
-    onComplete?.()
+    finishOverlayBoundsAnimation()
   }
 
   updateFrame()
@@ -492,7 +507,7 @@ function deletePreset(idInput) {
   saveSettings()
 }
 
-function showController() {
+function showControls() {
   settings.overlayVisible = true
   applyOverlayWindow()
   emitState()
@@ -571,7 +586,6 @@ function createOverlayWindow() {
     if (overlayFullscreen || overlayTransitioning || overlayOnboardingOpen) return
     const [x, y] = overlayWindow.getPosition()
     settings.position = { x, y }
-    controlWindow?.webContents.send('state:changed', settings)
     saveSettings()
   })
 
@@ -586,43 +600,6 @@ function createOverlayWindow() {
   })
 }
 
-function createControlWindow() {
-  controlWindow = new BrowserWindow({
-    width: 404,
-    height: 720,
-    minWidth: 360,
-    minHeight: 620,
-    show: false,
-    autoHideMenuBar: true,
-    backgroundColor: '#09090b',
-    title: 'CamFrame',
-    webPreferences: {
-      preload: join(currentDirectory, 'preload.cjs'),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-    },
-  })
-
-  controlWindow.loadFile(join(currentDirectory, 'control.html'))
-  controlWindow.once('ready-to-show', () => {
-    controlWindow.show()
-    emitState()
-    if (devices.length) controlWindow.webContents.send('devices:changed', devices)
-  })
-
-  controlWindow.on('close', (event) => {
-    if (!app.isQuitting) {
-      event.preventDefault()
-      controlWindow.hide()
-    }
-  })
-
-  controlWindow.on('closed', () => {
-    controlWindow = undefined
-  })
-}
-
 function createTray() {
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAV0lEQVR42mNgoBAwUqifYdQABkZGRv8ZGBj+I2QYGBgYGP7//8/Q4j8DAwPDf4ZGRqQZGBgY/lPAF2dkZPgPxFQjGpkWBgYGhv8MDIyM/4mRkZGJYdQABgYAlVYNt+H4v2wAAAAASUVORK5CYII=',
@@ -631,7 +608,7 @@ function createTray() {
   tray = new Tray(nativeImage.createFromBuffer(png))
   tray.setToolTip('CamFrame')
   setTrayMenu()
-  tray.on('double-click', showController)
+  tray.on('double-click', showControls)
 }
 
 function setTrayMenu() {
@@ -646,7 +623,7 @@ function setTrayMenu() {
     : [{ label: 'No saved scenes', enabled: false }]
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open controls', click: showController },
+      { label: 'Open controls', click: showControls },
       { label: 'Help & onboarding', click: showOnboarding },
       {
         label: 'Show camera',
@@ -670,24 +647,19 @@ function setTrayMenu() {
 function registerIpc() {
   ipcMain.handle('state:get', () => ({ ...settings, activePresetId }))
   ipcMain.on('state:update', (_event, patch) => updateSettings(patch))
+  ipcMain.on('accessibility:preferences', (event, preferences) => {
+    if (event.sender !== overlayWindow?.webContents) return
+    const nextReducedMotion = Boolean(preferences?.reducedMotion)
+    if (nextReducedMotion === reducedMotion) return
+    reducedMotion = nextReducedMotion
+    if (reducedMotion) finishOverlayBoundsAnimation()
+  })
   ipcMain.on('preset:save', (_event, name, id) => savePreset(name, id))
   ipcMain.on('preset:apply', (_event, id) => applyPreset(id))
   ipcMain.on('preset:delete', (_event, id) => deletePreset(id))
   ipcMain.on('preset:reorder', (_event, id, direction) => reorderPreset(id, direction))
   ipcMain.handle('preset:export', exportPresets)
   ipcMain.handle('preset:import', importPresets)
-  ipcMain.on('overlay:devices', (_event, nextDevices) => {
-    devices = Array.isArray(nextDevices)
-      ? nextDevices.slice(0, 32).map(({ deviceId, label }) => ({
-          deviceId: String(deviceId).slice(0, 512),
-          label: String(label).slice(0, 120),
-        }))
-      : []
-    controlWindow?.webContents.send('devices:changed', devices)
-  })
-  ipcMain.on('overlay:error', (_event, message) => {
-    controlWindow?.webContents.send('camera:error', String(message).slice(0, 300))
-  })
   ipcMain.on('overlay:interactive', (_event, interactive) => {
     setOverlayInteractive(Boolean(interactive))
   })
@@ -710,19 +682,6 @@ function registerIpc() {
   ipcMain.on('overlay:resize-stop', stopOverlayResize)
   ipcMain.on('overlay:fullscreen-toggle', () => setOverlayFullscreen(!overlayFullscreen))
   ipcMain.on('overlay:fullscreen-exit', () => setOverlayFullscreen(false))
-  ipcMain.on('controller:show', showController)
-  ipcMain.on('overlay:center', () => {
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
-    const camera = dimensionsFor(settings)
-    const windowSize = overlayDimensionsFor(settings)
-    settings.position = {
-      x: display.x + Math.round((display.width - windowSize.width) / 2),
-      y: display.y + Math.round(display.height / 2 - OVERLAY_CHROME.top - camera.height / 2),
-    }
-    applyOverlayWindow({ keepCenter: false })
-    emitState()
-    saveSettings()
-  })
   ipcMain.on('app:quit', () => {
     app.isQuitting = true
     app.quit()
@@ -745,7 +704,7 @@ app.whenReady().then(() => {
   createOverlayWindow()
   createTray()
 
-  globalShortcut.register('CommandOrControl+Shift+C', showController)
+  globalShortcut.register('CommandOrControl+Shift+C', showControls)
   globalShortcut.register('CommandOrControl+Shift+H', () => {
     updateSettings({ overlayVisible: !settings.overlayVisible })
   })

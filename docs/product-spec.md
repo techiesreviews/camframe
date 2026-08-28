@@ -4,7 +4,7 @@
 
 CamFrame is a small Electron desktop application for Windows and macOS that keeps a live camera surface available as a movable presentation layer above other applications. The product favors direct manipulation and unobtrusive controls over a conventional, permanently visible application window.
 
-This specification describes the current working tree based on git commit `fe8e6c6`, plus the unreleased onboarding behavior accepted in ADR 0012 and refined in ADR 0016–0023. “Must” statements are reconstruction requirements. Evidence is source inspection unless a verification reference is given.
+This specification describes the current working tree based on git commit `fe8e6c6`, plus the unreleased onboarding, accessibility, settings-surface, and stable Camera quality decisions accepted through ADR 0026. “Must” statements are reconstruction requirements. Evidence is source inspection unless a verification reference is given.
 
 ## Reachable surfaces
 
@@ -32,7 +32,7 @@ The normal toolbar is 196 px or the camera width minus 8 px, whichever is smalle
 
 Inline settings open over the Overlay and use three mutually exclusive sections:
 
-- **Camera**: camera device; compact and Full screen capture resolution; Mirror camera; Always on top.
+- **Camera**: camera device; one Camera quality used in Compact and Full screen; Mirror camera; Always on top.
 - **Style**: frame effect and contextual effect controls; frame width.
 - **Scenes**: create/update/apply/reorder/delete/import/export Scenes; Start at login; shortcut reference.
 
@@ -55,10 +55,6 @@ New installations show a four-step contextual coach-mark tour inside the Overlay
 - The coach mark occupies a temporary 220 px transparent reserve added above the compact Overlay. The renderer shifts all ordinary content down by the same amount inside the enlarged native window, preserving the Toolbar, Camera, resize handles, and Inline settings at their established screen coordinates. The coach mark ends 12 px above the unchanged five-button Toolbar. If the user opens Camera or Scenes, Inline settings starts 12 px below the Toolbar and scrolls in the remaining space. Opening and closing the tour must not produce an intermediate frame in which the ordinary UI jumps.
 - The Scenes step explains that each Scene retains its selected camera source, screen position, shape, framing, and style. The opened Scenes panel provides the complete controls and shortcut reference.
 
-### Dormant Controller
-
-`src/control.html`, `src/control.css`, `src/control.js`, and `createControlWindow()` implement a separate Controller with similar settings plus border color, show/hide, Center, and Quit actions. No reachable current code calls `createControlWindow()`. Tray “Open controls”, tray double-click, `Ctrl/Cmd+Shift+C`, and the `controller:show` IPC route reveal Inline settings instead. An exact rebuild must not accidentally make the dormant Controller appear unless a new product decision explicitly activates it.
-
 ## Camera behavior
 
 - Only video is requested; audio is always disabled.
@@ -67,18 +63,11 @@ New installations show a four-step contextual coach-mark tour inside the Overlay
 - The renderer reuses the active stream when the requested ID already resolves to the active physical device.
 - The video uses `object-fit: cover`; camera framing changes transform scale/origin rather than the native Overlay bounds.
 - The track content hint is `motion` when supported.
-- A first request that is overconstrained is retried without the compact-mode 30 fps minimum.
+- A first request that is overconstrained is retried without the 30 fps minimum.
 - Permission blocked, device busy, and generic failures have distinct status messages. Permission recovery copy names Windows Settings/desktop-app permission on Windows and System Settings/CamFrame permission on macOS.
 - Device changes trigger a fresh enumeration.
 
-Capture profiles are independent settings:
-
-| Mode | Default | Resolution choices | Frame-rate preference |
-| --- | --- | --- | --- |
-| Compact mode | 720p (1280×720) | 480p, 720p, 1080p, 2160p | ideal 60, minimum 30, maximum 60; retry may omit minimum |
-| Full screen | 2160p (3840×2160) | 480p, 720p, 1080p, 2160p | ideal/maximum 30 |
-
-Changing modes serializes `MediaStreamTrack.applyConstraints()` calls on the existing stream. Unsupported profiles leave the current working track in place. This is not proven visually seamless; see `known-gaps.md`.
+Camera quality is one setting shared by Compact mode and Full screen. It defaults to 720p (1280×720), offers 480p, 720p, 1080p, and 2160p, and requests ideal 60/minimum 30/maximum 60 fps; the overconstrained retry may omit the minimum. Changing modes never calls `MediaStreamTrack.applyConstraints()`. A user Camera quality change is serialized on the existing stream, and an unsupported profile leaves the current working track in place.
 
 ## Compact-mode geometry and manipulation
 
@@ -96,7 +85,6 @@ The transparent native window reserves 18 px on the left/right, 84 px above, and
 - Dragging the camera surface moves the native Overlay by polling the global cursor every 16 ms.
 - Four 14 px corner handles resize while preserving aspect ratio and anchor the opposite corner.
 - Shape, size, position, and frame-effect changes may reapply native bounds. Resolution, framing, mirror, and topmost changes must not resize the window.
-- Center positions the camera surface, not merely the outer window, on the display nearest the pointer. This command currently exists only in the dormant Controller.
 
 ## Camera framing
 
@@ -118,14 +106,15 @@ Camera framing is active only after selecting the target/crosshair tool.
 - Effect controls are contextual. Glow alone shows the in-app hex editor and six swatches. Progressive blur shows no artificial color.
 - Effects render outside the camera surface and are disabled in Full screen.
 - Edge bloom is intentionally absent.
-- Border color remains implemented in Preferences and the dormant Controller, but Inline settings exposes frame width only.
+- Border color remains accepted in Preferences and Scenes for compatibility, but Inline settings exposes frame width only.
 
 ## Full screen
 
 - Full screen uses the entire display matching the compact Overlay's saved bounds, not the display work area.
-- The app does not use Electron's native fullscreen mode; it animates native bounds over 280 ms with cubic ease-in-out.
-- Renderer camera geometry transitions over the same 280 ms to an unrounded, display-filling surface.
+- The app does not use Electron's native fullscreen mode; it animates native bounds over 280 ms with cubic ease-in-out unless reduced motion is active, when it applies final bounds immediately.
+- Renderer camera geometry transitions over the same 280 ms to an unrounded, display-filling surface, or changes immediately under reduced motion.
 - Full screen is always visible, topmost, focused, and interactive. `Esc`, the toolbar button, or `Ctrl/Cmd+Shift+F` exits.
+- Entering or leaving Full screen preserves the current camera track profile; only window and renderer geometry change.
 - Compact bounds, requested visibility, and topmost preference are restored after the exit animation.
 - The toolbar appears on entry and hides after 200 ms of inactivity. Its invisible recovery hotspot is the toolbar rectangle plus 12 px. Settings, framing, and resizing keep it visible.
 - Compact chrome is hidden immediately while the native window shrinks on exit.
@@ -135,10 +124,10 @@ Camera framing is active only after selecting the target/crosshair tool.
 The UI calls saved layouts **Scenes** while persistence uses `presets`.
 
 - At most six Scenes exist, in user-controlled order.
-- Saving captures camera identity/label, shape, size, both capture resolutions, frame/effect styling, mirror, camera zoom/crop, and compact Overlay position.
+- Saving captures camera identity/label, shape, size, Camera quality, frame/effect styling, mirror, camera zoom/crop, and compact Overlay position.
 - Saving does not capture visibility, Always on top, Start at login, current Full screen state, active Scene, or other Scenes.
 - Saving with a selected ID updates that Scene. A case-insensitive name match also replaces an existing Scene. Adding beyond six retains the latest five and adds the new Scene.
-- Applying a Scene immediately applies its settings, shows its name for 1.6 seconds, and animates compact bounds when visible.
+- Applying a Scene immediately applies its settings, shows its name for 1.6 seconds, and animates compact bounds when visible unless reduced motion is active.
 - Reordering controls the numeric direct-shortcut order.
 - Export writes a versioned JSON document. Import accepts that document, a legacy `presets` property, or a bare array, then merges by ID or case-insensitive name without deleting unrelated local Scenes or exceeding six.
 - Full screen is transient and is not entered/exited by applying a Scene.
@@ -157,6 +146,14 @@ Presentation entry points:
 | Tray “Open controls” / double-click | Show Overlay and open Inline settings |
 | Tray “Help & onboarding” | Show/focus Overlay and reopen onboarding |
 | Tray “Quit CamFrame” | Quit process |
+
+## Contrast and reduced motion
+
+- The Overlay follows live OS/Chromium `prefers-reduced-motion`, forced-colors, and increased-contrast signals; neither preference is persisted or captured by Scenes.
+- Reduced motion disables renderer animations and transitions for the whole Overlay, suppresses onboarding demonstrations, and makes Full screen and visible compact Scene bounds changes complete immediately at their final geometry.
+- Turning reduced motion on during a native bounds transition finishes that transition immediately rather than leaving intermediate geometry.
+- High contrast uses system colors and explicit borders for controls, settings, onboarding, status, and notices. Selected controls have a structural border/fill treatment, focused controls keep a separate outline, and the selected effect-color swatch shows a check mark.
+- The Overlay exposes `data-reduced-motion` and `data-high-contrast` to its scoped visual descendants so future Custom effects can respond without receiving native APIs.
 
 Global shortcut registration failures are not surfaced. Tray actions remain the visible fallback.
 
