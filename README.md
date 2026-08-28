@@ -2,6 +2,8 @@
 
 CamFrame is a small Windows and macOS desktop app that places a live camera feed in a movable shape above other windows.
 
+For an implementation-level product specification, architecture map, data contracts, rebuild sequence, and verification history, start at [`docs/README.md`](docs/README.md).
+
 ## Features
 
 - Select any connected camera.
