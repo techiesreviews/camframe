@@ -15,7 +15,7 @@ Every execution gets a dated file under `runs/`; never overwrite the last known 
 
 ## Current automated suite
 
-Command: `npm test` (`node --test`). Current count: 50 tests in `test/settings.test.js`.
+Commands: `npm test` for 50 unit/static contracts and `npm run test:electron` for one Windows-scoped real Electron integration smoke.
 
 | Coverage area | Tests demonstrate | Important limitation |
 | --- | --- | --- |
@@ -29,6 +29,8 @@ Command: `npm test` (`node --test`). Current count: 50 tests in `test/settings.t
 | Onboarding | New/existing Preferences decision, bounded steps, target/reveal mapping, platform copy, schema/Scene exclusion | No automated BrowserWindow focus, tray click, or visual/layout observation |
 | Accessibility preferences | Pure zero/280 ms bounds plan plus static live-query, IPC, reduced-motion blanket, system-color, selection/focus/status contracts | Does not toggle real Windows/macOS accessibility settings or observe assistive technology |
 
+The Electron smoke launches the actual main process with an isolated Preferences directory and Chromium's synthetic camera. It verifies the BrowserWindow/preload/IPC path, onboarding completion, Inline Camera settings, one Camera quality across Full screen, native compact/Full screen bounds, live reduced-motion and forced-color propagation, and the absence of renderer errors. It writes three PNGs under `qa/electron-smoke/`; Windows CI retains them as the `camframe-electron-smoke-windows-x64` artifact. It does not replace any manual OS/hardware row.
+
 Also run:
 
 ```powershell
@@ -38,6 +40,7 @@ node --check src/settings.js
 node --check src/cameras.js
 node --check src/fullscreen.js
 node --check src/onboarding.js
+node --check scripts/electron-smoke.mjs
 git diff --check
 ```
 

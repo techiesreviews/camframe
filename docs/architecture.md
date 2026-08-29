@@ -33,6 +33,7 @@ global shortcuts / tray
 | `src/fullscreen.js` | Fullscreen copy/input, toolbar hotspot, z-order level, transition plan/interpolation | Main, Overlay, and tests |
 | `src/onboarding.js` | Current onboarding version, migration/show predicates, bounded step navigation, platform permission copy, and coach-mark target/reveal content | Main, Overlay, Settings, and tests |
 | `test/settings.test.js` | Pure unit tests plus static source/markup/CSS contract assertions | `npm test` / CI |
+| `scripts/electron-smoke.mjs` | Windows-scoped real Electron lifecycle, preload/IPC, synthetic-camera, Full screen/profile, accessibility-emulation, and screenshot smoke | `npm run test:electron` / Windows CI; uses main-process-only `CAMFRAME_E2E*` environment hooks |
 | `.github/workflows/build-desktop.yml` | Tagged Windows/macOS build and GitHub release | Manual dispatch or `v*` tag |
 
 ## State ownership
@@ -145,7 +146,7 @@ Scene writes and imports run in main so file dialogs and Preferences remain priv
 
 ## Packaging and release flow
 
-`npm ci` restores the lockfile. `npm test` runs before each CI platform build. Electron Builder creates Windows x64 NSIS/portable outputs and macOS arm64/x64 DMG/ZIP outputs. A tag beginning with `v` makes the release job merge artifacts and create a GitHub release. Code signing discovery is disabled; the macOS identity is explicitly null.
+`npm ci` restores the exactly pinned lockfile. `npm test` runs before each CI platform build; Windows also runs the Playwright Electron smoke and uploads its screenshots. Electron Builder creates Windows x64 NSIS/portable outputs and macOS arm64/x64 DMG/ZIP outputs. A tag beginning with `v` makes the release job merge artifacts and create a GitHub release. Code signing discovery is disabled; the macOS identity is explicitly null.
 
 ## Architectural constraints worth preserving
 

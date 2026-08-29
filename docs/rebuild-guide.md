@@ -8,16 +8,17 @@ This guide is for reconstructing the current source behavior based on v0.4.3 plu
 - Working-tree extension: contextual onboarding, accessibility preferences, removal of the unreachable Controller, and one stable Camera quality from ADR 0012 and ADR 0016–0026; Preferences schema 12
 - Node used by the 2026-08-28 audit: `v24.15.0`
 - npm used: `11.14.1`
-- Lockfile-resolved top-level tools: Electron `43.2.0`, Electron Builder `26.15.3`, Vite `8.2.0`
+- Exactly pinned top-level tools: Electron `43.2.0`, Electron Builder `26.15.5`, Playwright Core `1.62.1`, Vite `8.2.0`
 - Runtime code: browser-native JavaScript modules plus one CommonJS preload; no framework and no transpilation step for packaged source.
 
-`package.json` declares the development dependencies as `latest`; exact reproduction therefore requires `package-lock.json` and `npm ci`. Do not regenerate the lockfile casually.
+`package.json` and `package-lock.json` pin the direct release toolchain exactly. Use `npm ci`; treat every Electron, Electron Builder, or Vite upgrade as an explicit verified maintenance change.
 
 ## Build from this repository
 
 ```powershell
 npm.cmd ci
 npm.cmd test
+npm.cmd run test:electron
 npm.cmd start
 ```
 

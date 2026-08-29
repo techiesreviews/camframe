@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   app,
@@ -39,6 +39,12 @@ import {
 } from './fullscreen.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
+const integrationUserDataDirectory = process.env.CAMFRAME_E2E_USER_DATA_DIR
+if (!app.isPackaged && process.env.CAMFRAME_E2E === '1' && isAbsolute(integrationUserDataDirectory ?? '')) {
+  app.setPath('userData', integrationUserDataDirectory)
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream')
+  app.commandLine.appendSwitch('use-fake-ui-for-media-stream')
+}
 const preferencesPath = () => join(app.getPath('userData'), 'preferences.json')
 const alwaysOnTopLevel = alwaysOnTopLevelFor(process.platform)
 

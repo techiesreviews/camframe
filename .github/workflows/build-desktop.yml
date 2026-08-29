@@ -53,6 +53,18 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Run Electron integration smoke
+        if: runner.os == 'Windows'
+        run: npm.cmd run test:electron
+
+      - name: Upload Electron smoke evidence
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: camframe-electron-smoke-windows-x64
+          path: qa/electron-smoke/*.png
+          if-no-files-found: warn
+
       - name: Build application
         run: ${{ matrix.command }}
 

@@ -40,28 +40,28 @@ See `experiments/2026-08-12-fullscreen-capture-renegotiation.md`.
 
 `NotAllowedError` and onboarding now share platform-specific recovery copy: Windows names Windows Settings and desktop-app camera permission; macOS names System Settings and CamFrame camera permission. Manual permission-denial checks have not been recorded on macOS, so wording accuracy and the complete recovery path remain unverified there.
 
-## KG-05 — Automated tests do not run Electron end to end
+## KG-05 — Electron automation is Windows-scoped and not comprehensive
 
-**Status:** Coverage implementation tracked by GitHub issue 22 (`ready-for-agent`).
-**Evidence:** Test inspection.
+**Status:** Core integration seam added; expansion remains tracked by GitHub issue 22 (`ready-for-agent`).
+**Evidence:** `npm run test:electron`, CI workflow inspection, and retained smoke screenshots.
 
-The 50 Node tests cover pure helpers and inspect source/HTML/CSS strings. They do not create BrowserWindows, request a real camera, exercise IPC, verify pointer pass-through, run global shortcuts, toggle real OS accessibility preferences, open dialogs, validate Start at login, or inspect live packaged artifacts.
+The 50 unit/static tests remain, plus a Windows-scoped Playwright Electron smoke that creates the real BrowserWindow, crosses the preload/IPC boundary, uses Chromium's synthetic camera, completes onboarding, opens Camera settings, changes Camera quality, enters/exits Full screen without changing the track profile, emulates reduced motion/forced colors, checks native bounds, and captures three screenshots.
 
-Several assertions prove that implementation text exists rather than that behavior works. Use the manual matrix and avoid interpreting “50 passing” as full application verification.
+The integration smoke does not prove real camera/driver behavior, native pointer pass-through, global shortcuts, OS accessibility settings/assistive technology, native dialogs, Start at login, installers, or macOS behavior. Use the manual matrix and do not interpret “50 unit + 1 Electron passing” as full application verification.
 
-## KG-06 — Local packaging and renderer visual smoke remain incomplete
+## KG-06 — Renderer visual coverage remains incomplete
 
-**Status:** Vite startup reverified; packaging and visual automation tracked with KG-05 by GitHub issue 22 (`ready-for-agent`).
-**Evidence:** `verification/runs/2026-08-28-v0.4.3-baseline.md`, `verification/runs/2026-08-28-onboarding.md`, and `verification/runs/2026-08-28-onboarding-coach-marks.md`.
+**Status:** Current-source Windows packaging/inspection and three Electron screenshots pass; final v0.5.0 CI packaging and broader state coverage remain tracked with KG-05 by GitHub issue 22 (`ready-for-agent`).
+**Evidence:** `verification/runs/2026-08-29-v0.5.0-release-candidate.md` and CI smoke artifacts.
 
-The original onboarding run started Vite successfully and navigated the browser-safe Overlay page, but T3 snapshot/evaluation failed. The contextual-coach-mark follow-up passed automated contracts and launched as a Windows development app for human review, but no durable visual evidence is recorded yet. The accessibility-preference run again navigated successfully while snapshot/evaluation failed. Packaging was not rerun. A pre-existing `dist/win-unpacked` from 2026-08-24 is not evidence for the current working tree. CI/history records earlier successful builds, but current toolchain packaging and durable visual capture should be reverified.
+The current source packaged successfully as Windows unpacked, NSIS, and portable outputs immediately before the v0.5.0 metadata bump; ASAR, locales, assets, hashes, signatures, unpacked launch, and portable launch were inspected. The Electron smoke captures onboarding Camera, Inline Camera settings, and Full screen high contrast. T3's renderer snapshot/resize/recording endpoints still fail, final v0.5.0 CI packaging is pending, and the complete visual-state set is not yet automated or retained across every platform.
 
-## KG-07 — `latest` dependency declarations weaken future reproducibility
+## KG-07 — `latest` dependency declarations weakened future reproducibility
 
-**Status:** Managed by lockfile, still a maintenance risk.
-**Evidence:** Package and lockfile inspection.
+**Status:** Resolved in the unreleased working tree by ADR 0027.
+**Evidence:** Package/lockfile inspection, isolated clean dependency resolution, and packaging verification; final CI install pending.
 
-The three development dependencies are declared as `latest`. `npm ci` is reproducible while the lockfile remains intact, but lockfile regeneration can silently cross major Electron/Vite/Builder versions. Record exact resolved versions in every release verification run.
+Electron, Electron Builder, Playwright Core, and Vite are exact direct dependencies. This prevents lockfile regeneration from silently crossing versions and selects Electron Builder 26.15.5 instead of npm's broken 26.15.3 `latest` resolution on Windows. Continue recording exact resolved versions in every release verification run.
 
 ## KG-08 — Global shortcut failures are silent
 
