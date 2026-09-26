@@ -21,6 +21,8 @@ Pin every direct development/release dependency exactly:
 
 Keep `package-lock.json` checked in and use `npm ci` locally and in CI. Dependency upgrades are explicit maintenance changes with tests, packaging, and an updated verification run.
 
+2026-09-26 maintenance update: Electron 44.4.5, Electron Builder 26.17.0 (npm `v26` tag; `latest` still resolves to 26.15.3), Playwright Core 1.63.0, and Vite 8.3.1. Electron 44 drops macOS 12 and 32-bit Windows.
+
 ## Consequences
 
 - A clean install and release CI resolve the same direct tool versions, including the Electron integration driver.

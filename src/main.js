@@ -42,7 +42,9 @@ const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const integrationUserDataDirectory = process.env.CAMFRAME_E2E_USER_DATA_DIR
 if (!app.isPackaged && process.env.CAMFRAME_E2E === '1' && isAbsolute(integrationUserDataDirectory ?? '')) {
   app.setPath('userData', integrationUserDataDirectory)
-  app.commandLine.appendSwitch('use-fake-device-for-media-stream')
+  if (process.env.CAMFRAME_E2E_REAL_CAMERA !== '1') {
+    app.commandLine.appendSwitch('use-fake-device-for-media-stream', 'fps=60')
+  }
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream')
 }
 const preferencesPath = () => join(app.getPath('userData'), 'preferences.json')

@@ -61,7 +61,7 @@ The current source packaged successfully as Windows unpacked, NSIS, and portable
 **Status:** Resolved in the unreleased working tree by ADR 0027.
 **Evidence:** Package/lockfile inspection, isolated clean dependency resolution, and packaging verification; final CI install pending.
 
-Electron, Electron Builder, Playwright Core, and Vite are exact direct dependencies. This prevents lockfile regeneration from silently crossing versions and selects Electron Builder 26.15.5 instead of npm's broken 26.15.3 `latest` resolution on Windows. Continue recording exact resolved versions in every release verification run.
+Electron, Electron Builder, Playwright Core, and Vite are exact direct dependencies. This prevents lockfile regeneration from silently crossing versions and selects Electron Builder 26.17.0 (newer than the 26.15.5 fix) instead of npm's broken 26.15.3 `latest` resolution on Windows. Continue recording exact resolved versions in every release verification run.
 
 ## KG-08 — Global shortcut failures are silent
 

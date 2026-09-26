@@ -386,14 +386,42 @@ test('reuses an active capture when default and selected IDs resolve to the same
   assert.equal(canReuseCameraStream('camera-2', '', 'cam-link'), false)
 })
 
+function expectedCameraProfile(width, height) {
+  const requestedSize = { width: { min: width }, height: { min: height } }
+  return {
+    width: { ideal: width },
+    height: { ideal: height },
+    frameRate: { min: 30 },
+    advanced: [
+      { ...requestedSize, frameRate: { min: 50 } },
+      requestedSize,
+      { frameRate: { min: 50 } },
+    ],
+  }
+}
+
+function frameRateLimitsIn(constraints) {
+  return [constraints, ...(constraints.advanced ?? [])]
+    .map((set) => set.frameRate)
+    .filter((frameRate) => frameRate && ('ideal' in frameRate || 'max' in frameRate || 'exact' in frameRate))
+}
+
+test('never gives Chromium a frame-rate limit that discards early camera frames', () => {
+  for (const resolution of ['480p', '720p', '1080p', '2160p']) {
+    for (const allowSlowerFrameRate of [false, true]) {
+      assert.deepEqual(frameRateLimitsIn(cameraTrackConstraintsFor({ resolution, allowSlowerFrameRate })), [])
+    }
+  }
+  assert.equal(cameraTrackConstraintsFor({ allowSlowerFrameRate: true }).frameRate, undefined)
+  assert.deepEqual(cameraTrackConstraintsFor({ allowSlowerFrameRate: true }).advanced, expectedCameraProfile(1280, 720).advanced)
+})
+
 test('uses the verified low-latency camera profile', () => {
   assert.deepEqual(cameraConstraintsFor('cam-link'), {
     audio: false,
     video: {
       deviceId: { exact: 'cam-link' },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      frameRate: { ideal: 60, min: 30, max: 60 },
+      ...expectedCameraProfile(1280, 720),
     },
   })
 
@@ -403,18 +431,12 @@ test('uses the verified low-latency camera profile', () => {
 })
 
 test('keeps one stable capture profile across compact and Full screen', async () => {
-  assert.deepEqual(cameraTrackConstraintsFor(), {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    frameRate: { ideal: 60, min: 30, max: 60 },
-  })
+  assert.deepEqual(cameraTrackConstraintsFor(), expectedCameraProfile(1280, 720))
   assert.deepEqual(cameraConstraintsFor('cam-link'), {
     audio: false,
     video: {
       deviceId: { exact: 'cam-link' },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      frameRate: { ideal: 60, min: 30, max: 60 },
+      ...expectedCameraProfile(1280, 720),
     },
   })
 
@@ -432,11 +454,7 @@ test('keeps one stable capture profile across compact and Full screen', async ()
 })
 
 test('uses the selected Camera quality without a mode-specific profile', async () => {
-  assert.deepEqual(cameraTrackConstraintsFor({ resolution: '1080p' }), {
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    frameRate: { ideal: 60, min: 30, max: 60 },
-  })
+  assert.deepEqual(cameraTrackConstraintsFor({ resolution: '1080p' }), expectedCameraProfile(1920, 1080))
 
   const applied = []
   const track = { applyConstraints: async (constraints) => applied.push(constraints) }

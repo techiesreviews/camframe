@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-08-29
+Accepted — 2026-08-29. The frame-rate preference is superseded by ADR 0028.
 
 ## Context
 

@@ -110,7 +110,7 @@ Resolution mapping:
 | `1080p` | 1920?1080 |
 | `2160p` | 3840?2160 |
 
-`cameraConstraintsFor(id, options)` returns `{audio:false, video:{...}}`; non-empty IDs become `{deviceId:{exact:id}}`. The chosen Camera quality is used in Compact mode and Full screen with ideal 60/minimum 30/maximum 60 fps unless retrying slower. These dimensions are preferences, not guarantees; browsers and drivers may choose another supported profile. Mode changes never apply new track constraints.
+`cameraConstraintsFor(id, options)` returns `{audio:false, video:{...}}`; non-empty IDs become `{deviceId:{exact:id}}`. The chosen Camera quality is used in Compact mode and Full screen with minimum 30 fps unless retrying slower, plus optional advanced sets that prefer the requested size at 50 fps or faster, then the requested size, then 50 fps or faster. No constraint set contains a frame-rate ideal, maximum, or exact value because Chromium would discard early frames (ADR 0028). These dimensions are preferences, not guarantees; browsers and drivers may choose another supported profile. Mode changes never apply new track constraints.
 
 ## Geometry contracts
 

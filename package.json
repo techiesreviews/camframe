@@ -12,13 +12,14 @@
     "test:electron": "node --test scripts/electron-smoke.mjs",
     "pack": "electron-builder --dir --win",
     "dist": "electron-builder --win nsis portable --publish never",
-    "dist:mac": "electron-builder --mac dmg zip --publish never"
+    "dist:mac": "electron-builder --mac dmg zip --publish never",
+    "probe:camera": "node scripts/camera-latency.mjs"
   },
   "devDependencies": {
-    "electron": "43.2.0",
-    "electron-builder": "26.15.5",
-    "playwright-core": "1.62.1",
-    "vite": "8.2.0"
+    "electron": "44.4.5",
+    "electron-builder": "26.17.0",
+    "playwright-core": "1.63.0",
+    "vite": "8.3.1"
   },
   "build": {
     "appId": "tools.techies.camframe",

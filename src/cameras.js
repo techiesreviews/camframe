@@ -6,17 +6,23 @@ export function cameraTrackConstraintsFor({ allowSlowerFrameRate = false, resolu
     '2160p': { width: 3840, height: 2160 },
   }
   const selectedResolution = resolutions[resolution] ?? resolutions['720p']
+  const requestedSize = {
+    width: { min: selectedResolution.width },
+    height: { min: selectedResolution.height },
+  }
+  const smoothFrameRate = { frameRate: { min: SMOOTH_CAMERA_FRAME_RATE } }
 
+  // Chromium turns any ideal or maximum frame rate into a track limiter that drops early frames,
+  // so smooth modes are preferred through optional minimums only. See ADR 0028.
   return {
     width: { ideal: selectedResolution.width },
     height: { ideal: selectedResolution.height },
-    frameRate: {
-      ideal: 60,
-      ...(!allowSlowerFrameRate ? { min: 30 } : {}),
-      max: 60,
-    },
+    ...(!allowSlowerFrameRate ? { frameRate: { min: 30 } } : {}),
+    advanced: [{ ...requestedSize, ...smoothFrameRate }, requestedSize, smoothFrameRate],
   }
 }
+
+export const SMOOTH_CAMERA_FRAME_RATE = 50
 
 export function cameraConstraintsFor(
   cameraId,

@@ -39,10 +39,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -59,7 +59,7 @@ jobs:
 
       - name: Upload Electron smoke evidence
         if: always() && runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: camframe-electron-smoke-windows-x64
           path: qa/electron-smoke/*.png
@@ -69,7 +69,7 @@ jobs:
         run: ${{ matrix.command }}
 
       - name: Upload application
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: camframe-${{ matrix.platform }}
           path: ${{ matrix.files }}
@@ -84,7 +84,7 @@ jobs:
 
     steps:
       - name: Download applications
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true

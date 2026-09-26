@@ -67,7 +67,7 @@ New installations show a four-step contextual coach-mark tour inside the Overlay
 - Permission blocked, device busy, and generic failures have distinct status messages. Permission recovery copy names Windows Settings/desktop-app permission on Windows and System Settings/CamFrame permission on macOS.
 - Device changes trigger a fresh enumeration.
 
-Camera quality is one setting shared by Compact mode and Full screen. It defaults to 720p (1280×720), offers 480p, 720p, 1080p, and 2160p, and requests ideal 60/minimum 30/maximum 60 fps; the overconstrained retry may omit the minimum. Changing modes never calls `MediaStreamTrack.applyConstraints()`. A user Camera quality change is serialized on the existing stream, and an unsupported profile leaves the current working track in place.
+Camera quality is one setting shared by Compact mode and Full screen. It defaults to 720p (1280×720), offers 480p, 720p, 1080p, and 2160p, and requests at least 30 fps while preferring 50 fps or faster modes without ever setting a frame-rate ideal or maximum (ADR 0028); the overconstrained retry may omit the minimum. Changing modes never calls `MediaStreamTrack.applyConstraints()`. A user Camera quality change is serialized on the existing stream, and an unsupported profile leaves the current working track in place.
 
 ## Compact-mode geometry and manipulation
 
