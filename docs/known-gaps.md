@@ -76,3 +76,10 @@ Return values from `globalShortcut.register()` are ignored. Conflicts produce no
 **Evidence:** Source inspection.
 
 Exports identify `camframe-scenes` version 1, but imports accept any object with `scenes`/`presets` or any array. Future format evolution needs an ADR/migration plan before strict validation changes existing imports.
+
+## KG-10 — Mirrored off-center framing uncovers part of the Camera surface
+
+**Status:** Unresolved defect found during the GPUI port experiment; not yet observed manually.
+**Evidence:** Source inspection of `applyCameraFraming()` in `src/overlay.js` plus the CSS transform math; reproduced by `camera::tests::mirrored_off_center_framing_uncovers_the_surface_like_css` in `gpui/`.
+
+The video uses `transform: scaleX(-1) scale(z)` with `transform-origin` at `cameraPosition`. On the horizontal axis, a surface of width `W` with origin `Ox` maps the element to `[Ox − z(W − Ox), Ox + z·Ox]`. This covers `[0, W]` only when `W/(1+z) ≤ Ox ≤ zW/(1+z)`. At 100% zoom that interval is exactly 50%, so with Mirror camera on, any horizontal pan at 100% zoom exposes the `#18181b` surface background along one edge. Unmirrored framing always covers the surface for `z ≥ 1`. A fix should constrain or reinterpret the horizontal origin while mirrored; it needs an ADR because it changes persisted Scene framing semantics.

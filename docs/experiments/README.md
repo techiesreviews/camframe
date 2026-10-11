@@ -15,3 +15,4 @@ Never delete a completed record merely because the attempt failed. Remove tempor
 Current backfilled records:
 
 - [`2026-08-12-fullscreen-capture-renegotiation.md`](2026-08-12-fullscreen-capture-renegotiation.md) — dynamic profile switching and the unsuccessful canvas workaround.
+- [`2026-09-30-gpui-port.md`](2026-09-30-gpui-port.md) — running native Rust port on GPUI and GPUI Kit in `gpui/`.
