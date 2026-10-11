@@ -2,16 +2,14 @@
 
 These are evidence-backed mismatches or risks in the v0.4.3 baseline and current unreleased working tree. They are not automatically authorized fixes. Resolve behavior changes through an issue/ADR and update the reconstruction baseline.
 
-## KG-01 — Native compositor-region helpers are not applied
+## KG-01 — Native compositor-region helpers were not applied
 
-**Status:** Open discrepancy.
-**Evidence:** Source inspection and automated helper tests.
+**Status:** Resolved on 2026-10-11 by ADR 0029 (helpers removed).
+**Evidence:** Source inspection and automated tests.
 
-`settings.js` computes shape/effect/toolbar/control regions through `regionsFor()` and `overlayRegionsFor()`. `main.js` does not import those functions and never calls Electron `BrowserWindow.setShape()`. The test named “every compact camera shape has an explicit compositor clip mask” asserts CSS `clip-path`, not a native compositor mask.
+`settings.js` computed shape/effect/toolbar/control regions through `regionsFor()` and `overlayRegionsFor()`, but main never imported them or called `BrowserWindow.setShape()`. They and their tests were deleted. CSS clips the visible camera, and mouse acceptance still toggles for the entire rectangular outer window. When non-interactive, the whole window is click-through; when interactive, transparent pixels inside that outer rectangle may accept/block input.
 
-Current source clips the visible camera in CSS and toggles mouse acceptance for the entire rectangular outer window. When non-interactive, the whole window is click-through; when interactive, transparent pixels inside that outer rectangle may accept/block input. `CONTEXT.md` and older prose previously implied a live native mask.
-
-**Rebuild rule:** reproduce the current whole-window interactivity for exact parity, or make native regions a deliberate new feature with cross-platform manual tests.
+**Rebuild rule:** reproduce the current whole-window interactivity for exact parity, or make native regions a deliberate new feature with an ADR and cross-platform manual tests.
 
 ## KG-02 — The separate Controller was unreachable
 
@@ -38,16 +36,16 @@ See `experiments/2026-08-12-fullscreen-capture-renegotiation.md`.
 **Status:** Source mismatch resolved; packaged macOS evidence tracked by GitHub issue 21 (`ready-for-human`).
 **Evidence:** Automated copy contract and source inspection; no macOS permission-denial observation.
 
-`NotAllowedError` and onboarding now share platform-specific recovery copy: Windows names Windows Settings and desktop-app camera permission; macOS names System Settings and CamFrame camera permission. Manual permission-denial checks have not been recorded on macOS, so wording accuracy and the complete recovery path remain unverified there.
+`NotAllowedError` uses platform-specific recovery copy from `cameraErrorMessage()` in `camera-session.js`: Windows names Windows Settings and desktop-app camera permission; macOS names System Settings and CamFrame camera permission. Manual permission-denial checks have not been recorded on macOS, so wording accuracy and the complete recovery path remain unverified there.
 
 ## KG-05 — Electron automation is Windows-scoped and not comprehensive
 
 **Status:** Core integration seam added; expansion remains tracked by GitHub issue 22 (`ready-for-agent`).
 **Evidence:** `npm run test:electron`, CI workflow inspection, and retained smoke screenshots.
 
-The 50 unit/static tests remain, plus a Windows-scoped Playwright Electron smoke that creates the real BrowserWindow, crosses the preload/IPC boundary, uses Chromium's synthetic camera, completes onboarding, opens Camera settings, changes Camera quality, enters/exits Full screen without changing the track profile, emulates reduced motion/forced colors, checks native bounds, and captures three screenshots.
+The 155 module and static tests (136 behavioral through module interfaces with fakes, 19 static markup/CSS/wiring checks) remain, plus a Windows-scoped Playwright Electron smoke that creates the real BrowserWindow, crosses the preload/IPC boundary, uses Chromium's synthetic camera, completes onboarding, opens Camera settings, changes Camera quality, enters/exits Full screen without changing the track profile, emulates reduced motion/forced colors, checks native bounds, and captures three screenshots.
 
-The integration smoke does not prove real camera/driver behavior, native pointer pass-through, global shortcuts, OS accessibility settings/assistive technology, native dialogs, Start at login, installers, or macOS behavior. Use the manual matrix and do not interpret “50 unit + 1 Electron passing” as full application verification.
+The integration smoke does not prove real camera/driver behavior, native pointer pass-through, global shortcuts, OS accessibility settings/assistive technology, native dialogs, Start at login, installers, or macOS behavior. Use the manual matrix and do not interpret “155 unit + 1 Electron passing” as full application verification. The smoke also runs on a Linux X11/XWayland desktop session (2026-10-11 run), but that is not part of CI.
 
 ## KG-06 — Renderer visual coverage remains incomplete
 
@@ -76,3 +74,26 @@ Return values from `globalShortcut.register()` are ignored. Conflicts produce no
 **Evidence:** Source inspection.
 
 Exports identify `camframe-scenes` version 1, but imports accept any object with `scenes`/`presets` or any array. Future format evolution needs an ADR/migration plan before strict validation changes existing imports.
+
+## KG-10 — Mirrored off-center framing uncovers part of the Camera surface
+
+**Status:** Unresolved defect found during the GPUI port experiment; not yet observed manually.
+**Evidence:** Source inspection of `applyCameraFraming()` in `src/overlay.js` plus the CSS transform math; reproduced by `camera::tests::mirrored_off_center_framing_uncovers_the_surface_like_css` in `gpui/`.
+
+The video uses `transform: scaleX(-1) scale(z)` with `transform-origin` at `cameraPosition`. On the horizontal axis, a surface of width `W` with origin `Ox` maps the element to `[Ox − z(W − Ox), Ox + z·Ox]`. This covers `[0, W]` only when `W/(1+z) ≤ Ox ≤ zW/(1+z)`. At 100% zoom that interval is exactly 50%, so with Mirror camera on, any horizontal pan at 100% zoom exposes the `#18181b` surface background along one edge. Unmirrored framing always covers the surface for `z ≥ 1`. A fix should constrain or reinterpret the horizontal origin while mirrored; it needs an ADR because it changes persisted Scene framing semantics.
+
+On the Electron side the transform is now produced only by `cameraFramingStyles()` in `src/camera-framing.js` (formerly `applyCameraFraming()`), so a fix lands in one place.
+
+## KG-11 — Main can make the Overlay click-through without telling the renderer
+
+**Status:** Unverified risk.
+**Evidence:** Source inspection.
+
+The renderer sends `overlay:interactive` only when its derived interactivity changes. Main can also set interactivity itself: hiding the Overlay makes it click-through, and Full screen, Open controls, Help, and drag/resize starts make it interactive. If main makes a hidden Overlay click-through while the renderer still believes it is interactive, and the Overlay is shown again from the tray checkbox or `Ctrl/Cmd+Shift+H` without the pointer leaving and re-entering, the renderer will not resend `true`. Hiding normally blurs the window, which already hides the chrome, so this is unlikely. A fix would make main report its forced changes back, or have the renderer resend on show.
+
+## KG-12 — Escape leaves framing but the framing demo keeps running
+
+**Status:** Open defect, preserved by the 2026-10-11 refactor.
+**Evidence:** Automated real-Electron trace (`docs/verification/runs/2026-10-11-deep-modules-electron-44-7.md`) on the baseline and refactored source.
+
+During the Onboarding framing step, `Escape` turns framing mode off and keeps the tour open (ADR 0021), but unlike clicking Crosshair it does not hand the demo over. The demo keeps panning and zooming the camera with framing mode off until the user changes steps or closes the tour, which restores the framing from before the demo. The fix is one call (`takeOver('framing')` in the tour's `escape()`), but it changes what Escape keeps, so it needs product confirmation.

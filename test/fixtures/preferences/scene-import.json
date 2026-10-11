@@ -1,0 +1,936 @@
+{
+  "contract": "camframe-scene-import",
+  "version": 1,
+  "cases": [
+    {
+      "name": "a matching name updates in place and keeps the existing id; new names append",
+      "existing": [
+        {
+          "id": "desk",
+          "name": "Desk",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 240,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        },
+        {
+          "id": "wide",
+          "name": "Wide",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 320,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        }
+      ],
+      "payload": {
+        "format": "camframe-scenes",
+        "version": 1,
+        "scenes": [
+          {
+            "id": "other-id",
+            "name": "Desk",
+            "settings": {
+              "size": 480
+            }
+          },
+          {
+            "id": "portrait",
+            "name": "Portrait",
+            "settings": {
+              "size": 360
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "desk",
+            "name": "Desk",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 480,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "wide",
+            "name": "Wide",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 320,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "portrait",
+            "name": "Portrait",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 360,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 2
+      }
+    },
+    {
+      "name": "name matching ignores case",
+      "existing": [
+        {
+          "id": "desk",
+          "name": "Desk",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 240,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        }
+      ],
+      "payload": {
+        "scenes": [
+          {
+            "id": "x",
+            "name": "DESK",
+            "settings": {
+              "size": 300
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "desk",
+            "name": "DESK",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 300,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 1
+      }
+    },
+    {
+      "name": "a matching id updates in place even when the name changed",
+      "existing": [
+        {
+          "id": "desk",
+          "name": "Desk",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 240,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        }
+      ],
+      "payload": {
+        "scenes": [
+          {
+            "id": "desk",
+            "name": "Studio",
+            "settings": {
+              "size": 300
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "desk",
+            "name": "Studio",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 300,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 1
+      }
+    },
+    {
+      "name": "the Scene limit drops new Scenes but still updates matches",
+      "existing": [
+        {
+          "id": "scene-0",
+          "name": "Scene 0",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 200,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        },
+        {
+          "id": "scene-1",
+          "name": "Scene 1",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 201,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        },
+        {
+          "id": "scene-2",
+          "name": "Scene 2",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 202,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        },
+        {
+          "id": "scene-3",
+          "name": "Scene 3",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 203,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        },
+        {
+          "id": "scene-4",
+          "name": "Scene 4",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 204,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        },
+        {
+          "id": "scene-5",
+          "name": "Scene 5",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 205,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        }
+      ],
+      "payload": {
+        "scenes": [
+          {
+            "id": "extra",
+            "name": "Extra",
+            "settings": {
+              "size": 300
+            }
+          },
+          {
+            "id": "y",
+            "name": "scene 2",
+            "settings": {
+              "size": 500
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "scene-0",
+            "name": "Scene 0",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 200,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "scene-1",
+            "name": "Scene 1",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 201,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "scene-2",
+            "name": "scene 2",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 500,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "scene-3",
+            "name": "Scene 3",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 203,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "scene-4",
+            "name": "Scene 4",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 204,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "scene-5",
+            "name": "Scene 5",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 205,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 2
+      }
+    },
+    {
+      "name": "a bare array is accepted",
+      "existing": [],
+      "payload": [
+        {
+          "id": "a",
+          "name": "A",
+          "settings": {
+            "size": 300
+          }
+        }
+      ],
+      "expected": {
+        "scenes": [
+          {
+            "id": "a",
+            "name": "A",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 300,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 1
+      }
+    },
+    {
+      "name": "the legacy presets key is accepted",
+      "existing": [],
+      "payload": {
+        "presets": [
+          {
+            "id": "a",
+            "name": "A",
+            "settings": {
+              "size": 300
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "a",
+            "name": "A",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 300,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 1
+      }
+    },
+    {
+      "name": "format and version metadata are not enforced (KG-09)",
+      "existing": [],
+      "payload": {
+        "format": "other",
+        "version": 99,
+        "scenes": [
+          {
+            "id": "a",
+            "name": "A",
+            "settings": {
+              "size": 300
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "a",
+            "name": "A",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 300,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 1
+      }
+    },
+    {
+      "name": "only the first six records are read before invalid ones are dropped",
+      "existing": [],
+      "payload": {
+        "scenes": [
+          {
+            "id": "",
+            "name": "bad",
+            "settings": {}
+          },
+          {
+            "id": "",
+            "name": "bad",
+            "settings": {}
+          },
+          {
+            "id": "",
+            "name": "bad",
+            "settings": {}
+          },
+          {
+            "id": "",
+            "name": "bad",
+            "settings": {}
+          },
+          {
+            "id": "",
+            "name": "bad",
+            "settings": {}
+          },
+          {
+            "id": "ok",
+            "name": "Ok",
+            "settings": {
+              "size": 300
+            }
+          },
+          {
+            "id": "late",
+            "name": "Late",
+            "settings": {
+              "size": 300
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "ok",
+            "name": "Ok",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 300,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          }
+        ],
+        "importedCount": 1
+      }
+    },
+    {
+      "name": "a file with no valid Scenes is rejected",
+      "existing": [
+        {
+          "id": "desk",
+          "name": "Desk",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 240,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        }
+      ],
+      "payload": {
+        "scenes": [
+          {
+            "id": "a",
+            "name": ""
+          }
+        ]
+      },
+      "expected": {
+        "error": "No valid scenes found."
+      }
+    },
+    {
+      "name": "an object without Scenes is rejected as empty",
+      "existing": [],
+      "payload": {
+        "something": true
+      },
+      "expected": {
+        "error": "No valid scenes found."
+      }
+    },
+    {
+      "name": "invalid JSON is not a Scene export",
+      "existing": [],
+      "payloadText": "{\"scenes\": [",
+      "expected": {
+        "error": "That file is not a valid CamFrame scene export."
+      }
+    },
+    {
+      "name": "a null document is not a Scene export",
+      "existing": [],
+      "payload": null,
+      "expected": {
+        "error": "That file is not a valid CamFrame scene export."
+      }
+    }
+  ]
+}

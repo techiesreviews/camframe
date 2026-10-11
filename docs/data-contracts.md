@@ -4,6 +4,8 @@
 
 Preferences are the only durable application state. `sanitizeSettings()` always starts from defaults, selectively accepts known values, deep-copies nested objects, and drops unknown keys. The current schema version is 12.
 
+The executable form of this section is `test/fixtures/preferences/`: `sanitize.json`, `load.json`, and `scene-import.json` hold input/expected cases that any implementation of Preferences must pass (ADR 0030). Their `README.md` describes the format. Strings are measured in UTF-16 code units and numbers round half away from zero. When this section and the fixtures disagree, the fixtures and source are the current behavior.
+
 | Field | Default | Accepted/sanitized value | Persisted | In Scene |
 | --- | --- | --- | --- | --- |
 | `schemaVersion` | `12` | Always current default; input is not copied | Yes | No |
@@ -34,7 +36,7 @@ Colors retain input case in persisted state when accepted. The live hex text edi
 
 ### Startup override
 
-`startupSettings()` sanitizes Preferences, then always sets `alwaysOnTop` and `overlayVisible` to `true`. The stored values can change during a session and are written, but false values are intentionally not restored on launch.
+`preferencesFromDocument(text)` turns the raw file text (undefined when missing) into launch settings. It applies the legacy migrations below, sanitizes, then always sets `alwaysOnTop` and `overlayVisible` to `true`. Missing files, invalid JSON, and non-object documents start a new installation. The stored values can change during a session and are written, but false values are intentionally not restored on launch.
 
 The integration harness is the only exception to the normal user-data path: in an unpackaged build, when `CAMFRAME_E2E=1` and `CAMFRAME_E2E_USER_DATA_DIR` is absolute, main selects that isolated directory before reading Preferences and enables Chromium's synthetic video device/permission switches. These process-environment hooks are not exposed through preload, persisted, or honored by packaged launches.
 
@@ -93,9 +95,8 @@ Import also accepts a bare array or an object with `presets`. The current import
 
 1. Match by exact ID or locale-aware case-insensitive name.
 2. A match replaces settings/name but preserves the local matched ID.
-3. A non-match appends if fewer than six local Scenes exist.
-4. A colliding imported ID is prefixed with `imported-{slot}-` and truncated to 64 characters.
-5. Unrelated local Scenes are retained; import never performs a full replacement.
+3. A non-match appends if fewer than six local Scenes exist. Because ID matches are found first, an appended Scene's ID never collides. The former `imported-{slot}-` renaming branch was unreachable and was removed.
+4. Unrelated local Scenes are retained; import never performs a full replacement.
 
 The import result count is the number of valid imported input records, not necessarily the number appended or changed.
 
@@ -132,11 +133,13 @@ Camera pan uses the visible surface dimensions and zoom overflow. At 100% it use
 
 Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`, import, and export are request/response invocations.
 
+`BRIDGE_CONTRACT` in `src/bridge.js` is the single list of these channels. Main registers one handler per entry and refuses to start if its handlers drift from the list. Every renderer→main channel accepts only the Overlay renderer and checks its arguments first: `send` messages with invalid arguments are dropped, `invoke` calls reject, and `sendSync` returns the entry's `rejected` value (`0` for the onboarding reserve). `updateState` patches must be plain objects and lose `presets`, `completedOnboardingVersion`, and `schemaVersion`, so a renderer can change those only through Scene and onboarding operations. `reorderPreset` requires a finite direction, `startOverlayResize` a string handle, and Scene names/IDs are coerced to strings. The sandboxed preload cannot import the contract; `test/bridge.test.js` runs `preload.cjs` against a fake Electron and checks every method's channel and transport.
+
 | Bridge method/event | Main channel | Direction | Payload/result |
 | --- | --- | --- | --- |
 | `getState()` | `state:get` | invoke ? handle | Full Preferences plus runtime `activePresetId` |
 | `updateState(patch)` | `state:update` | send ? on | Partial untrusted settings patch |
-| `reportAccessibilityPreferences(preferences)` | `accessibility:preferences` | send ? on | Live `{reducedMotion,highContrast}` booleans; main accepts known CamFrame renderers and retains reduced motion only; not persisted |
+| `reportAccessibilityPreferences(preferences)` | `accessibility:preferences` | send ? on | Live `{reducedMotion,highContrast}` booleans; main retains reduced motion only; not persisted |
 | `onStateChanged(cb)` | `state:changed` | main ? renderer | Full state snapshot |
 | `savePreset(name,id)` | `preset:save` | send ? on | Name and optional Scene ID |
 | `applyPreset(id)` | `preset:apply` | send ? on | Scene ID |
@@ -146,7 +149,7 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 | `importPresets()` | `preset:import` | invoke ? handle | `{canceled}`, count, or error string |
 | `setOverlayInteractive(bool)` | `overlay:interactive` | send ? on | Whole-window mouse acceptance |
 | `setOverlaySettingsOpen(bool)` | `overlay:settings-open` | send ? on | `true` forces interactivity; `false` has no main-side action |
-| `setOverlayOnboardingOpen(bool)` | `overlay:onboarding-open` | synchronous send ? on | Opens/closes the transient native top reserve; returns applied reserve px (`220` or `0`). `true` also shows/focuses the Overlay and forces interactivity |
+| `setOverlayOnboardingOpen(bool)` | `overlay:onboarding-open` | synchronous send ? on | Opens/closes the transient native top reserve; returns applied reserve px (`220` or `0`). The reserve opens only in settled Compact mode and closes in every mode. `true` also shows/focuses the Overlay and forces interactivity |
 | `completeOnboarding()` | `onboarding:complete` | send ? on | Persists the current onboarding version without clearing the active Scene |
 | `startOverlayDrag()` / `stopOverlayDrag()` | `overlay:drag-start/stop` | send ? on | No payload |
 | `startOverlayResize(handle)` / `stopOverlayResize()` | `overlay:resize-start/stop` | send ? on | One of four corner tokens |

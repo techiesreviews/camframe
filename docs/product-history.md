@@ -6,6 +6,7 @@ This ledger answers four different questions that a changelog usually mixes toge
 
 | Version | Retained outcome | Historical validation recorded at the time |
 | --- | --- | --- |
+| Unreleased (after 0.5.0) | Deep-module structure (ADR 0030): Preferences fixtures, Scene library, Overlay window geometry, bridge contract with sender/argument checks, Camera session, Overlay interaction, onboarding tour controller, Camera framing. Fixed: closing onboarding in Full screen left the onboarding reserve set, so leaving Full screen put the Overlay 220 px too high and stopped saving its position. Unapplied Compositor mask removed (ADR 0029). Electron 44.7.0 | 155 module/static tests plus the real Electron smoke on Linux; real-Electron reproduction of the reserve defect before and after; onboarding trace identical to baseline. See `verification/runs/2026-10-11-deep-modules-electron-44-7.md` |
 | Unreleased (0.5.0 candidate) | Contextual Overlay onboarding; live high-contrast/reduced-motion behavior; removal of the unreachable Controller; one stable Camera quality across Compact and Full screen; exactly pinned release toolchain | 50 unit/static tests plus one real Electron smoke and three screenshots; native accessibility, camera-hardware, macOS permission, and final cross-platform packaging remain open |
 | 0.2.12 | Initial Windows Electron Overlay: camera selection, four shapes, mirror/frame, direct drag/resize/crop, hover controls, Full screen, persistence | 13 tests; Windows unpacked build |
 | 0.2.13 | macOS arm64/x64 packaging, camera permission copy, hidden Dock icon, smaller English-only packages and exact font assets | 13 tests; Windows packages; ASAR/locale inspection; package size ~86.8?87.0 MB |
@@ -41,6 +42,7 @@ Historical validation is evidence about those revisions, not proof that the curr
 | Settings surface | Overlay Inline settings are the only settings UI; open-controls entry points reveal them | ADR 0025 |
 | Camera quality | One chosen capture profile remains unchanged across Compact and Full screen geometry | ADR 0026, GitHub issue 5 |
 | Release toolchain | Exact Electron, Electron Builder, Playwright Core, and Vite versions plus lockfile-driven clean installs | ADR 0027 |
+| Module structure | Deep modules behind injected adapters; shared Preferences fixtures; one checked bridge contract | ADR 0030 |
 
 ## Removed or replaced behavior
 
@@ -56,6 +58,7 @@ Historical validation is evidence about those revisions, not proof that the curr
 | Always-visible Full screen toolbar | Distracted from presentation | Timed auto-hide/hotspot | ADR 0011 |
 | Windows `pop-up-menu` topmost level | Current v0.4.3 commit prioritizes reliable controls/taskbar layering | `screen-saver` plus z-order re-raise | Commit `fe8e6c6` |
 | Separate dormant Controller, its privileged relays, and Inter assets | It was unreachable and duplicated the live settings surface | Inline settings only; persisted `borderColor` remains accepted for compatibility | ADR 0025 |
+| Unapplied native Compositor mask helpers | Never wired to `setShape()`; kept only by their own tests | CSS clipping and whole-window interactivity remain | ADR 0029, KG-01 |
 | Separate Full screen quality and mode-change track renegotiation | Hardware reports showed stale, black, or wrong frames during renegotiation | One Camera quality used unchanged in both modes; old `fullscreenResolution` is ignored | ADR 0026, GitHub issue 5 |
 
 ## Tried and not successful

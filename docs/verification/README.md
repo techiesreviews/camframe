@@ -15,32 +15,27 @@ Every execution gets a dated file under `runs/`; never overwrite the last known 
 
 ## Current automated suite
 
-Commands: `npm test` for 50 unit/static contracts and `npm run test:electron` for one Windows-scoped real Electron integration smoke.
+Commands: `npm test` for 155 module and static contracts (136 behavioral through module interfaces with fakes, 19 static markup/CSS/wiring checks) and `npm run test:electron` for one real Electron integration smoke (Windows CI; it also runs on a Linux X11/XWayland desktop).
 
 | Coverage area | Tests demonstrate | Important limitation |
 | --- | --- | --- |
-| Settings safety | Defaults, whitelists, clamps, camera crop/zoom, single Camera quality, startup override | Does not read/write a real Preferences directory |
-| Geometry | Shape dimensions, outer chrome, resize anchoring, region bounds, pan direction | Native BrowserWindow shape/input is not exercised |
-| Camera | Device filtering, stream reuse predicate, constraints, motion hint, profile apply/failure | No real camera, driver, frame, permission, or Chromium pipeline |
-| Scenes | Snapshot inclusion/exclusion, live position capture, cap/sanitize, reorder, merge | No dialogs/filesystem round trip or UI interaction |
-| UI contracts | Controls/tabs/copy/selectors exist; removed controls/effect absent; CSS variables/clip paths exist | Mostly regex over source; presence is not functionality |
-| Presentation | Shortcut/tray/notice implementation text exists | Shortcuts/tray are not registered or clicked in a test runtime |
-| Full screen | Copy, Escape predicate, plan, interpolation, toolbar timing/hotspot, blur-handler text | No native window animation, display, focus, z-order, or video continuity |
-| Onboarding | New/existing Preferences decision, bounded steps, target/reveal mapping, platform copy, schema/Scene exclusion | No automated BrowserWindow focus, tray click, or visual/layout observation |
-| Accessibility preferences | Pure zero/280 ms bounds plan plus static live-query, IPC, reduced-motion blanket, system-color, selection/focus/status contracts | Does not toggle real Windows/macOS accessibility settings or observe assistive technology |
+| Preferences contract | `test/fixtures/preferences/` sanitize, load/migration, and Scene import cases; schema 12; Scene snapshot keys | Does not read/write a real Preferences directory |
+| Scene library | Save (live position, limit, name/ID match), apply, numbered apply, cycle, delete, reorder, import notices, export format, active-Scene clearing | No dialogs/filesystem round trip or UI interaction |
+| Overlay window geometry | Fake window/screen/clock sequences: placement, centering, Full screen enter/exit and Always on top restore, reduced motion, onboarding reserve in every mode (including the 2026-10-11 regression), moved/position saving, drag, corner resize, pass-through | Native BrowserWindow animation, displays, focus, and z-order are not exercised |
+| Bridge contract | `preload.cjs` run against a fake Electron matches every channel and transport; main rejects other senders and invalid arguments; renderer patches cannot change Scenes/onboarding/schema; QA fake completeness | Real IPC only in the Electron smoke |
+| Camera session | Fake `mediaDevices`/tracks/videos: constraints (ADR 0028), overconstrained retry, missing-camera fallback, error copy, stale results, reuse, ordered quality changes, halo video, device scans, QA preview | No real camera, driver, frame, permission, or Chromium pipeline |
+| Overlay interaction | Chrome/hide timing, activities holding interactivity, Full screen hotspot and delay, change-only messages | Real pointer forwarding is manual (W-08) |
+| Onboarding | Versioning/migration, step copy, offer once, reveal timing, shape and framing demos, hand-over, Back/Next restore, Escape order, reduced motion, completion, timer cleanup (fake Overlay port, view, clock) | No automated BrowserWindow focus, tray click, or visual/layout observation |
+| Camera framing | Pan direction/mirroring, wheel steps, shared CSS rendering | KG-10 is not yet asserted |
+| UI/wiring contracts | Controls/tabs/copy exist; removed controls absent; CSS variables, clip paths, high contrast, reduced motion; shortcut/tray text; a few `overlay.js` wiring lines | Regex over source; presence is not functionality |
 
 The Electron smoke launches the actual main process with an isolated Preferences directory and Chromium's synthetic camera. It verifies the BrowserWindow/preload/IPC path, onboarding completion, Inline Camera settings, one Camera quality across Full screen, native compact/Full screen bounds, live reduced-motion and forced-color propagation, and the absence of renderer errors. It writes three PNGs under `qa/electron-smoke/`; Windows CI retains them as the `camframe-electron-smoke-windows-x64` artifact. It does not replace any manual OS/hardware row.
 
 Also run:
 
-```powershell
-node --check src/main.js
-node --check src/overlay.js
-node --check src/settings.js
-node --check src/cameras.js
-node --check src/fullscreen.js
-node --check src/onboarding.js
-node --check scripts/electron-smoke.mjs
+```bash
+for f in src/*.js scripts/*.mjs; do node --check "$f"; done
+node --check src/preload.cjs
 git diff --check
 ```
 

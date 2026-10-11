@@ -1,0 +1,320 @@
+{
+  "contract": "camframe-preferences-load",
+  "version": 1,
+  "cases": [
+    {
+      "name": "missing file starts a new installation",
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 0,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "invalid JSON starts a new installation",
+      "documentText": "{\"size\": 320,",
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 0,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "null document starts a new installation",
+      "document": null,
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 0,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "non-object document starts a new installation",
+      "document": 5,
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 0,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "existing document without the onboarding field counts as completed",
+      "document": {
+        "schemaVersion": 11,
+        "size": 320,
+        "shape": "rounded"
+      },
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "rounded",
+        "size": 320,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 1,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "explicit incomplete onboarding stays incomplete",
+      "document": {
+        "schemaVersion": 12,
+        "completedOnboardingVersion": 0
+      },
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 0,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "pre-schema-3 documents reset frame width and size",
+      "document": {
+        "schemaVersion": 2,
+        "size": 500,
+        "borderWidth": 8,
+        "shape": "landscape"
+      },
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "landscape",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 1,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "documents without a schema version get the pre-schema-3 reset",
+      "document": {
+        "size": 500,
+        "borderWidth": 8
+      },
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 1,
+        "position": null,
+        "presets": []
+      }
+    },
+    {
+      "name": "every launch is visible and always on top",
+      "document": {
+        "schemaVersion": 12,
+        "overlayVisible": false,
+        "alwaysOnTop": false,
+        "launchAtLogin": true,
+        "position": {
+          "x": 40,
+          "y": 60
+        }
+      },
+      "expected": {
+        "schemaVersion": 12,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": true,
+        "completedOnboardingVersion": 1,
+        "position": {
+          "x": 40,
+          "y": 60
+        },
+        "presets": []
+      }
+    }
+  ]
+}
