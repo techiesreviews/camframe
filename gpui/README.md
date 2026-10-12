@@ -19,6 +19,8 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 ```
 
+On Windows you don't need a local toolchain: every push to `experiment/gpui-port` that touches `gpui/` runs the "Build GPUI experiment (Windows)" workflow, which uploads `camframe.exe` as the `camframe-gpui-windows-x64` artifact on the run page. GPUI compiles its shaders with the Windows SDK's `fxc.exe`, so the port cannot be cross-compiled from Linux. A console window opens alongside the Overlay and shows any errors.
+
 Preferences use the Electron `preferences.json` format, stored separately under `~/.config/camframe-gpui/` (Linux), `%APPDATA%\camframe-gpui\` (Windows), or `~/Library/Application Support/camframe-gpui/` (macOS). To try it with your existing Scenes, copy the Electron document there.
 
 ## What is ported
