@@ -6,6 +6,7 @@ This ledger answers four different questions that a changelog usually mixes toge
 
 | Version | Retained outcome | Historical validation recorded at the time |
 | --- | --- | --- |
+| [0.5.1](https://github.com/techiesreviews/camframe/releases/tag/v0.5.1), promoted stable 2026-10-13 | Electron 44.7.0, tested module boundaries, and the Full screen/onboarding reserve fix; existing prerelease artifacts promoted at Lex's request | Windows x64 and both macOS builds passed release CI; Lex reported Windows fullscreen camera continuity as good. Accessibility and macOS permission checks remain open. See [the dated promotion run](verification/runs/2026-10-13-v0.5.1-stable-release.md); this release is separate from the GPUI experiment branch. |
 | Unreleased (0.5.0 candidate) | Contextual Overlay onboarding; live high-contrast/reduced-motion behavior; removal of the unreachable Controller; one stable Camera quality across Compact and Full screen; exactly pinned release toolchain | 50 unit/static tests plus one real Electron smoke and three screenshots; native accessibility, camera-hardware, macOS permission, and final cross-platform packaging remain open |
 | 0.2.12 | Initial Windows Electron Overlay: camera selection, four shapes, mirror/frame, direct drag/resize/crop, hover controls, Full screen, persistence | 13 tests; Windows unpacked build |
 | 0.2.13 | macOS arm64/x64 packaging, camera permission copy, hidden Dock icon, smaller English-only packages and exact font assets | 13 tests; Windows packages; ASAR/locale inspection; package size ~86.8?87.0 MB |
@@ -66,7 +67,7 @@ Historical validation is evidence about those revisions, not proof that the curr
 
 ## Uncertain historical outcomes
 
-- GitHub issue 5's original canvas-held-frame attempt did not succeed. The current source removes the mode-change renegotiation trigger under ADR 0026; repeat the hardware matrix before treating continuity as manually verified.
+- GitHub issue 5's original canvas-held-frame attempt did not succeed. The source removes the mode-change renegotiation trigger under ADR 0026. Lex reported the Windows fullscreen continuity check as good on 2026-10-13; the [dated run](verification/runs/2026-10-13-v0.5.1-stable-release.md) records the report and its missing hardware metadata.
 - Historical PR 6 says `pop-up-menu` was manually verified over the Windows taskbar. v0.4.3 later changes to `screen-saver` without an ADR. Both facts are preserved; current code is authoritative for reconstruction.
 
 ## Adding a history entry

@@ -21,6 +21,8 @@ cargo clippy --all-targets -- -D warnings
 
 On Windows you don't need a local toolchain: every push to `experiment/gpui-port` that touches `gpui/` runs the "Build GPUI experiment (Windows)" workflow, which uploads `camframe.exe` as the `camframe-gpui-windows-x64` artifact on the run page. GPUI compiles its shaders with the Windows SDK's `fxc.exe`, so the port cannot be cross-compiled from Linux. A console window opens alongside the Overlay and shows any errors.
 
+The Overlay overrides GPUI Kit's opaque default Root background while retaining its component layers. Native transparency and the reported gray outer frame still need a Windows retest; see the [2026-10-13 verification run](../docs/verification/runs/2026-10-13-gpui-transparent-overlay.md). Linux client decoration frames remain a platform gap.
+
 Preferences use the Electron `preferences.json` format, stored separately under `~/.config/camframe-gpui/` (Linux), `%APPDATA%\camframe-gpui\` (Windows), or `~/Library/Application Support/camframe-gpui/` (macOS). To try it with your existing Scenes, copy the Electron document there.
 
 ## What is ported

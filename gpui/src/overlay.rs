@@ -183,6 +183,12 @@ pub struct Overlay {
 }
 
 pub fn open(settings: Settings, cx: &mut App) -> Result<()> {
+    let options = window_options(&settings, cx);
+    open_root(options, cx, |window, cx| cx.new(|cx| Overlay::new(settings, window, cx)))?;
+    Ok(())
+}
+
+fn window_options(settings: &Settings, cx: &App) -> WindowOptions {
     let (width, height) = settings::overlay_dimensions(settings.scene.shape, settings.scene.size);
     let size = size(px(width), px(height));
     let bounds = match settings.scene.position {
@@ -191,7 +197,7 @@ pub fn open(settings: Settings, cx: &mut App) -> Result<()> {
         }
         _ => Bounds::centered(None, size, cx),
     };
-    let options = WindowOptions {
+    WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: None,
         focus: false,
@@ -208,9 +214,20 @@ pub fn open(settings: Settings, cx: &mut App) -> Result<()> {
         app_id: Some("camframe".into()),
         window_decorations: Some(WindowDecorations::Client),
         ..WindowOptions::default()
-    };
-    gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Overlay::new(settings, window, cx)))?;
-    Ok(())
+    }
+}
+
+fn open_root<V: Render>(
+    options: WindowOptions,
+    cx: &mut App,
+    build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
+) -> Result<WindowHandle<gpui_kit::base::Root>> {
+    cx.open_window(options, |window, cx| {
+        let view = build(window, cx);
+        // Kit's theme supplies an opaque Root background even for transparent windows.
+        // Override that fill while retaining its input, popup, and dialog layers.
+        cx.new(|cx| gpui_kit::base::Root::new(view, window, cx).bg(transparent_black()))
+    })
 }
 
 fn choices(items: impl IntoIterator<Item = (String, String)>) -> Vec<Choice> {
@@ -1416,5 +1433,69 @@ impl Render for Overlay {
                     });
                 }).absolute().size_full())
             })
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::{CHROME_SIDE, CHROME_TOP, Settings, hex, open_root, window_options};
+    use gpui_kit::component::{Theme, ThemeMode, WindowExt};
+    use gpui_kit::test::TestWindowExt;
+    use gpui_kit::{AppContext, Context, IntoElement, ParentElement, Render, Styled, TestAppContext, Window, WindowHandle, div, gpui, px};
+
+    /// A camera-sized opaque surface, without capture threads or camera hardware.
+    struct CameraSurface;
+
+    impl Render for CameraSurface {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                div().absolute().left(px(CHROME_SIDE)).top(px(CHROME_TOP))
+                    .size(px(240.0)).rounded(px(120.0)).bg(hex(0x18181b)),
+            )
+        }
+    }
+
+    fn open_test_overlay(cx: &mut TestAppContext) -> WindowHandle<gpui_kit::base::Root> {
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            Theme::change(ThemeMode::Dark, None, cx);
+            let options = window_options(&Settings::default(), cx);
+            open_root(options, cx, |_, cx| cx.new(|_| CameraSurface)).unwrap()
+        })
+    }
+
+    #[gpui_kit::test]
+    fn overlay_root_does_not_paint_an_opaque_window_background(cx: &mut TestAppContext) {
+        let handle = open_test_overlay(cx);
+        let (baseline, _) = cx.update(|cx| {
+            gpui_kit::open_window(window_options(&Settings::default(), cx), cx, |_, cx| cx.new(|_| CameraSurface))
+        }).unwrap();
+        cx.update_window(baseline, |_, window, cx| {
+            window.draw(cx).clear(cx);
+            let viewport = window.viewport_size().scale(window.scale_factor());
+            assert!(window.painted_quads().iter().any(|quad| {
+                !quad.background.is_transparent() && quad.bounds.size == viewport
+            }), "the Kit default must reproduce the opaque Root fill this regression covers");
+        }).unwrap();
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.draw(cx).clear(cx);
+            let quads = window.painted_quads();
+            assert!(!quads.is_empty(), "the camera surface must actually paint");
+            let viewport = window.viewport_size().scale(window.scale_factor());
+            assert!(quads.iter().all(|quad| {
+                quad.background.is_transparent() || quad.bounds.size != viewport
+            }), "transparent native windows must not receive a window-sized opaque Root fill");
+        }).unwrap();
+    }
+
+    #[gpui_kit::test]
+    fn transparent_overlay_root_keeps_kit_dialog_layers(cx: &mut TestAppContext) {
+        let handle = open_test_overlay(cx);
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.open_dialog(cx, |dialog, _, _| dialog.title("Overlay dialog"));
+            window.render_frame(cx);
+            assert!(window.find("dialog").visible());
+        }).unwrap();
     }
 }
