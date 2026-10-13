@@ -1,6 +1,6 @@
 # Verification run: GPUI transparent Overlay — 2026-10-13
 
-- **Commit:** initial Windows CI tested `4c39f49a5b2390f632818c9eb00e1beb1a646cb7`, branch `experiment/gpui-port`; subsequent unused test import cleanup awaits CI
+- **Commit:** final Windows CI tested `bfe884b539bbb83090303539de90657ebc7f256a`, branch `experiment/gpui-port`; initial CI tested `4c39f49a5b2390f632818c9eb00e1beb1a646cb7`
 - **Version:** GPUI experiment `0.1.0`; Electron unchanged by this experiment fix
 - **Observer:** Codex GPT-6.1-Sol implementation agent; Lex supplied the Windows defect screenshot
 - **Environment:** Linux `7.0.0-38-generic`, x86_64; rustc `1.98.1`, Cargo `1.98.1`; no native Windows compositor available
@@ -28,7 +28,20 @@ Adding the development `test-support` feature required updating `gpui/Cargo.lock
 | --- | --- | --- |
 | `cargo build --release --locked` | Pass | Windows application code compiled. |
 | `cargo test --release --locked` | Pass | All 23 tests passed, including the Root paint regression with its opaque baseline control and the dialog layer regression. |
-| `cargo clippy --all-targets --locked -- -D warnings` | Fail | Sole diagnostic: unused import `gpui` at `gpui/src/overlay.rs:1445:128`. The redundant explicit test import has been removed; a new CI run is pending. |
+| `cargo clippy --all-targets --locked -- -D warnings` | Fail | Sole diagnostic: unused import `gpui` at `gpui/src/overlay.rs:1445:128`. The redundant explicit test import was removed in `bfe884b`; the final run below verifies the correction. |
+
+### Final Windows CI
+
+[Run 38370012546](https://github.com/techiesreviews/camframe/actions/runs/38370012546) tested `bfe884b` and completed successfully on 2026-10-13. Its `windows-latest` runner used Rust `1.98.1` as specified by the workflow.
+
+| Check | Result | Evidence/notes |
+| --- | --- | --- |
+| `cargo build --release --locked` | Pass | Optimized Windows application compiled in 44.99 seconds. |
+| `cargo test --release --locked` | Pass | 23 passed, 0 failed; both new Overlay tests passed. Test compilation took 4 minutes 15 seconds; execution took 0.01 seconds. |
+| `cargo clippy --all-targets --locked -- -D warnings` | Pass | No warnings; completed in 43.25 seconds. |
+| Independent source review | No findings | Read-only `codex exec`, GPT-6.1-Sol/medium, reviewed immutable `f7ba709..4c39f49`. Confirmed Root style ordering, retained Kit layers, test APIs, and unchanged runtime versions/checksums. The later cleanup only removes the test import flagged by CI. |
+
+These paint tests verify scene composition through the production startup helper and the opaque-fill baseline. They do not demonstrate native compositor transparency or resolve the gray outline on Lex's Windows desktop.
 
 ## Source inspection
 
@@ -41,7 +54,8 @@ Adding the development `test-support` feature required updating `gpui/Cargo.lock
 
 | Target/check | Result | Notes |
 | --- | --- | --- |
-| Windows GPUI runtime build | Pass (CI) | Run 38368888574 compiled the runtime and passed 23 tests; Clippy failed on the redundant test import. A new CI run and packaged artifact are pending. |
+| Windows GPUI runtime build | Pass (CI) | Final run 38370012546 compiled `camframe.exe`, passed all 23 tests, and passed Clippy. |
+| Windows x64 artifact | Pass (CI metadata) | `camframe-gpui-windows-x64`, artifact ID `11797999468`, archive size 9,226,353 bytes, GitHub artifact archive SHA-256 `0b2d15e167c251f63b36da8a74501ea79cb3ffc20720fcf9407c95a5f976ae1e`. The archive contains the workflow's `gpui/target/release/camframe.exe`; the archive was not downloaded or launched on this Linux host. |
 | Windows compositor transparency | Not run | Requires the rebuilt executable on Windows. |
 
 ## Manual checks
@@ -57,6 +71,6 @@ Adding the development `test-support` feature required updating `gpui/Cargo.lock
 
 ## Release decision
 
-- **Decision:** experiment fix awaiting verification
-- **Reason:** Windows CI passed the runtime build and all 23 tests, but the unused test import cleanup still awaits a clean Clippy run and native Windows behavior is unverified.
-- **Follow-ups:** rerun Windows CI after the import cleanup, build a fresh Windows artifact, and repeat the manual checks above. Investigate the gray outline only if it persists after the Root fill override.
+- **Decision:** experiment fix ready for Windows visual retest
+- **Reason:** Final Windows CI passed the runtime build, all 23 tests, and Clippy. Native desktop transparency and the gray outline remain unverified.
+- **Follow-ups:** download `camframe-gpui-windows-x64` from the final run and repeat the manual checks above. Investigate the gray outline if it persists after the Root fill override.
