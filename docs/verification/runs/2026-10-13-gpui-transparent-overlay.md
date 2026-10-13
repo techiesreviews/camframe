@@ -1,6 +1,6 @@
 # Verification run: GPUI transparent Overlay — 2026-10-13
 
-- **Commit:** working tree based on `f7ba709c101f6f20e546d5830f0d47f16f0590a6`, branch `experiment/gpui-port`
+- **Commit:** initial Windows CI tested `4c39f49a5b2390f632818c9eb00e1beb1a646cb7`, branch `experiment/gpui-port`; subsequent unused test import cleanup awaits CI
 - **Version:** GPUI experiment `0.1.0`; Electron unchanged by this experiment fix
 - **Observer:** Codex GPT-6.1-Sol implementation agent; Lex supplied the Windows defect screenshot
 - **Environment:** Linux `7.0.0-38-generic`, x86_64; rustc `1.98.1`, Cargo `1.98.1`; no native Windows compositor available
@@ -20,6 +20,16 @@ Commands run in `gpui/`, except `git diff --check` in the repository root.
 
 Adding the development `test-support` feature required updating `gpui/Cargo.lock` with 11 additional packages. The runtime GPUI/Kit pins remain `0.3.7`/`0.7.0`. No system packages or platform dependency patches were installed. A preliminary locked invocation rejected the missing development dependencies; the lockfile was then regenerated and the required packages fetched before the commands above.
 
+### Initial Windows CI
+
+[Run 38368888574](https://github.com/techiesreviews/camframe/actions/runs/38368888574) tested `4c39f49` after the local checks above.
+
+| Check | Result | Evidence/notes |
+| --- | --- | --- |
+| `cargo build --release --locked` | Pass | Windows application code compiled. |
+| `cargo test --release --locked` | Pass | All 23 tests passed, including the Root paint regression with its opaque baseline control and the dialog layer regression. |
+| `cargo clippy --all-targets --locked -- -D warnings` | Fail | Sole diagnostic: unused import `gpui` at `gpui/src/overlay.rs:1445:128`. The redundant explicit test import has been removed; a new CI run is pending. |
+
 ## Source inspection
 
 - The Kit opener wraps application content in Base Root. The component plugin paints the theme background on that Root unless an explicit Root style overrides it.
@@ -31,7 +41,7 @@ Adding the development `test-support` feature required updating `gpui/Cargo.lock
 
 | Target/check | Result | Notes |
 | --- | --- | --- |
-| Windows GPUI executable | Not run locally | Linux cannot cross-compile GPUI's Windows shaders; Windows CI build and test results are pending. |
+| Windows GPUI runtime build | Pass (CI) | Run 38368888574 compiled the runtime and passed 23 tests; Clippy failed on the redundant test import. A new CI run and packaged artifact are pending. |
 | Windows compositor transparency | Not run | Requires the rebuilt executable on Windows. |
 
 ## Manual checks
@@ -48,5 +58,5 @@ Adding the development `test-support` feature required updating `gpui/Cargo.lock
 ## Release decision
 
 - **Decision:** experiment fix awaiting verification
-- **Reason:** the opaque Root fill is directly evidenced in dependency source, but local build prerequisites block automated execution and native Windows behavior is unverified.
-- **Follow-ups:** run locked tests and Clippy on a configured build host, build a fresh Windows artifact, and repeat the checks above. Investigate the gray outline only if it persists after the Root fill override.
+- **Reason:** Windows CI passed the runtime build and all 23 tests, but the unused test import cleanup still awaits a clean Clippy run and native Windows behavior is unverified.
+- **Follow-ups:** rerun Windows CI after the import cleanup, build a fresh Windows artifact, and repeat the manual checks above. Investigate the gray outline only if it persists after the Root fill override.

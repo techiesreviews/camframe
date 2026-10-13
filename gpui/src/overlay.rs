@@ -1442,7 +1442,7 @@ mod tests {
     use super::{CHROME_SIDE, CHROME_TOP, Settings, hex, open_root, window_options};
     use gpui_kit::component::{Theme, ThemeMode, WindowExt};
     use gpui_kit::test::TestWindowExt;
-    use gpui_kit::{AppContext, Context, IntoElement, ParentElement, Render, Styled, TestAppContext, Window, WindowHandle, div, gpui, px};
+    use gpui_kit::{AppContext, Context, IntoElement, ParentElement, Render, Styled, TestAppContext, Window, WindowHandle, div, px};
 
     /// A camera-sized opaque surface, without capture threads or camera hardware.
     struct CameraSurface;
