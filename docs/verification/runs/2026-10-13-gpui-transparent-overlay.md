@@ -55,15 +55,15 @@ These paint tests verify scene composition through the production startup helper
 | Target/check | Result | Notes |
 | --- | --- | --- |
 | Windows GPUI runtime build | Pass (CI) | Final run 38370012546 compiled `camframe.exe`, passed all 23 tests, and passed Clippy. |
-| Windows x64 artifact | Pass (CI metadata) | `camframe-gpui-windows-x64`, artifact ID `11797999468`, archive size 9,226,353 bytes, GitHub artifact archive SHA-256 `0b2d15e167c251f63b36da8a74501ea79cb3ffc20720fcf9407c95a5f976ae1e`. The archive contains the workflow's `gpui/target/release/camframe.exe`; the archive was not downloaded or launched on this Linux host. |
-| Windows compositor transparency | Not run | Requires the rebuilt executable on Windows. |
+| Historical Windows x64 artifact | Pass (CI metadata) | `camframe-gpui-windows-x64`, artifact ID `11797999468`, archive size 9,226,353 bytes, GitHub artifact archive SHA-256 `0b2d15e167c251f63b36da8a74501ea79cb3ffc20720fcf9407c95a5f976ae1e`. The archive contained the workflow's `gpui/target/release/camframe.exe`; it was not downloaded or launched on this Linux host. Build removal and external artifact cleanup are tracked in the [removal run](2026-10-13-gpui-build-removal.md). |
+| Windows compositor transparency | Fail (user reported) | Lex reported the corrected build was “Still the same.” Exact executable, Windows version, and GPU configuration were not supplied. |
 
 ## Manual checks
 
 | Check | Result | Observation/evidence |
 | --- | --- | --- |
 | Original Windows Circle overlay | Fail (reported) | Lex's private screenshot shows a black rectangular surround and gray rounded outer outline. Exact Windows/GPU configuration was not supplied. The screenshot is not copied into the repository. |
-| Rebuilt Circle idle/hover | Not run | Confirm desktop remains visible above, beside, and around the Circle; inspect the gray outer outline separately. |
+| Rebuilt Windows Overlay | Fail (user reported) | Lex reported “Still the same” after the corrected build and requested build removal. No new screenshot or exact artifact/device match was supplied. |
 | Square, Portrait, Wide, and frame effects | Not run | Confirm transparent chrome and shape/effect edges on Windows. |
 | Inline settings, Select popup, tooltip, dialogs | Not run | Confirm component layers remain usable after the Root override. |
 | Full screen entry/exit | Not run | Confirm no opaque surround appears after returning to Compact mode. |
@@ -71,6 +71,6 @@ These paint tests verify scene composition through the production startup helper
 
 ## Release decision
 
-- **Decision:** experiment fix ready for Windows visual retest
-- **Reason:** Final Windows CI passed the runtime build, all 23 tests, and Clippy. Native desktop transparency and the gray outline remain unverified.
-- **Follow-ups:** download `camframe-gpui-windows-x64` from the final run and repeat the manual checks above. Investigate the gray outline if it persists after the Root fill override.
+- **Decision:** experiment abandoned; GPUI build removed
+- **Reason:** Final Windows CI passed the runtime build, all 23 tests, and Clippy, but Lex reported the corrected Windows build still showed the same problem and requested removal. Headless tests did not prove native transparency.
+- **Follow-ups:** stop GPUI repair and automated builds. Keep source and evidence archived. Track external workflow and artifact cleanup in the [removal run](2026-10-13-gpui-build-removal.md).
