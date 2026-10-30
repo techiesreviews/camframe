@@ -1,4 +1,4 @@
-// What the Overlay shows for the Prompter link. The Inline settings switch, its status line and the
+// What the Overlay shows for the Prompter link, and the one recent request its two controls flip. The Inline settings switch, its status line and the
 // toolbar button all read this one view of `prompterLink` (the stored choice) and
 // `prompterLinkStatus` (what main's link is doing), so they can never disagree.
 
@@ -19,14 +19,14 @@ export function prompterLinkView({ prompterLink, prompterLinkStatus } = {}) {
   return { on, state, status, title }
 }
 
-// The Overlay's last `prompterLink` request that main has not answered yet (`undefined` when none),
-// shared by the toolbar button and the settings switch, so a quick second press flips that request
-// instead of repeating the one before it.
-export function toggledPrompterLink(pending, stored) {
-  return !(pending ?? stored)
-}
+// The Overlay's last `prompterLink` request (`{ value, at }`, `undefined` before the first press). The
+// toolbar button and the settings switch both flip it, so a quick second press flips that request
+// instead of repeating the one before it. Main answers a request in milliseconds but also sends state
+// for other reasons (the link's status), so a stored value that matches a request does not prove every
+// request was answered; instead a request counts for PENDING_MS, after which the stored choice leads.
+export const PENDING_MS = 1000
 
-// Clears the pending request once the stored setting has caught up with it.
-export function settledPrompterLink(pending, stored) {
-  return pending === stored ? undefined : pending
+export function toggledPrompterLink(pending, stored, now) {
+  const fresh = pending !== undefined && now - pending.at < PENDING_MS
+  return { value: !(fresh ? pending.value : stored), at: now }
 }

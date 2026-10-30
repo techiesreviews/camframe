@@ -32,7 +32,7 @@
 
 ## Regressions and surprises
 
-- Found by review and fixed: a quick second click on the toolbar button before main answered repeated the first request, so the link stayed on, and a toolbar click right after the switch could do the same. Both controls now share one pending request (`toggledPrompterLink` / `settledPrompterLink` in `src/prompter-link-view.js`).
+- Found by review and fixed: a quick second click on the toolbar button before main answered repeated the first request, so the link stayed on, and a toolbar click right after the switch could do the same. Both controls now flip one recent request (`toggledPrompterLink` in `src/prompter-link-view.js`); a third review found that an early answer matching the newest request ended it too soon, so the request now counts for `PENDING_MS` (1 s) instead of ending when the stored value matches it. The smoke now also presses three times in a row.
 - Found while checking: in high contrast, keyboard focus was invisible on toolbar buttons, tabs, selects and switches (a control rule's `outline: 0` outranked the focus rule), and pressed toolbar buttons showed no icon (forced colors painted a Canvas backplate behind the white glyph). Both predate this branch for the existing controls; both are fixed.
 - Still in high contrast, the sliders' tracks are not drawn (existing, not changed here).
 

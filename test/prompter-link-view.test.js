@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { prompterLinkView, settledPrompterLink, toggledPrompterLink } from '../src/prompter-link-view.js'
+import { PENDING_MS, prompterLinkView, toggledPrompterLink } from '../src/prompter-link-view.js'
 
 // The Inline settings switch, its status line and the toolbar button all render this one view.
 
@@ -60,54 +60,65 @@ test('only a stored true turns the view on', () => {
   assert.equal(prompterLinkView().state, 'off')
 })
 
-// A small model of the Overlay: presses record a pending request and send it; main answers each
-// request in order with the stored value; every answer settles the pending request.
+// The Overlay as the two controls see it: each press flips the recent request (or the stored choice
+// once that request is older than PENDING_MS) and sends it; main answers requests in order, and may
+// also send state for other reasons at any time (`echo`).
 function overlayModel(stored) {
-  const model = { stored, pending: undefined, sent: [] }
-  const send = (value) => {
-    model.pending = value
-    model.sent.push(value)
+  const model = { stored, pending: undefined, sent: [], queue: [], now: 0 }
+  const press = () => {
+    model.pending = toggledPrompterLink(model.pending, model.stored, model.now)
+    model.sent.push(model.pending.value)
+    model.queue.push(model.pending.value)
   }
   return Object.assign(model, {
-    toolbar: () => send(toggledPrompterLink(model.pending, model.stored)),
-    // The switch shows `stored` until main answers, so a click asks for the opposite of that.
-    settingsSwitch: () => send(!model.stored),
-    answer: () => {
-      model.stored = model.sent.shift()
-      model.pending = settledPrompterLink(model.pending, model.stored)
-    },
+    toolbar: press,
+    settingsSwitch: press,
+    answer: () => { model.stored = model.queue.shift() },
+    drain: () => { while (model.queue.length) model.answer() },
+    wait: (ms) => { model.now += ms },
   })
 }
 
-test('quick toolbar presses flip the pending request instead of repeating it', () => {
+test('quick toolbar presses flip the recent request instead of repeating it', () => {
   const model = overlayModel(true)
   model.toolbar()
   model.toolbar()
-  assert.deepEqual(model.sent, [false, true])
   model.answer()
   model.toolbar()
-  assert.deepEqual(model.sent, [true, false])
-  model.answer()
-  model.answer()
+  assert.deepEqual(model.sent, [false, true, false])
+  model.drain()
   assert.equal(model.stored, false)
-  assert.equal(model.pending, undefined)
 })
 
-test('the toolbar after the settings switch flips the switch\'s request', () => {
+test('an early answer that matches the newest request does not end it', () => {
+  const model = overlayModel(false)
+  model.toolbar()
+  model.toolbar()
+  model.toolbar()
+  model.answer()
+  model.answer()
+  model.toolbar()
+  model.drain()
+  assert.deepEqual(model.sent, [true, false, true, false])
+  assert.equal(model.stored, false)
+})
+
+test('the toolbar and the settings switch flip the same request', () => {
   const model = overlayModel(true)
   model.toolbar()
   model.settingsSwitch()
   model.toolbar()
-  assert.deepEqual(model.sent, [false, false, true])
-  while (model.sent.length) model.answer()
-  assert.equal(model.stored, true)
-  assert.equal(model.pending, undefined)
+  assert.deepEqual(model.sent, [false, true, false])
+  model.drain()
+  assert.equal(model.stored, false)
 })
 
-test('a pending request clears only when the stored setting matches it', () => {
-  assert.equal(settledPrompterLink(undefined, true), undefined)
-  assert.equal(settledPrompterLink(false, true), false)
-  assert.equal(settledPrompterLink(false, false), undefined)
-  assert.equal(toggledPrompterLink(undefined, false), true)
-  assert.equal(toggledPrompterLink(true, true), false)
+test('after PENDING_MS the stored choice leads again (changed elsewhere, e.g. the tray)', () => {
+  const model = overlayModel(false)
+  model.toolbar()
+  model.drain()
+  model.wait(PENDING_MS)
+  model.stored = false
+  model.settingsSwitch()
+  assert.deepEqual(model.sent, [true, true])
 })
