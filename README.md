@@ -26,11 +26,11 @@ CamFrame can follow the camera cues in your prompter script, so you don't have t
 
 **Turn it on**
 
-1. In CamFrame, hover over the camera, open the controls (the sliders button), choose **Scenes**, and switch on **Prompter link**. The line under it should say "On. Listening for the prompter on this computer".
+1. In CamFrame, hover over the camera and click the **Prompter link** button (the scroll icon, next to the sliders). It gets a white ring and a green dot when it is ready. You can also switch it on in the controls (the sliders button) under **Scenes** → **Prompter link**; the line under it then says "On. Waiting for prompter cues on port 47833". An orange dot means something is wrong, for example another app uses the port: the line under the switch says what happened.
 2. In the prompter (https://prompter.techies.tools), open **Settings** and tick **CamFrame link**. It should say "Connected to CamFrame" and list your Scenes.
 3. The first time, Chrome may ask whether the prompter may reach apps on this device. Allow it.
 
-Turn either switch off to stop. With the link off, CamFrame listens for nothing.
+Click the scroll button again, or turn either switch off, to stop. With the link off, CamFrame listens for nothing.
 
 **Cue cheat-sheet** (write these as reminder lines in your script, in square brackets; capitals don't matter)
 
@@ -43,7 +43,7 @@ Turn either switch off to stop. With the link off, CamFrame listens for nothing.
 
 You can put a cue after other words, like `[Share screen. Face small.]` or `[Stop share. Face full.]`. The cue fires once when that line reaches the prompter's reading line, and again if you scroll back above it and read it again.
 
-**Settings** (under the Prompter link switch): **Face full** (Full screen or a Scene), **Face small** (Where it was, one of the seven places, or a Scene) and **Corner margin** (how far the camera stays from the screen edges, 32 px by default). At the top places the camera sits a little lower, so its toolbar stays on screen.
+**Settings** (under the Prompter link switch, shown while it is on): **Face full** (Full screen or a Scene), **Face small** (Where it was, one of the seven places, or a Scene) and **Corner margin** (how far the camera stays from the screen edges, 32 px by default). At the top places the camera sits a little lower, so its toolbar stays on screen.
 
 **Good to know**
 

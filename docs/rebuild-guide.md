@@ -46,7 +46,7 @@ The CI release path is authoritative for cross-platform artifacts: tag `v*`, tes
 3. **Main-process shell** — wire Preferences file I/O, Overlay BrowserWindow, media permissions, tray, shortcuts, dialogs, and bridge handlers to those modules. Keep native privileges out of renderers.
 4. **Camera surface** — create one autoplay/muted/playsinline video with cover cropping. Implement stale-request cancellation, exact-device fallback, slower-profile retry, motion hint, and enumeration after permission.
 5. **Overlay geometry** — reproduce the fixed chrome reserve (18/84/18/18), shape ratios, CSS clipping, inner frame, and direct native drag/resize polling.
-6. **Hover/interactivity state machine** — default to click-through with forwarded movement; reveal the five-button toolbar and handles; preserve 220 ms compact hide and 200 ms Full screen hide behavior.
+6. **Hover/interactivity state machine** — default to click-through with forwarded movement; reveal the six-button toolbar and handles; preserve 220 ms compact hide and 200 ms Full screen hide behavior.
 7. **Camera framing** — target tool, mirrored pan, 5% wheel zoom, double-click reset, and identical transforms on primary/blur videos. Do not add Size or Zoom settings rows.
 8. **Effects** — outside-only Glow and Progressive blur with contextual controls and current tunable ranges. Do not restore Edge bloom.
 9. **Full screen** — animate native bounds rather than toggling Electron fullscreen; preserve the active camera profile while coordinating renderer geometry, Escape, toolbar hotspot, state restoration, and immediate final geometry under reduced motion.

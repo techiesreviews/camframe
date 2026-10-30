@@ -238,7 +238,7 @@ video {
 }
 
 .hover-toolbar {
-  --toolbar-width: min(196px, calc(var(--active-camera-width) - 8px));
+  --toolbar-width: min(234px, calc(var(--active-camera-width) - 8px));
   position: absolute;
   top: calc(22px + var(--onboarding-offset));
   left: calc(
@@ -309,6 +309,46 @@ video {
 .hover-toolbar i {
   font-size: 20px;
   line-height: 1;
+}
+
+/* The Prompter link shortcut: the white ring while the link is on (like Full screen), and a dot for
+   what the link is doing: green ready, grey starting, orange a problem such as a busy port. */
+.prompter-button {
+  position: relative;
+}
+
+.prompter-button .link-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  opacity: 0;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px #0c0c0d;
+  scale: 0.4;
+  transition:
+    opacity 120ms ease-out,
+    scale 160ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 160ms ease-out;
+}
+
+.prompter-button:hover .link-dot {
+  box-shadow: 0 0 0 2px #19191b;
+}
+
+.prompter-button:not([data-link-state='off']) .link-dot {
+  opacity: 1;
+  scale: 1;
+}
+
+.prompter-button[data-link-state='starting'] .link-dot {
+  background: #a1a1aa;
+}
+
+.prompter-button[data-link-state='error'] .link-dot {
+  background: #f97316;
 }
 
 .selection-corner {
@@ -695,26 +735,45 @@ video {
 
 .inline-prompter {
   display: grid;
-  gap: 6px;
+  gap: 2px;
   padding-top: 2px;
   border-top: 1px solid rgb(255 255 255 / 8%);
 }
 
+.inline-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f4f4f5;
+  font: 600 12px/16px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.inline-group-title i {
+  color: #a1a1aa;
+  font-size: 14px;
+}
+
 .prompter-status {
-  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 6px;
   color: #a1a1aa;
   font: 500 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
 }
 
 .prompter-status::before {
-  display: inline-block;
+  flex: none;
   width: 6px;
   height: 6px;
-  margin-right: 6px;
+  margin-top: 4px;
   border-radius: 50%;
   background: #52525b;
   content: '';
-  vertical-align: 1px;
+}
+
+.prompter-status[data-state='starting']::before {
+  background: #a1a1aa;
 }
 
 .prompter-status[data-state='on']::before {
@@ -725,8 +784,28 @@ video {
   background: #f97316;
 }
 
+/* The link's choices sit in one quiet inset, shown only while the link is on. */
 .inline-prompter-options {
   display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 4%);
+  transition:
+    opacity 160ms ease-out,
+    translate 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@starting-style {
+  .inline-prompter-options {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+.inline-setting-row {
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
   gap: 8px;
 }
 
@@ -781,10 +860,47 @@ video {
   cursor: pointer;
 }
 
-.inline-toggle input {
-  width: 15px;
-  height: 15px;
-  accent-color: #f97316;
+/* On/off settings are switches in the slider's colors: a grey track, and white once on. */
+.inline-toggle input[role='switch'] {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  appearance: none;
+  border-radius: 999px;
+  outline: 0;
+  background: #3f3f46;
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+
+.inline-toggle input[role='switch']::before {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #a1a1aa;
+  content: '';
+  transition:
+    translate 160ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 160ms ease-out;
+}
+
+.inline-toggle input[role='switch']:checked {
+  background: #f4f4f5;
+}
+
+.inline-toggle input[role='switch']:checked::before {
+  background: #0c0c0d;
+  translate: 12px 0;
+}
+
+.inline-toggle input[role='switch']:focus-visible {
+  outline: 2px solid #fb923c;
+  outline-offset: 2px;
 }
 
 .onboarding-coachmark {
@@ -1113,6 +1229,7 @@ video {
   .preset-manager button,
   .onboarding-coachmark button,
   .inline-setting select,
+  .inline-toggle input[role='switch'],
   .inline-effect-color input[type='text'],
   .preset-manager input[type='text'],
   .shortcut-list kbd
@@ -1131,6 +1248,45 @@ video {
   color: HighlightText;
   border: 2px solid Highlight;
   background: Highlight;
+}
+
+.overlay[data-high-contrast='true'] .inline-toggle input[role='switch'] {
+  forced-color-adjust: none;
+}
+
+.overlay[data-high-contrast='true'] .inline-toggle input[role='switch']::before {
+  forced-color-adjust: none;
+  top: 1px;
+  left: 1px;
+  background: ButtonText;
+}
+
+.overlay[data-high-contrast='true'] .inline-toggle input[role='switch']:checked {
+  border-color: Highlight;
+  background: Highlight;
+}
+
+.overlay[data-high-contrast='true'] .inline-toggle input[role='switch']:checked::before {
+  background: HighlightText;
+}
+
+/* Without color, the dots take the text color, and a problem shows as a hollow dot. */
+.overlay[data-high-contrast='true'] .prompter-button .link-dot,
+.overlay[data-high-contrast='true'] .prompter-status::before {
+  forced-color-adjust: none;
+  background: currentColor;
+  box-shadow: none;
+}
+
+.overlay[data-high-contrast='true'] .prompter-button[data-link-state='error'] .link-dot,
+.overlay[data-high-contrast='true'] .prompter-status[data-state='error']::before {
+  border: 2px solid currentColor;
+  background: transparent;
+}
+
+.overlay[data-high-contrast='true'] .inline-prompter-options {
+  border: 1px solid CanvasText;
+  background: Canvas;
 }
 
 .overlay[data-high-contrast='true'] .hover-toolbar button[data-onboarding-target='true'] {
@@ -1154,6 +1310,8 @@ video {
   .inline-effect-color,
   .inline-resolution-setting legend,
   .inline-resolution-grid span,
+  .inline-group-title,
+  .inline-group-title i,
   .scene-manager,
   .scene-message,
   .prompter-status,
@@ -1222,7 +1380,11 @@ video {
   .camera-effect-layer,
   .hover-toolbar,
   .selection-corner,
-  .onboarding-demo-mouse {
+  .onboarding-demo-mouse,
+  .prompter-button .link-dot,
+  .inline-prompter-options,
+  .inline-toggle input[role='switch'],
+  .inline-toggle input[role='switch']::before {
     animation: none;
     transition: none;
   }

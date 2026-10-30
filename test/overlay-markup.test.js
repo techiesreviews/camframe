@@ -53,7 +53,7 @@ test('Camera quality is one control used in Compact mode and Full screen', () =>
 test('toolbar centering does not depend on the animated transform', () => {
   const toolbarRule = overlayCss.match(/(?:^|\n)\.hover-toolbar\s*\{([^}]+)\}/)?.[1] ?? ''
 
-  assert.match(toolbarRule, /--toolbar-width:\s*min\(196px,/)
+  assert.match(toolbarRule, /--toolbar-width:\s*min\(234px,/)
   assert.match(toolbarRule, /var\(--active-camera-left\)/)
   assert.match(toolbarRule, /var\(--active-camera-width\)/)
   assert.doesNotMatch(toolbarRule, /translateX/)
@@ -198,8 +198,10 @@ test('high contrast preserves boundaries, selection, focus, and status without e
 })
 
 test('the Prompter link is an opt-in Scenes setting that closes with the app', () => {
-  const scenesPanel = overlayHtml.match(/<div class="inline-prompter" data-settings-panel="presets">[\s\S]*?<\/div>\n {8}<\/div>/)?.[0] ?? ''
-  assert.match(scenesPanel, /id="overlay-prompter-toggle"[^>]*type="checkbox"/)
+  const scenesPanel = overlayHtml.match(/<div class="inline-prompter" data-settings-panel="presets"[\s\S]*?<\/div>\n {10}<\/div>\n {8}<\/div>/)?.[0] ?? ''
+  assert.match(scenesPanel, /role="group" aria-labelledby="overlay-prompter-title"/)
+  assert.match(scenesPanel, /id="overlay-prompter-title"><i class="ph ph-scroll" aria-hidden="true"><\/i>Prompter link</)
+  assert.match(scenesPanel, /id="overlay-prompter-toggle"[^>]*type="checkbox" role="switch"/)
   assert.doesNotMatch(scenesPanel, /id="overlay-prompter-toggle"[^>]*checked/)
   assert.match(scenesPanel, /id="overlay-prompter-status"[^>]*aria-live="polite"/)
   assert.match(scenesPanel, /id="overlay-prompter-options" hidden/)
@@ -209,4 +211,35 @@ test('the Prompter link is an opt-in Scenes setting that closes with the app', (
   assert.match(mainSource, /prompterLink\.setEnabled\(settings\.prompterLink\)/)
   assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\.prompterLink\)/)
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
+})
+
+test('the toolbar Prompter link button flips the same stored setting as the settings switch', () => {
+  const toolbar = overlayHtml.match(/<nav class="hover-toolbar"[\s\S]*?<\/nav>/)?.[0] ?? ''
+  const buttons = [...toolbar.matchAll(/<button type="button" id="([a-z-]+)"/g)].map((match) => match[1])
+  assert.deepEqual(buttons, ['close-button', 'fullscreen-button', 'shape-button', 'position-button', 'prompter-button', 'controls-button'])
+  const button = toolbar.match(/<button type="button" id="prompter-button"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? ''
+  assert.match(button, /aria-label="Prompter link"/)
+  assert.match(button, /aria-pressed="false"/)
+  assert.match(button, /aria-describedby="overlay-prompter-status"/)
+  assert.match(button, /title="Prompter link: off"/)
+  assert.match(button, /<i class="ph ph-scroll" aria-hidden="true"><\/i>/)
+  assert.match(button, /<span class="link-dot" aria-hidden="true"><\/span>/)
+  assert.match(read('assets/icons.css'), /\.ph-scroll::before\s*\{\s*content:\s*'\\eb7a';/)
+  // One stored setting, one IPC path: both controls send `prompterLink` and render from prompterLinkView.
+  assert.match(overlaySource, /prompterToggle\.addEventListener\('change', \(\) => \{\n {2}camFrame\.updateState\(\{ prompterLink: prompterToggle\.checked \}\)/)
+  assert.match(overlaySource, /prompterButton\.addEventListener\('click', \(\) => \{\n {2}if \(state\) camFrame\.updateState\(\{ prompterLink: !state\.prompterLink \}\)/)
+  assert.match(overlaySource, /const link = prompterLinkView\(state\)/)
+  assert.match(overlaySource, /prompterToggle\.checked = link\.on/)
+  assert.match(overlaySource, /prompterButton\.setAttribute\('aria-pressed', String\(link\.on\)\)/)
+  assert.match(overlaySource, /prompterButton\.dataset\.linkState = link\.state/)
+  assert.match(overlayCss, /\.prompter-button\[data-link-state='error'\] \.link-dot\s*\{[^}]*background:\s*#f97316/)
+})
+
+test('on/off settings are switches, with a forced-colors fallback and no motion when reduced', () => {
+  const switches = overlayHtml.match(/type="checkbox"[^>]*>/g) ?? []
+  assert.equal(switches.length, 4)
+  for (const item of switches) assert.match(item, /role="switch"/)
+  assert.match(overlayCss, /\.inline-toggle input\[role='switch'\]\s*\{[^}]*appearance:\s*none/)
+  assert.match(overlayCss, /\.overlay\[data-high-contrast='true'\] \.inline-toggle input\[role='switch'\]:checked\s*\{[^}]*background:\s*Highlight/)
+  assert.match(overlayCss, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.inline-toggle input\[role='switch'\]::before\s*\{\s*animation:\s*none;\s*transition:\s*none/)
 })

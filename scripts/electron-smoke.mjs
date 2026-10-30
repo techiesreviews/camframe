@@ -236,8 +236,27 @@ test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', 
     const missing = await prompterCall('POST', '/camframe/cue', { scene: 'Outro' })
     assert.equal(missing.status, 404)
 
-    await page.evaluate(() => window.camFrame.updateState({ prompterLink: false }))
-    await page.waitForTimeout(200)
+    // The toolbar button and the Inline settings switch flip the same stored setting through main.
+    const linkControls = () =>
+      page.evaluate(() => ({
+        pressed: document.querySelector('#prompter-button').getAttribute('aria-pressed'),
+        linkState: document.querySelector('#prompter-button').dataset.linkState,
+        switchOn: document.querySelector('#overlay-prompter-toggle').checked,
+      }))
+    await page.evaluate(() => document.querySelector('#prompter-button').click())
+    await page.waitForFunction(() => document.querySelector('#prompter-button').dataset.linkState === 'off')
+    assert.deepEqual(await linkControls(), { pressed: 'false', linkState: 'off', switchOn: false })
+    assert.equal((await page.evaluate(() => window.camFrame.getState())).prompterLink, false)
+    await assert.rejects(prompterCall('GET', '/camframe/status'), /ECONNREFUSED/)
+
+    await page.evaluate(() => document.querySelector('#prompter-button').click())
+    await page.waitForFunction(() => document.querySelector('#prompter-button').dataset.linkState === 'on')
+    assert.deepEqual(await linkControls(), { pressed: 'true', linkState: 'on', switchOn: true })
+    assert.equal((await prompterCall('GET', '/camframe/status')).status, 200)
+
+    await page.evaluate(() => document.querySelector('#overlay-prompter-toggle').click())
+    await page.waitForFunction(() => document.querySelector('#prompter-button').dataset.linkState === 'off')
+    assert.deepEqual(await linkControls(), { pressed: 'false', linkState: 'off', switchOn: false })
     await assert.rejects(prompterCall('GET', '/camframe/status'), /ECONNREFUSED/)
   } finally {
     await application?.close().catch(() => {})

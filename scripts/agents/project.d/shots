@@ -3,7 +3,9 @@
 // Usage: kit shots [--help]
 // Serves src/ on a free 127.0.0.1 port, opens overlay.html without Electron (its QA bridge fake),
 // opens Inline settings on the Scenes tab and captures the Prompter link off, on and with a busy port,
-// at the default Overlay window size (324x390) and a tall view. Evidence: .scratch/shots/<time>/.
+// at the default Overlay window size (324x390) and a tall view, then the toolbar's Prompter link
+// button off, on and busy, and checks the button and the settings switch stay in sync.
+// Evidence: .scratch/shots/<time>/.
 import { createServer } from 'node:http'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
@@ -14,8 +16,11 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(`Usage: kit shots
 Serves src/ locally and opens overlay.html in Chromium without Electron (the browser QA preview), then captures
 Inline settings on the Scenes tab: the Prompter link off, on (Face full / Face small / Corner margin) and with
-its port busy, at the default Overlay size (324x390, scrolled to the link) and a tall 324x820 view.
-Also checks that a Corner margin update leaves the open Face full choices in place.
+its port busy, at the default Overlay size (324x390, scrolled to the link) and a tall 324x820 view, plus the
+Camera tab's switches and the link in high contrast. Then the toolbar's Prompter link button off, on (turned on
+from the keyboard) and busy, checking it stays in sync with the settings switch both ways and that all six
+toolbar buttons fit the default Overlay. Also checks that a Corner margin update leaves the open Face full
+choices in place.
 Fails on page errors or when a control is missing. Playwright comes from KIT_PLAYWRIGHT_MODULE, else
 "playwright" in scripts/agents/kit.json (the repo's own playwright-core after npm ci; Chromium for it comes
 from npx playwright-core install chromium). Evidence: .scratch/shots/<time>/shots.json and *.png.`)
@@ -62,9 +67,11 @@ try {
   for (const view of [
     { name: 'default', width: 324, height: 390 },
     { name: 'tall', width: 324, height: 820 },
+    { name: 'high-contrast-tall', width: 324, height: 820, forcedColors: 'active' },
   ]) {
-    for (const mode of ['off', 'on', 'busy']) {
+    for (const mode of view.forcedColors ? ['on', 'busy'] : ['off', 'on', 'busy']) {
       const page = await browser.newPage({ viewport: { width: view.width, height: view.height } })
+      if (view.forcedColors) await page.emulateMedia({ forcedColors: view.forcedColors })
       page.on('pageerror', (error) => errors.push(`${view.name}/${mode}: ${error.message}`))
       await page.goto(mode === 'busy' ? `${base}?prompter=busy` : base)
       await page.locator('#overlay').waitFor({ state: 'visible' })
@@ -83,9 +90,16 @@ try {
         optionsHidden: document.querySelector('#overlay-prompter-options').hidden,
         faceFull: [...document.querySelector('#overlay-prompter-full').options].map((option) => option.text),
         faceSmall: [...document.querySelector('#overlay-prompter-small').options].map((option) => option.text),
+        toolbarPressed: document.querySelector('#prompter-button').getAttribute('aria-pressed'),
+        toolbarState: document.querySelector('#prompter-button').dataset.linkState,
       }))
       if (mode === 'off' && !state.optionsHidden) fail('options show while the link is off')
       if (mode !== 'off' && state.optionsHidden) fail('options stay hidden while the link is on')
+      // The settings switch drives the toolbar button through the same stored setting.
+      const expected = { off: ['false', 'off'], on: ['true', 'on'], busy: ['true', 'error'] }[mode]
+      if (state.toolbarPressed !== expected[0] || state.toolbarState !== expected[1]) {
+        fail(`the toolbar button shows ${state.toolbarPressed}/${state.toolbarState} after the switch set ${mode}`)
+      }
       if (mode === 'on') {
         // A state update that changes only the Corner margin keeps the Face full choices as they
         // are (rebuilding them would close an open dropdown).
@@ -110,10 +124,82 @@ try {
         state.marginUpdateKeptChoices = kept
       }
       const file = `prompter-link-${mode}-${view.name}.png`
-      await page.screenshot({ path: join(out, file) })
+      await page.screenshot({ path: join(out, file), animations: 'disabled' })
       shots.push({ file, view, mode, ...state })
+      if (view.name === 'tall' && mode === 'off') {
+        await page.locator('[data-settings-tab="camera"]').click()
+        await page.screenshot({ path: join(out, 'settings-camera-switches-tall.png'), animations: 'disabled' })
+        shots.push({ file: 'settings-camera-switches-tall.png', view, mode })
+      }
       await page.close()
     }
+  }
+
+  // The toolbar's Prompter link button: off, on (from the keyboard), busy (a click), and back off with a click,
+  // checking each time that the Inline settings switch follows it. Captured at 2x, cropped to the toolbar.
+  for (const mode of ['off', 'on', 'busy']) {
+    const page = await browser.newPage({ viewport: { width: 324, height: 390 }, deviceScaleFactor: 2 })
+    page.on('pageerror', (error) => errors.push(`toolbar/${mode}: ${error.message}`))
+    await page.goto(mode === 'busy' ? `${base}?prompter=busy` : base)
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    await page.locator('#camera-surface').hover()
+    const button = page.locator('#prompter-button')
+    if (await button.count() !== 1) fail('the toolbar Prompter link button is missing')
+    const fit = await page.evaluate(() => {
+      const toolbar = document.querySelector('#hover-toolbar').getBoundingClientRect()
+      const buttons = [...document.querySelectorAll('#hover-toolbar > button')].map((item) => item.getBoundingClientRect())
+      return {
+        count: buttons.length,
+        inside: buttons.every((rect) => rect.left >= toolbar.left && rect.right <= toolbar.right),
+        narrowest: Math.min(...buttons.map((rect) => rect.width)),
+        toolbarInView: toolbar.left >= 0 && toolbar.right <= window.innerWidth,
+      }
+    })
+    if (fit.count !== 6 || !fit.inside || fit.narrowest < 36 || !fit.toolbarInView) {
+      fail(`the toolbar does not fit the default Overlay (${JSON.stringify(fit)})`)
+    }
+    if (mode === 'on') {
+      await button.focus()
+      await page.keyboard.press('Enter')
+    }
+    if (mode === 'busy') await button.click()
+    await page.locator('#camera-surface').hover()
+    await page.waitForTimeout(250)
+    const read = () =>
+      page.evaluate(() => {
+        const item = document.querySelector('#prompter-button')
+        return {
+          pressed: item.getAttribute('aria-pressed'),
+          linkState: item.dataset.linkState,
+          title: item.title,
+          selected: item.classList.contains('selected'),
+          switchChecked: document.querySelector('#overlay-prompter-toggle').checked,
+        }
+      })
+    const state = await read()
+    const expected = { off: ['false', 'off', false], on: ['true', 'on', true], busy: ['true', 'error', true] }[mode]
+    if (state.pressed !== expected[0] || state.linkState !== expected[1] || state.selected !== expected[2] || state.switchChecked !== expected[2]) {
+      fail(`the toolbar button and settings switch disagree for ${mode} (${JSON.stringify(state)})`)
+    }
+    const file = `toolbar-prompter-${mode}.png`
+    const box = await page.locator('#hover-toolbar').boundingBox()
+    await page.screenshot({
+      path: join(out, file),
+      clip: { x: box.x - 8, y: box.y - 8, width: box.width + 16, height: box.height + 16 },
+      animations: 'disabled',
+    })
+    shots.push({ file, mode, fit, ...state })
+    if (mode === 'on') {
+      // Back off with a click: the settings switch and its options follow.
+      await button.click()
+      const off = await read()
+      const optionsHidden = await page.evaluate(() => document.querySelector('#overlay-prompter-options').hidden)
+      if (off.pressed !== 'false' || off.switchChecked || !optionsHidden) {
+        fail(`turning the link off from the toolbar left the settings on (${JSON.stringify(off)})`)
+      }
+      shots.push({ check: 'toolbar click turns the link off', ...off, optionsHidden })
+    }
+    await page.close()
   }
 } catch (error) {
   errors.push(error.message.split('\n')[0])

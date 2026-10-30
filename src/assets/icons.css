@@ -36,6 +36,10 @@
   content: '\e1d6';
 }
 
+.ph-scroll::before {
+  content: '\eb7a';
+}
+
 .ph-sliders-horizontal::before {
   content: '\e434';
 }

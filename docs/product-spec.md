@@ -14,7 +14,7 @@ The Overlay is the primary and only reachable application surface. It is a frame
 
 - starts visible and always on top on every launch, regardless of the previous session's visibility/topmost values;
 - is hidden from the taskbar and, on macOS, from the Dock;
-- contains one visible camera video, an optional second video using the same stream for Progressive blur, a five-button hover toolbar, four resize handles, Inline settings, versioned onboarding, status text, and temporary Scene notices;
+- contains one visible camera video, an optional second video using the same stream for Progressive blur, a six-button hover toolbar, four resize handles, Inline settings, versioned onboarding, status text, and temporary Scene notices;
 - normally ignores mouse events while forwarding pointer movement, then becomes interactive while its controls or direct-manipulation modes are active;
 - keeps background throttling disabled so the camera renderer continues while unfocused.
 
@@ -26,7 +26,7 @@ The toolbar order and actions are:
 4. Enter or exit camera-framing mode.
 5. Open or close Inline settings.
 
-The normal toolbar is 196 px or the camera width minus 8 px, whichever is smaller. It is 44 px high, centered over the camera, and positioned 22 px from the top of the outer window. In framing mode it expands up to 240 px to show the zoom value and “Drag · Scroll · Double-click resets” guidance.
+The normal toolbar is 234 px or the camera width minus 8 px, whichever is smaller. It is 44 px high, centered over the camera, and positioned 22 px from the top of the outer window. In framing mode it expands up to 240 px to show the zoom value and “Drag · Scroll · Double-click resets” guidance.
 
 ### Inline settings
 
@@ -42,7 +42,7 @@ Camera is the default section. Opening settings keeps the Overlay interactive. S
 
 New installations show a four-step contextual coach-mark tour inside the Overlay after camera startup reaches either a working or error state. It covers camera access and selection, moving/resizing the Overlay, manual camera framing, and Scenes. Platform-appropriate presentation shortcuts remain available in the opened Scenes panel.
 
-- Every step first paints against the unchanged five-button Toolbar with settings closed and framing off. The coach mark points to Settings, Shape, Crosshair, or Settings again.
+- Every step first paints against the unchanged six-button Toolbar with settings closed and framing off. The coach mark points to Settings, Shape, Crosshair, or Settings again.
 - The current target keeps the Toolbar's real hover colors for the duration of its step, in addition to the orange target outline. The header says only “Getting started”; four orange/neutral line segments provide visible progress while progressbar semantics expose the numeric step to assistive technology.
 - Coach marks are modeless and the highlighted control remains operable. After the coach mark has been eligible to paint, Camera and Scenes steps automatically open Inline settings with the matching section selected. After 320 ms, Shape and framing use an `aria-hidden`, non-interactive ghost mouse to demonstrate the live control.
 - Shape performs three automatic clicks through real shapes. Hovering, focusing, or clicking Shape stops the animation and hands over at the current shape. Framing demonstrates pan, scroll zoom, and reset; entering the Camera/Crosshair or attempting real interaction stops it and hands over with framing active at the current crop/zoom.
@@ -52,7 +52,7 @@ New installations show a four-step contextual coach-mark tour inside the Overlay
 - Skip and final completion both persist onboarding version 1 globally. The completion field is not captured by Scenes.
 - Existing Preferences documents that predate schema 12 migrate as completed, so existing users are not interrupted.
 - Tray “Help & onboarding” shows the Overlay, focuses it, and reopens the guide without clearing completion state.
-- The coach mark occupies a temporary 220 px transparent reserve added above the compact Overlay. The renderer shifts all ordinary content down by the same amount inside the enlarged native window, preserving the Toolbar, Camera, resize handles, and Inline settings at their established screen coordinates. The coach mark ends 12 px above the unchanged five-button Toolbar. If the user opens Camera or Scenes, Inline settings starts 12 px below the Toolbar and scrolls in the remaining space. Opening and closing the tour must not produce an intermediate frame in which the ordinary UI jumps.
+- The coach mark occupies a temporary 220 px transparent reserve added above the compact Overlay. The renderer shifts all ordinary content down by the same amount inside the enlarged native window, preserving the Toolbar, Camera, resize handles, and Inline settings at their established screen coordinates. The coach mark ends 12 px above the unchanged six-button Toolbar. If the user opens Camera or Scenes, Inline settings starts 12 px below the Toolbar and scrolls in the remaining space. Opening and closing the tour must not produce an intermediate frame in which the ordinary UI jumps.
 - The Scenes step explains that each Scene retains its selected camera source, screen position, shape, framing, and style. The opened Scenes panel provides the complete controls and shortcut reference.
 
 ## Camera behavior
@@ -151,8 +151,9 @@ Presentation entry points:
 
 An optional link that lets the Techies teleprompter (https://prompter.techies.tools, a local copy, or a file:// copy) switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it never records, streams, or changes the camera itself (ADR 0031).
 
-- Off by default. Turning it on in Inline settings → Scenes starts a tiny HTTP server bound to `127.0.0.1` only, on port `47833`. Turning it off, or quitting, closes the port. With it off nothing listens.
-- The status line under the switch says Off, On (listening on port 47833), or why it could not start (for example "Port 47833 is in use by another app."); turning the switch off and on retries.
+- Off by default. Turning it on in Inline settings → Scenes, or with the toolbar's Prompter link button (scroll icon), starts a tiny HTTP server bound to `127.0.0.1` only, on port `47833`. Turning it off, or quitting, closes the port. With it off nothing listens.
+- The toolbar button and the settings switch are two views of the one stored setting and always agree. The button is pressed while the link is on and shows a dot: green ready, grey starting, orange a problem.
+- The status line under the switch says Off, On (waiting for prompter cues on port 47833), Starting…, or why it could not start (for example "Port 47833 is in use by another app."); turning the link off and on retries. Face full, Face small and Corner margin show only while the link is on.
 - **Face full** (cue `{size:"full"}`): Full screen by default, or a chosen Scene.
 - **Face small** without a place (cue `{size:"small"}`): by default "Where it was" (leave Full screen back to the previous Compact size and position; nothing changes when already Compact), or one of the seven places, or a chosen Scene.
 - **Face small at a place** (`position`: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `left`, `right`, `center`): Compact mode on the display the Overlay is on now, keeping its shape and size, with the camera surface **Corner margin** px (default 32, 0–160) from the edges it touches. The whole Overlay window stays inside the display's work area so the hover toolbar stays reachable; at the top places that puts the camera a little lower than the margin. The move animates like a Scene (immediately under reduced motion) and leaves Full screen first when needed. It is an ordinary position change: it is saved and clears the active Scene.

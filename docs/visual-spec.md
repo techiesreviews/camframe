@@ -10,7 +10,7 @@ The outer native window is transparent. In Compact mode, the camera starts at `(
 | --- | --- | --- |
 | Camera effect | Same bounds as camera surface; outside overflow visible | Below camera |
 | Camera surface | Left 18, top 84, shape-derived dimensions | Base visible surface |
-| Toolbar | Top 22, horizontally centered over active camera; 196×44 max | Above camera |
+| Toolbar | Top 22, horizontally centered over active camera; 234×44 max | Above camera |
 | Resize handles | 14×14, centered 7 px outside each camera corner | Camera layer |
 | Inline settings | Top 76; centered; width min(240, camera width − 28); max height outer height − 76 | Above toolbar/camera (`z-index:4`) |
 | Onboarding | In a temporary 220 px native reserve above the compact origin; 12 px above Toolbar; width min(244, outer width − 16) | Modeless coach mark (`z-index:10`) |
@@ -22,7 +22,7 @@ In Full screen, the camera surface becomes `inset:0`, width/height 100%, square 
 
 - Reachable Overlay UI uses `Segoe UI Variable`, then `Segoe UI`, then sans-serif.
 - Labels are generally 500 weight at 11/16 px; controls use 10–11 px; icons are 20 px.
-- Phosphor is embedded as `Phosphor.woff2` with ligature-style glyph mappings. Toolbar glyphs, in order: `x-circle`, `corners-out`, `circle`, `crosshair`, `sliders-horizontal`.
+- Phosphor is embedded as `Phosphor.woff2` with ligature-style glyph mappings. Toolbar glyphs, in order: `x-circle`, `corners-out`, `circle`, `crosshair`, `scroll` (Prompter link), `sliders-horizontal`. `src/assets/icons.css` maps only the glyphs in use (`scroll` is `\eb7a`).
 - The framing status uses 9/12 px secondary copy and 600 weight 11/13 px for the live Zoom line.
 
 ## Core palette
@@ -52,8 +52,9 @@ In Full screen, the camera surface becomes `inset:0`, width/height 100%, square 
 
 ## Toolbar and direct-manipulation chrome
 
-- Normal toolbar width is `min(196 px, active camera width − 8 px)`, with 4 px padding, 2 px button gaps, 10 px radius, and solid `#0c0c0d` background.
+- Normal toolbar width is `min(234 px, active camera width − 8 px)` (six buttons), with 4 px padding, 2 px button gaps, 10 px radius, and solid `#0c0c0d` background.
 - Each button is 36×36 px, 8 px radius, transparent by default. Selected buttons use an inset 1.5 px `#eeeeef` outline. Keyboard focus uses a 2 px orange outline with 1 px offset.
+- The Prompter link button uses the selected outline while the link is on, plus a 7 px dot 6 px from its top-right corner with a 2 px toolbar-colored ring: `#22c55e` ready, `#a1a1aa` starting, `#f97316` a problem (busy port). The dot fades and scales in over 120–160 ms; it is hidden while the link is off.
 - Hidden toolbar state is opacity 0, pointer-events none, translated down 4 px. Visible state is opacity 1/translation 0. Fade is 120 ms; translation is 160 ms.
 - Framing mode hides all buttons except crosshair, expands the toolbar to `min(240 px, camera width − 8 px)`, left-aligns content with 8 px gap, and adds 10 px right padding.
 - Resize handles are `#18181b`, with 2 px 92%-white borders and 3 px radius. They are invisible/non-interactive until hover/resize and never appear Full screen.
@@ -66,7 +67,8 @@ In Full screen, the camera surface becomes `inset:0`, width/height 100%, square 
 - Glow hex input is 68×30 px, uppercase 10 px monospace. Six swatches are 18×18 px with 5 px radius and 4 px gaps: orange `#fb923c`, cyan `#22d3ee`, violet `#8b5cf6`, pink `#ec4899`, green `#22c55e`, white `#ffffff`. Selected swatch has a 2 px white outline plus 1 px offset.
 - Sliders have a 3 px `#3f3f46` pill track and 12 px `#f4f4f5` circular thumb. Output uses tabular 10 px numerals.
 - Scene action buttons are 30 px high; management grids use three equal columns for order/delete and two for import/export. Disabled controls use opacity 0.42.
-- Toggle rows have 7 px vertical padding and subtle separators. Checkboxes use the browser control with orange accent.
+- Toggle rows have 7 px vertical padding and subtle separators. On/off settings are 28×16 px switches (`role="switch"` checkboxes drawn in CSS): `#3f3f46` track with a 12 px `#a1a1aa` knob when off, `#f4f4f5` track with a `#0c0c0d` knob when on; the knob slides 12 px over 160 ms. Focus uses the 2 px orange outline with 2 px offset.
+- The Prompter link group (Scenes) has a heading row (14 px `#a1a1aa` scroll icon, “Prompter link” at 600 12/16 px `#f4f4f5`, switch), a 10/14 px `#a1a1aa` status line led by a 6 px dot (`#52525b` off, `#a1a1aa` starting, `#22c55e` on, `#f97316` problem), and, only while on, an inset (8 px padding, 9 px radius, 4%-white background) holding Face full and Face small as 64 px label + select rows and the Corner margin slider. The inset fades in from 4 px above over 160 ms.
 - Camera quality uses one full-width resolution select; there is no separate Full screen quality column.
 - Scene keyboard hints are muted 10/14 px; `<kbd>` chips have 1×4 px padding, 4 px radius, hairline border, and `#202023` background.
 
@@ -78,7 +80,7 @@ In Full screen, the camera surface becomes `inset:0`, width/height 100%, square 
 - The header pairs an 11/16 px muted “Getting started” label with a compact 24 px ghost Skip button. Beneath it, four 3 px line segments with 4 px gaps show cumulative progress: completed/current segments are orange `#fb923c`, upcoming segments are `#3f3f46`. Numeric position is exposed through progressbar semantics but is not visible text.
 - The current heading is 18 px/1.25 at weight 600. Explanatory copy is 14/19 px, with optional 12/17 px muted platform/help notes.
 - Back is a secondary `#202023` button; Next/Done is the only filled orange primary action. All actions are 34 px high with 7 px radii and 2 px orange focus outlines.
-- Every step first paints the unchanged five-button Toolbar at its normal screen position beneath the coach mark, with settings closed and framing off. Step 1 targets Settings for Camera; step 2 targets Shape; step 3 targets Crosshair; step 4 targets Settings for Scenes.
+- Every step first paints the unchanged six-button Toolbar at its normal screen position beneath the coach mark, with settings closed and framing off. Step 1 targets Settings for Camera; step 2 targets Shape; step 3 targets Crosshair; step 4 targets Settings for Scenes.
 - After that first paint, steps 1 and 4 automatically open the appropriate settings panel 12 px below the 44 px Toolbar with an independently scrollable remainder. Camera or Scenes is selected to match the coach mark. Clicking Crosshair may change the Toolbar only after the framing explanation is already visible. Back/Next restores the standard transient Toolbar state before the next coach mark appears.
 - The framing copy names both exits. When framing is active, clicking Crosshair again or pressing Escape restores the standard Toolbar while leaving the current coach mark visible.
 - Shape and framing demos use an 18×26 px dark mouse with a white 1.5 px outline, orange wheel/click pulse, 9 px radius, and subtle black shadow. It sits above Camera/settings but below the coach mark, accepts no input, and is hidden from accessibility APIs.

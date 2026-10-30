@@ -14,6 +14,7 @@ import {
   createOnboardingTour,
   onboardingStepsFor,
 } from './onboarding.js'
+import { prompterLinkView } from './prompter-link-view.js'
 
 const overlay = document.querySelector('#overlay')
 const cameraSurface = document.querySelector('#camera-surface')
@@ -61,6 +62,7 @@ const presentationToast = document.querySelector('#presentation-toast')
 const fullscreenButton = document.querySelector('#fullscreen-button')
 const shapeButton = document.querySelector('#shape-button')
 const positionButton = document.querySelector('#position-button')
+const prompterButton = document.querySelector('#prompter-button')
 const video = document.querySelector('#camera')
 const effectVideo = document.querySelector('#effect-camera')
 const cameraState = document.querySelector('#camera-state')
@@ -527,15 +529,6 @@ function renderPresets() {
   }
 }
 
-// The Prompter link: on/off, what it is doing, and what "Face full" and a bare "Face small" do.
-// A choice naming a deleted Scene shows the default, which is also what a cue then does.
-function prompterStatusText(status = { state: 'off' }) {
-  if (status.state === 'on') return `On. Listening for the prompter on this computer (port ${status.port}).`
-  if (status.state === 'starting') return 'Starting…'
-  if (status.state === 'error') return `${status.message} Turn the link off and on to try again.`
-  return 'Off. When on, the prompter can switch this view at [Face …] cue lines.'
-}
-
 // Rebuilds a select's options only when they change and sets its choice only when it differs, so
 // a state update (the Corner margin slider, a status change) never closes an open dropdown.
 const filledChoices = new WeakMap()
@@ -549,13 +542,19 @@ function fillChoices(select, options, value, fallback) {
   if (select.value !== chosen) select.value = chosen
 }
 
+// The Prompter link: the Inline settings switch, its status line, the toolbar button, and what
+// "Face full" and a bare "Face small" do. All of them render from the stored `prompterLink`.
+// A choice naming a deleted Scene shows the default, which is also what a cue then does.
 function renderPrompterLink() {
-  const status = state.prompterLinkStatus ?? { state: 'off' }
-  prompterToggle.checked = state.prompterLink
-  prompterStatus.dataset.state = state.prompterLink ? status.state : 'off'
-  const statusText = prompterStatusText(state.prompterLink ? status : undefined)
-  if (prompterStatus.textContent !== statusText) prompterStatus.textContent = statusText
-  prompterOptions.hidden = !state.prompterLink
+  const link = prompterLinkView(state)
+  prompterToggle.checked = link.on
+  prompterStatus.dataset.state = link.state
+  if (prompterStatus.textContent !== link.status) prompterStatus.textContent = link.status
+  prompterOptions.hidden = !link.on
+  prompterButton.classList.toggle('selected', link.on)
+  prompterButton.setAttribute('aria-pressed', String(link.on))
+  prompterButton.dataset.linkState = link.state
+  prompterButton.title = link.title
   const scenes = state.presets.map((preset) => [`scene:${preset.id}`, `Scene: ${preset.name}`])
   fillChoices(prompterFull, [['fullscreen', 'Full screen'], ...scenes], state.prompterFaceFull, 'fullscreen')
   fillChoices(
@@ -968,6 +967,11 @@ topToggle.addEventListener('change', () => {
 
 prompterToggle.addEventListener('change', () => {
   camFrame.updateState({ prompterLink: prompterToggle.checked })
+})
+
+// The toolbar shortcut flips the same stored setting the Inline settings switch does.
+prompterButton.addEventListener('click', () => {
+  if (state) camFrame.updateState({ prompterLink: !state.prompterLink })
 })
 
 prompterFull.addEventListener('change', () => {
