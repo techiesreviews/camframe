@@ -202,7 +202,8 @@ export function createOverlayGeometry({
     if (!alive()) return
     // A new animation replaces the running one, but its finishing step still runs (leaving Full
     // screen clears the saved Compact base and restores the z-order there), or a burst of moves
-    // would keep a stale base for the next Full screen.
+    // would keep a stale base for the next Full screen. Its z-order and raise apply now, while the
+    // window is still on its way.
     const replaced = animation?.onComplete
     stopAnimation()
     replaced?.()
@@ -292,13 +293,16 @@ export function createOverlayGeometry({
   }
 
   // Moves a Compact Overlay to the current settings' Scene geometry, animated when visible.
-  function showScene() {
+  // `base` places it there instead of at the settings' position (or the live bounds without one).
+  function showScene({ base } = {}) {
     if (!alive()) return
     if (fullscreen || !settings().overlayVisible) {
       apply({ keepCenter: false })
       return
     }
-    const target = compactWindowBounds({ keepCenter: false })
+    const target = base
+      ? windowFromBase({ ...base, ...overlayDimensionsFor(settings()) })
+      : compactWindowBounds({ keepCenter: false })
     applyZOrder()
     window.showInactive()
     animateTo(target)
@@ -346,17 +350,18 @@ export function createOverlayGeometry({
       return 0
     },
 
-    showScene,
+    showScene: () => showScene(),
 
     // Moves the Overlay to the current settings' Compact geometry, leaving Full screen first when
     // it is on. Unlike `showScene`, a Scene or position applied in Full screen lands in Compact mode.
     showCompact() {
       if (!alive()) return
+      // A Scene without a position keeps the place the Overlay had before Full screen, also
+      // while the exit animation is still running (the saved base is cleared when it ends).
       if (!fullscreen) {
-        showScene()
+        showScene({ base: settings().position ? undefined : compactBase })
         return
       }
-      // A Scene without a position keeps the place the Overlay had before Full screen.
       if (settings().position) compactBase = undefined
       exitFullscreen()
     },

@@ -538,6 +538,20 @@ test('a Scene applied in Full screen lands with its size and shape, and without 
   assert.deepEqual(window.bounds, compact(settings(), { x: 120, y: 140 }))
 })
 
+test('a Scene without a position applied during the Full screen exit lands where the Overlay was before', () => {
+  const { geometry, window, patch, settings, clock, settle } = overlay()
+  const before = window.getBounds()
+  geometry.setFullscreen(true)
+  settle()
+  geometry.setFullscreen(false)
+  clock.advance(OVERLAY_BOUNDS_TRANSITION_MS / 3)
+  patch({ size: 200, shape: 'portrait', position: null })
+  geometry.showCompact()
+  settle()
+  assert.deepEqual(window.bounds, compact(settings(), { x: before.x, y: before.y }))
+  assert.equal(clock.activeTimers(), 0)
+})
+
 test('showCompact leaves Full screen for the new compact position', () => {
   const { geometry, window, patch, settings, settle, events } = overlay()
   geometry.setFullscreen(true)

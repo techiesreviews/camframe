@@ -150,6 +150,46 @@ test('a port that opens after the link was turned off is closed at once', async 
   assert.equal(link.state().state, 'off')
 })
 
+test('on, off and on again before the port opens reuses the same server', async () => {
+  // A second server would race the first for the port (EADDRINUSE) on Node versions that still bind it.
+  let created = 0
+  let bound = false
+  const server = new EventEmitter()
+  Object.assign(server, {
+    listen(port, host, done) {
+      if (bound) throw Object.assign(new Error('in use'), { code: 'EADDRINUSE' })
+      setImmediate(() => {
+        bound = true
+        done()
+      })
+    },
+    close() {
+      bound = false
+    },
+    address: () => ({ address: '127.0.0.1', port: 47833 }),
+  })
+  const states = []
+  const link = createPrompterLink({
+    createServer: () => {
+      created += 1
+      return server
+    },
+    status: () => ({}),
+    applyCue: () => ({ ok: true }),
+    onState: (s) => states.push(s.state),
+  })
+  link.setEnabled(true)
+  link.setEnabled(false)
+  link.setEnabled(true)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(created, 1)
+  assert.equal(bound, true)
+  assert.equal(link.state().state, 'on')
+  assert.deepEqual(states, ['starting', 'off', 'starting', 'on'])
+  link.close()
+  assert.equal(bound, false)
+})
+
 test('a busy port is reported, not thrown', async (t) => {
   const blocker = createServer()
   await new Promise((resolve) => blocker.listen(0, '127.0.0.1', resolve))

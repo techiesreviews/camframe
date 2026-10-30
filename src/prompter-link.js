@@ -114,6 +114,8 @@ export function createPrompterLink({
   onState = () => {},
 }) {
   let server
+  // The server whose listen() has not called back yet.
+  let pending
   let state = { state: 'off', port, message: '' }
 
   const setState = (next) => {
@@ -204,6 +206,11 @@ export function createPrompterLink({
   function start() {
     if (server) return
     setState({ state: 'starting' })
+    // Turned off and on again before its port opened: that server carries on.
+    if (pending) {
+      server = pending
+      return
+    }
     const next = createServer((request, response) => {
       handle(request, response).catch(() => {
         if (!response.headersSent) send(response, 500, { ok: false, error: 'CamFrame could not apply the cue.' })
@@ -214,7 +221,9 @@ export function createPrompterLink({
     next.headersTimeout = 5000
     next.keepAliveTimeout = 2000
     server = next
+    pending = next
     next.on('error', (error) => {
+      if (pending === next) pending = undefined
       if (server !== next) return
       server = undefined
       next.close()
@@ -227,8 +236,8 @@ export function createPrompterLink({
       })
     })
     next.listen(port, host, () => {
-      // Turned off before the port opened (listen resolves the host on a later tick, so stop()
-      // could not close it yet): close it now instead of leaving an unseen listener.
+      if (pending === next) pending = undefined
+      // Turned off before the port opened: close it now instead of leaving an unseen listener.
       if (server !== next) {
         next.close()
         return
@@ -240,7 +249,10 @@ export function createPrompterLink({
   function stop() {
     const current = server
     server = undefined
-    if (current) {
+    // A port that is not open yet (listen resolves the host on a later tick) is closed by its
+    // listen callback: close() now would not stop every Node version from opening it, and an
+    // "on" before then reuses it instead of racing it for the port.
+    if (current && current !== pending) {
       current.close()
       current.closeAllConnections?.()
     }

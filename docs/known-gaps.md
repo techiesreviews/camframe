@@ -101,6 +101,6 @@ During the Onboarding framing step, `Escape` turns framing mode off and keeps th
 ## KG-13 — The Prompter link lacks manual Windows and macOS evidence
 
 **Status:** Open verification gap, 2026-10-30.
-**Evidence:** Automated: unit tests (server, origins, host, cue checks, placement on several displays) and a real-Electron cue run on Linux (`docs/verification/runs/2026-10-30-prompter-link.md`). Not yet observed on Windows or macOS hardware.
+**Evidence:** Automated: unit tests (server, origins, host, cue checks, placement on several displays) and real-Electron cue runs on Linux (`docs/verification/runs/2026-10-30-prompter-link.md`, `2026-10-30-prompter-link-review.md`). Not yet observed on Windows or macOS hardware.
 
 Still to confirm by hand: Chrome's one-time Local Network Access prompt when https://prompter.techies.tools first reaches `127.0.0.1:47833`; whether the Windows Defender Firewall or macOS firewall prompts for a `127.0.0.1`-only listener (not expected); Safari reaching `http://127.0.0.1` from an https page (may be refused, so Chrome or Edge is the supported pairing); corner placement with mixed display scaling, a display left of or above the primary one, and a taskbar or Dock on the side. These are the manual rows W-30 and M-12 in `docs/verification/README.md`.

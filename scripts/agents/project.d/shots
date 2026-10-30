@@ -15,6 +15,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 Serves src/ locally and opens overlay.html in Chromium without Electron (the browser QA preview), then captures
 Inline settings on the Scenes tab: the Prompter link off, on (Face full / Face small / Corner margin) and with
 its port busy, at the default Overlay size (324x390, scrolled to the link) and a tall 324x820 view.
+Also checks that a Corner margin update leaves the open Face full choices in place.
 Fails on page errors or when a control is missing. Playwright comes from KIT_PLAYWRIGHT_MODULE, else
 "playwright" in scripts/agents/kit.json (the repo's own playwright-core after npm ci; Chromium for it comes
 from npx playwright-core install chromium). Evidence: .scratch/shots/<time>/shots.json and *.png.`)
@@ -85,6 +86,29 @@ try {
       }))
       if (mode === 'off' && !state.optionsHidden) fail('options show while the link is off')
       if (mode !== 'off' && state.optionsHidden) fail('options stay hidden while the link is on')
+      if (mode === 'on') {
+        // A state update that changes only the Corner margin keeps the Face full choices as they
+        // are (rebuilding them would close an open dropdown).
+        const kept = await page.evaluate(() => {
+          const select = document.querySelector('#overlay-prompter-full')
+          select.focus()
+          const first = select.options[0]
+          const value = select.value
+          const margin = document.querySelector('#overlay-prompter-margin')
+          margin.value = String(Number(margin.value) + 8)
+          margin.dispatchEvent(new Event('input', { bubbles: true }))
+          return {
+            sameOption: first.isConnected && select.options[0] === first,
+            sameValue: select.value === value,
+            focused: document.activeElement === select,
+            margin: document.querySelector('#overlay-prompter-margin-output')?.textContent ?? '',
+          }
+        })
+        if (!kept.sameOption || !kept.sameValue || !kept.focused) {
+          fail(`a Corner margin update rebuilt the Face full choices (${JSON.stringify(kept)})`)
+        }
+        state.marginUpdateKeptChoices = kept
+      }
       const file = `prompter-link-${mode}-${view.name}.png`
       await page.screenshot({ path: join(out, file) })
       shots.push({ file, view, mode, ...state })
