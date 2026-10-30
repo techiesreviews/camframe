@@ -97,3 +97,10 @@ The renderer sends `overlay:interactive` only when its derived interactivity cha
 **Evidence:** Automated real-Electron trace (`docs/verification/runs/2026-10-11-deep-modules-electron-44-7.md`) on the baseline and refactored source.
 
 During the Onboarding framing step, `Escape` turns framing mode off and keeps the tour open (ADR 0021), but unlike clicking Crosshair it does not hand the demo over. The demo keeps panning and zooming the camera with framing mode off until the user changes steps or closes the tour, which restores the framing from before the demo. The fix is one call (`takeOver('framing')` in the tour's `escape()`), but it changes what Escape keeps, so it needs product confirmation.
+
+## KG-13 — The Prompter link lacks manual Windows and macOS evidence
+
+**Status:** Open verification gap, 2026-10-30.
+**Evidence:** Automated: unit tests (server, origins, host, cue checks, placement on several displays) and a real-Electron cue run on Linux (`docs/verification/runs/2026-10-30-prompter-link.md`). Not yet observed on Windows or macOS hardware.
+
+Still to confirm by hand: Chrome's one-time Local Network Access prompt when https://prompter.techies.tools first reaches `127.0.0.1:47833`; whether the Windows Defender Firewall or macOS firewall prompts for a `127.0.0.1`-only listener (not expected); Safari reaching `http://127.0.0.1` from an https page (may be refused, so Chrome or Edge is the supported pairing); corner placement with mixed display scaling, a display left of or above the primary one, and a taskbar or Dock on the side.

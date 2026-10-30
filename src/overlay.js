@@ -1,6 +1,6 @@
 import { DEFAULT_CAMERA_LABEL, createCameraSession } from './camera-session.js'
 import { createOverlayInteraction } from './overlay-interaction.js'
-import { DEFAULT_SETTINGS, SHAPES, dimensionsFor } from './settings.js'
+import { COMPACT_SPOTS, DEFAULT_SETTINGS, SHAPES, dimensionsFor } from './settings.js'
 import {
   cameraFramingStyles,
   cameraPositionAfterDrag,
@@ -50,6 +50,13 @@ const frameOutput = document.querySelector('#overlay-frame-output')
 const mirrorToggle = document.querySelector('#overlay-mirror-toggle')
 const topToggle = document.querySelector('#overlay-top-toggle')
 const launchToggle = document.querySelector('#overlay-launch-toggle')
+const prompterToggle = document.querySelector('#overlay-prompter-toggle')
+const prompterStatus = document.querySelector('#overlay-prompter-status')
+const prompterOptions = document.querySelector('#overlay-prompter-options')
+const prompterFull = document.querySelector('#overlay-prompter-full')
+const prompterSmall = document.querySelector('#overlay-prompter-small')
+const prompterMargin = document.querySelector('#overlay-prompter-margin')
+const prompterMarginOutput = document.querySelector('#overlay-prompter-margin-output')
 const presentationToast = document.querySelector('#presentation-toast')
 const fullscreenButton = document.querySelector('#fullscreen-button')
 const shapeButton = document.querySelector('#shape-button')
@@ -76,10 +83,27 @@ const onboardingDemoMouse = document.querySelector('#onboarding-demo-mouse')
 const onboardingDemoWheel = document.querySelector('#onboarding-demo-wheel')
 const onboardingDemoClick = document.querySelector('#onboarding-demo-click')
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
+const SPOT_LABELS = Object.freeze({
+  'top-left': 'Top left',
+  'top-right': 'Top right',
+  'bottom-left': 'Bottom left',
+  'bottom-right': 'Bottom right',
+  left: 'Left',
+  right: 'Right',
+  center: 'Center',
+})
 const SHAPE_CYCLE = Object.freeze([...SHAPES])
 const onboardingMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
 const forcedColorsQuery = window.matchMedia('(forced-colors: active)')
 const increasedContrastQuery = window.matchMedia('(prefers-contrast: more)')
+// The QA preview has no main process: the Prompter link shows on, or `?prompter=busy` its port error.
+function qaPrompterLinkStatus(patch) {
+  if (!Object.hasOwn(patch, 'prompterLink')) return {}
+  if (!patch.prompterLink) return { prompterLinkStatus: { state: 'off', port: 47833, message: '' } }
+  return qaPreviewParams.get('prompter') === 'busy'
+    ? { prompterLinkStatus: { state: 'error', port: 47833, message: 'Port 47833 is in use by another app.' } }
+    : { prompterLinkStatus: { state: 'on', port: 47833, message: '' } }
+}
 const qaBridge = isQaPreview
   ? createBridgeFake({
       platform: navigator.userAgent.includes('Mac') ? 'darwin' : 'win32',
@@ -91,7 +115,7 @@ const qaBridge = isQaPreview
           completedOnboardingVersion:
             qaPreviewParams.get('state') === 'onboarding' ? 0 : CURRENT_ONBOARDING_VERSION,
         }),
-        updateState: (patch) => applyState({ ...state, ...patch }),
+        updateState: (patch) => applyState({ ...state, ...patch, ...qaPrompterLinkStatus(patch) }),
         exportPresets: async () => ({ canceled: false, count: 0 }),
         importPresets: async () => ({ canceled: false, count: 0 }),
         setOverlayOnboardingOpen: (open) => (open ? ONBOARDING_TOP_RESERVE : 0),
@@ -503,6 +527,37 @@ function renderPresets() {
   }
 }
 
+// The Prompter link: on/off, what it is doing, and what "Face full" and a bare "Face small" do.
+// A choice naming a deleted Scene shows the default, which is also what a cue then does.
+function prompterStatusText(status = { state: 'off' }) {
+  if (status.state === 'on') return `On. Listening for the prompter on this computer (port ${status.port}).`
+  if (status.state === 'starting') return 'Starting…'
+  if (status.state === 'error') return `${status.message} Turn the link off and on to try again.`
+  return 'Off. When on, the prompter can switch this view at [Face …] cue lines.'
+}
+
+function fillChoices(select, options, value, fallback) {
+  select.replaceChildren(...options.map(([optionValue, label]) => new Option(label, optionValue)))
+  select.value = options.some(([optionValue]) => optionValue === value) ? value : fallback
+}
+
+function renderPrompterLink() {
+  const status = state.prompterLinkStatus ?? { state: 'off' }
+  prompterToggle.checked = state.prompterLink
+  prompterStatus.dataset.state = state.prompterLink ? status.state : 'off'
+  prompterStatus.textContent = prompterStatusText(state.prompterLink ? status : undefined)
+  prompterOptions.hidden = !state.prompterLink
+  const scenes = state.presets.map((preset) => [`scene:${preset.id}`, `Scene: ${preset.name}`])
+  fillChoices(prompterFull, [['fullscreen', 'Full screen'], ...scenes], state.prompterFaceFull, 'fullscreen')
+  fillChoices(
+    prompterSmall,
+    [['previous', 'Where it was'], ...COMPACT_SPOTS.map((spot) => [spot, SPOT_LABELS[spot]]), ...scenes],
+    state.prompterFaceSmall,
+    'previous',
+  )
+  prompterMargin.value = String(state.prompterMargin)
+  prompterMarginOutput.textContent = `${state.prompterMargin} px`
+}
 
 function applyState(nextState) {
   state = nextState
@@ -549,6 +604,7 @@ function applyState(nextState) {
   topToggle.checked = state.alwaysOnTop
   launchToggle.checked = state.launchAtLogin
   renderPresets()
+  renderPrompterLink()
   if (state.cameraId && [...cameraSelect.options].some((option) => option.value === state.cameraId)) {
     cameraSelect.value = state.cameraId
   }
@@ -899,6 +955,23 @@ mirrorToggle.addEventListener('change', () => {
 
 topToggle.addEventListener('change', () => {
   camFrame.updateState({ alwaysOnTop: topToggle.checked })
+})
+
+prompterToggle.addEventListener('change', () => {
+  camFrame.updateState({ prompterLink: prompterToggle.checked })
+})
+
+prompterFull.addEventListener('change', () => {
+  camFrame.updateState({ prompterFaceFull: prompterFull.value })
+})
+
+prompterSmall.addEventListener('change', () => {
+  camFrame.updateState({ prompterFaceSmall: prompterSmall.value })
+})
+
+prompterMargin.addEventListener('input', () => {
+  prompterMarginOutput.textContent = `${prompterMargin.value} px`
+  camFrame.updateState({ prompterMargin: Number(prompterMargin.value) })
 })
 
 launchToggle.addEventListener('change', () => {

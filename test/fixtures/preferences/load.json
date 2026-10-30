@@ -5,7 +5,7 @@
     {
       "name": "missing file starts a new installation",
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -30,6 +30,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -37,7 +41,7 @@
       "name": "invalid JSON starts a new installation",
       "documentText": "{\"size\": 320,",
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -62,6 +66,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -69,7 +77,7 @@
       "name": "null document starts a new installation",
       "document": null,
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -94,6 +102,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -101,7 +113,7 @@
       "name": "non-object document starts a new installation",
       "document": 5,
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -126,6 +138,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -137,7 +153,7 @@
         "shape": "rounded"
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "rounded",
@@ -162,6 +178,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 1,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -172,7 +192,7 @@
         "completedOnboardingVersion": 0
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -197,6 +217,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -209,7 +233,7 @@
         "shape": "landscape"
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "landscape",
@@ -234,6 +258,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 1,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -244,7 +272,7 @@
         "borderWidth": 8
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -269,6 +297,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 1,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -285,7 +317,7 @@
         }
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -313,6 +345,10 @@
           "x": 40,
           "y": 60
         },
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     }

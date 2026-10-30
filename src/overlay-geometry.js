@@ -1,5 +1,5 @@
 import { ONBOARDING_TOP_RESERVE } from './onboarding.js'
-import { dimensionsFor, overlayDimensionsFor } from './settings.js'
+import { COMPACT_SPOTS, OVERLAY_CHROME, dimensionsFor, overlayDimensionsFor } from './settings.js'
 
 export const OVERLAY_BOUNDS_TRANSITION_MS = 280
 const POINTER_POLL_MS = 16
@@ -77,6 +77,42 @@ export function compactBaseBounds({ settings, current, workArea, keepCenter = tr
     x: Math.round(current.x + (current.width - size.width) / 2),
     y: Math.round(current.y + (current.height - size.height) / 2),
     ...size,
+  }
+}
+
+// The Compact window position that puts the camera surface at `spot` in `workArea`, `margin` px
+// from the edges it touches. The whole window (with its transparent chrome) stays inside the work
+// area so the hover toolbar is always reachable; at the top spots that keeps the camera a little
+// lower than the margin. `size` is the Compact window size (`overlayDimensionsFor`).
+export function compactPositionAt(spot, { workArea, size, margin }) {
+  if (!COMPACT_SPOTS.includes(spot)) return undefined
+  const camera = {
+    width: size.width - OVERLAY_CHROME.left - OVERLAY_CHROME.right,
+    height: size.height - OVERLAY_CHROME.top - OVERLAY_CHROME.bottom,
+  }
+  const horizontal = spot.endsWith('left') ? 'start' : spot.endsWith('right') ? 'end' : 'middle'
+  const vertical = spot.startsWith('top') ? 'start' : spot.startsWith('bottom') ? 'end' : 'middle'
+  const along = (alignment, start, length, cameraLength) =>
+    alignment === 'start'
+      ? start + margin
+      : alignment === 'end'
+        ? start + length - margin - cameraLength
+        : start + (length - cameraLength) / 2
+  const keepInside = (value, start, length, windowLength) =>
+    Math.round(Math.max(start, Math.min(value, start + length - windowLength)))
+  return {
+    x: keepInside(
+      along(horizontal, workArea.x, workArea.width, camera.width) - OVERLAY_CHROME.left,
+      workArea.x,
+      workArea.width,
+      size.width,
+    ),
+    y: keepInside(
+      along(vertical, workArea.y, workArea.height, camera.height) - OVERLAY_CHROME.top,
+      workArea.y,
+      workArea.height,
+      size.height,
+    ),
   }
 }
 
@@ -251,6 +287,19 @@ export function createOverlayGeometry({
     })
   }
 
+  // Moves a Compact Overlay to the current settings' Scene geometry, animated when visible.
+  function showScene() {
+    if (!alive()) return
+    if (fullscreen || !settings().overlayVisible) {
+      apply({ keepCenter: false })
+      return
+    }
+    const target = compactWindowBounds({ keepCenter: false })
+    applyZOrder()
+    window.showInactive()
+    animateTo(target)
+  }
+
   applyZOrder()
   window.setIgnoreMouseEvents(true, { forward: true })
 
@@ -293,17 +342,24 @@ export function createOverlayGeometry({
       return 0
     },
 
-    // Moves a Compact Overlay to the current settings' Scene geometry, animated when visible.
-    showScene() {
+    showScene,
+
+    // Moves the Overlay to the current settings' Compact geometry, leaving Full screen first when
+    // it is on. Unlike `showScene`, a Scene or position applied in Full screen lands in Compact mode.
+    showCompact() {
       if (!alive()) return
-      if (fullscreen || !settings().overlayVisible) {
-        apply({ keepCenter: false })
+      if (!fullscreen) {
+        showScene()
         return
       }
-      const target = compactWindowBounds({ keepCenter: false })
-      applyZOrder()
-      window.showInactive()
-      animateTo(target)
+      compactBase = undefined
+      exitFullscreen()
+    },
+
+    // The work area of the display the Overlay is on now (the Full screen display in Full screen).
+    currentWorkArea() {
+      const display = screen.getDisplayMatching(window.getBounds())
+      return { ...(display.workArea ?? display.bounds) }
     },
 
     // Live Compact bounds without the reserve, or undefined in Full screen.

@@ -31,6 +31,7 @@ global shortcuts / tray
 | `src/preload.cjs` | Sandboxed `window.camFrame` adapter. It cannot import `bridge.js`, so `test/bridge.test.js` checks it against the contract | Loaded by the Overlay BrowserWindow |
 | `src/overlay-geometry.js` | Overlay window geometry: Compact placement, Full screen, the onboarding reserve, drag/resize polling, bounds animation with reduced motion, z-order, mouse pass-through | Main; injected `window`, `screen`, `timers` |
 | `src/scenes.js` | Scene library: save, apply, numbered apply, cycle, delete, reorder, import parsing/merge, export, the Scene limit, the active Scene, notices | Main |
+| `src/prompter-link.js` | The opt-in Prompter link: the `127.0.0.1:47833` HTTP server's lifecycle and state, origin/host/body checks, cue parsing, and what a cue does (`cueAction`) | Main; injected `createServer` |
 | `src/settings.js` | Preferences schema, sanitization, loading/migration (`preferencesFromDocument`), Scene snapshots, camera/window dimensions | Main, Scene library, geometry, Overlay, tests |
 | `src/overlay.js` | DOM rendering and event wiring for the Overlay, Inline settings, Scene UI, and the onboarding view | `overlay.html` |
 | `src/overlay-interaction.js` | Whether the chrome shows and whether the window is interactive; compact and Full screen hide delays; the toolbar hotspot | Overlay |
@@ -56,6 +57,7 @@ The active Scene (`activeSceneId` in main, `activePresetId` on the wire) is runt
 
 ### Main-process transient state
 
+- The Prompter link server and its status (`prompterLinkStatus`: off, starting, on, or error with a message). Main sends the status with every state update as a runtime-only field, like the active Scene.
 - Overlay/Tray object references and the Preferences write timer in `main.js`.
 - Inside Overlay window geometry: the mouse interactivity flag, drag/resize timers and start snapshots, the Full screen flag, remembered compact bounds (without the reserve), the bounds animation, the reduced-motion flag, and the onboarding reserve flag.
 
@@ -150,6 +152,10 @@ Main and Overlay coordinate, but neither uses Electron native fullscreen:
 ## Scene flow
 
 Scene writes and imports run in main so file dialogs and Preferences remain privileged. Renderers only send IDs/names or invoke import/export. The Scene library computes each result (next Preferences, active Scene, notice); main only performs file I/O, applies Scene geometry, emits, and persists. Applying a visible compact Scene emits visual state before transitioning native bounds, allowing CSS surface geometry and BrowserWindow movement to change together; both complete immediately under reduced motion.
+
+## Prompter link flow
+
+`settings.prompterLink` starts the link at launch and every `updateState` patch that contains it turns the server on or off; `before-quit` closes it. A cue request passes the host, origin, method, content-type, size, and `parseCue()` checks inside `prompter-link.js`, then main's `applyPrompterCue()` asks `cueAction()` what to do and applies it with the existing paths: `setFullscreen(true/false)`, the Scene library's `applyScene()` committed with `showCompact()` (leaves Full screen), or a position from `compactPositionAt()` on `currentWorkArea()` committed like an ordinary settings patch and moved with `showCompact()`. Every change still goes through `emitState()`, the tray refresh, and `saveSettings()`.
 
 ## Packaging and release flow
 

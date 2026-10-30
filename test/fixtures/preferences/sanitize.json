@@ -6,7 +6,7 @@
       "name": "empty document yields defaults",
       "input": {},
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -31,6 +31,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -53,7 +57,7 @@
         }
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -81,6 +85,10 @@
           "x": 12,
           "y": 34
         },
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -96,7 +104,7 @@
         "blurOpacity": 55
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -121,6 +129,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -136,7 +148,7 @@
         "blurOpacity": 0
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -161,6 +173,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -175,7 +191,7 @@
         }
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -200,6 +216,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -212,7 +232,7 @@
         }
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -237,6 +257,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -247,7 +271,7 @@
         "cameraLabel": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL"
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
         "cameraLabel": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
         "shape": "circle",
@@ -272,6 +296,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -286,7 +314,7 @@
         "cameraLabel": false
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -311,6 +339,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -324,7 +356,7 @@
         }
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -349,6 +381,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -358,7 +394,7 @@
         "completedOnboardingVersion": 99
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -383,6 +419,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 1,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -392,7 +432,7 @@
         "completedOnboardingVersion": -3
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -417,6 +457,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": []
       }
     },
@@ -497,7 +541,7 @@
         ]
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -522,6 +566,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": [
           {
             "id": "preset-0",
@@ -648,7 +696,7 @@
         ]
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -673,6 +721,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": [
           {
             "id": "b",
@@ -715,7 +767,7 @@
         ]
       },
       "expected": {
-        "schemaVersion": 12,
+        "schemaVersion": 13,
         "cameraId": "",
         "cameraLabel": "Default camera",
         "shape": "circle",
@@ -740,6 +792,10 @@
         "launchAtLogin": false,
         "completedOnboardingVersion": 0,
         "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 32,
         "presets": [
           {
             "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
@@ -768,6 +824,88 @@
             }
           }
         ]
+      }
+    },
+    {
+      "name": "Prompter link choices keep known values and clamp the margin",
+      "input": {
+        "prompterLink": true,
+        "prompterFaceFull": "scene:preset-abc",
+        "prompterFaceSmall": "bottom-right",
+        "prompterMargin": 500.4
+      },
+      "expected": {
+        "schemaVersion": 13,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 0,
+        "position": null,
+        "prompterLink": true,
+        "prompterFaceFull": "scene:preset-abc",
+        "prompterFaceSmall": "bottom-right",
+        "prompterMargin": 160,
+        "presets": []
+      }
+    },
+    {
+      "name": "Prompter link drops unknown choices and non-boolean switches",
+      "input": {
+        "prompterLink": "yes",
+        "prompterFaceFull": "bottom-right",
+        "prompterFaceSmall": "middle",
+        "prompterMargin": -3
+      },
+      "expected": {
+        "schemaVersion": 13,
+        "cameraId": "",
+        "cameraLabel": "Default camera",
+        "shape": "circle",
+        "size": 288,
+        "overlayResolution": "720p",
+        "frameEffect": "none",
+        "effectColor": "#fb923c",
+        "glowStrength": 90,
+        "glowSpread": 13,
+        "blurAmount": 12,
+        "blurOpacity": 72,
+        "borderWidth": 0,
+        "borderColor": "#ffffff",
+        "mirror": true,
+        "cameraZoom": 100,
+        "cameraPosition": {
+          "x": 50,
+          "y": 50
+        },
+        "alwaysOnTop": true,
+        "overlayVisible": true,
+        "launchAtLogin": false,
+        "completedOnboardingVersion": 0,
+        "position": null,
+        "prompterLink": false,
+        "prompterFaceFull": "fullscreen",
+        "prompterFaceSmall": "previous",
+        "prompterMargin": 0,
+        "presets": []
       }
     }
   ]

@@ -693,6 +693,47 @@ video {
   font: inherit;
 }
 
+.inline-prompter {
+  display: grid;
+  gap: 6px;
+  padding-top: 2px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.prompter-status {
+  margin: 0;
+  color: #a1a1aa;
+  font: 500 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.prompter-status::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #52525b;
+  content: '';
+  vertical-align: 1px;
+}
+
+.prompter-status[data-state='on']::before {
+  background: #22c55e;
+}
+
+.prompter-status[data-state='error']::before {
+  background: #f97316;
+}
+
+.inline-prompter-options {
+  display: grid;
+  gap: 8px;
+}
+
+.inline-prompter-options[hidden] {
+  display: none;
+}
+
 .inline-toggle-list {
   border-top: 1px solid rgb(255 255 255 / 8%);
   border-bottom: 1px solid rgb(255 255 255 / 8%);
@@ -1115,6 +1156,7 @@ video {
   .inline-resolution-grid span,
   .scene-manager,
   .scene-message,
+  .prompter-status,
   .shortcut-list,
   .onboarding-kicker,
   .onboarding-copy h2,
@@ -1128,6 +1170,7 @@ video {
 .overlay[data-high-contrast='true'] :is(
   .settings-tabs,
   .inline-presentation,
+  .inline-prompter,
   .inline-toggle-list,
   .inline-toggle + .inline-toggle,
   .onboarding-copy .onboarding-note

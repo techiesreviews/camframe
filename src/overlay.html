@@ -92,6 +92,31 @@
             <div><span>Scene 1–6</span><kbd>Ctrl/Cmd Shift 1–6</kbd></div>
           </div>
         </div>
+        <div class="inline-prompter" data-settings-panel="presets">
+          <label class="inline-toggle" for="overlay-prompter-toggle">
+            <span>Prompter link</span>
+            <input id="overlay-prompter-toggle" name="prompter-link" type="checkbox" aria-describedby="overlay-prompter-status" />
+          </label>
+          <p class="prompter-status" id="overlay-prompter-status" data-state="off" aria-live="polite">Off. When on, the prompter can switch this view at [Face …] cue lines.</p>
+          <div class="inline-prompter-options" id="overlay-prompter-options" hidden>
+            <div class="inline-setting">
+              <label for="overlay-prompter-full">Face full</label>
+              <select id="overlay-prompter-full" name="prompter-face-full">
+                <option value="fullscreen">Full screen</option>
+              </select>
+            </div>
+            <div class="inline-setting">
+              <label for="overlay-prompter-small">Face small</label>
+              <select id="overlay-prompter-small" name="prompter-face-small">
+                <option value="previous">Where it was</option>
+              </select>
+            </div>
+            <div class="inline-setting inline-range">
+              <div><label for="overlay-prompter-margin">Corner margin</label><output id="overlay-prompter-margin-output">32 px</output></div>
+              <input id="overlay-prompter-margin" name="prompter-margin" type="range" min="0" max="160" step="4" value="32" />
+            </div>
+          </div>
+        </div>
         <div class="inline-setting" data-settings-panel="appearance">
           <label for="overlay-effect-select">Frame effect</label>
           <select id="overlay-effect-select" name="frame-effect">

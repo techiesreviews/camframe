@@ -11,9 +11,9 @@ import {
 
 // Sanitizing and loading rules are covered by the shared fixtures in preferences-contract.test.js.
 
-test('Preferences use schema 12', () => {
-  assert.equal(DEFAULT_SETTINGS.schemaVersion, 12)
-  assert.equal(sanitizeSettings({ schemaVersion: 3 }).schemaVersion, 12)
+test('Preferences use schema 13', () => {
+  assert.equal(DEFAULT_SETTINGS.schemaVersion, 13)
+  assert.equal(sanitizeSettings({ schemaVersion: 3 }).schemaVersion, 13)
 })
 
 test('only shape, size, and position changes move the native Overlay', () => {

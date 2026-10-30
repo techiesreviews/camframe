@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { _electron as electron } from 'playwright-core'
@@ -120,6 +121,99 @@ test('real Electron exercises the Overlay, IPC, camera profile, and accessibilit
     assert.equal(persistedState.completedOnboardingVersion, 1)
     assert.equal(persistedState.overlayResolution, '1080p')
     assert.deepEqual(errors, [])
+  } finally {
+    await application?.close().catch(() => {})
+    const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`
+    if (resolve(userDataDirectory).startsWith(expectedPrefix)) {
+      await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+    }
+  }
+})
+
+function prompterCall(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      {
+        host: '127.0.0.1',
+        port: 47833,
+        method,
+        path,
+        agent: false,
+        headers: { Origin: 'https://prompter.techies.tools', 'Content-Type': 'application/json' },
+      },
+      (response) => {
+        let text = ''
+        response.on('data', (chunk) => {
+          text += chunk
+        })
+        response.on('end', () => resolve({ status: response.statusCode, body: JSON.parse(text) }))
+      },
+    )
+    request.on('error', reject)
+    if (body) request.write(JSON.stringify(body))
+    request.end()
+  })
+}
+
+test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', async () => {
+  await mkdir(artifactDirectory, { recursive: true })
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
+  await writeFile(
+    join(userDataDirectory, 'preferences.json'),
+    JSON.stringify({
+      schemaVersion: 13,
+      completedOnboardingVersion: 1,
+      prompterLink: true,
+      prompterMargin: 40,
+      position: { x: 200, y: 200 },
+      presets: [
+        { id: 'preset-demo', name: 'Demo', settings: { size: 240, shape: 'rounded', position: { x: 120, y: 140 } } },
+      ],
+    }),
+  )
+  let application
+
+  try {
+    application = await launchCamFrame(userDataDirectory)
+    const page = await application.firstWindow()
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    await page.waitForFunction(() => window.camFrame && true)
+
+    const status = await prompterCall('GET', '/camframe/status')
+    assert.equal(status.status, 200)
+    assert.deepEqual(status.body.scenes, ['Demo'])
+
+    const display = await application.evaluate(({ BrowserWindow, screen }) => {
+      const overlay = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')
+      return screen.getDisplayMatching(overlay.getBounds())
+    })
+
+    assert.equal((await prompterCall('POST', '/camframe/cue', { size: 'full' })).status, 200)
+    await page.waitForFunction(() => document.querySelector('#overlay')?.dataset.fullscreen === 'true')
+    await page.waitForTimeout(400)
+    assert.deepEqual(await overlayBounds(application), display.bounds)
+
+    assert.equal((await prompterCall('POST', '/camframe/cue', { size: 'small', position: 'bottom-right' })).status, 200)
+    await page.waitForFunction(() => document.querySelector('#overlay')?.dataset.fullscreen === 'false')
+    await page.waitForTimeout(400)
+    const corner = await overlayBounds(application)
+    const workArea = display.workArea
+    assert.equal(corner.x + corner.width - 18, workArea.x + workArea.width - 40)
+    assert.equal(corner.y + corner.height - 18, workArea.y + workArea.height - 40)
+    await captureOverlay(application, '04-prompter-bottom-right.png')
+
+    const scene = await prompterCall('POST', '/camframe/cue', { scene: 'demo' })
+    assert.equal(scene.status, 200)
+    await page.waitForTimeout(400)
+    const sceneBounds = await overlayBounds(application)
+    assert.deepEqual({ x: sceneBounds.x, y: sceneBounds.y, width: sceneBounds.width }, { x: 120, y: 140, width: 240 + 36 })
+
+    const missing = await prompterCall('POST', '/camframe/cue', { scene: 'Outro' })
+    assert.equal(missing.status, 404)
+
+    await page.evaluate(() => window.camFrame.updateState({ prompterLink: false }))
+    await page.waitForTimeout(200)
+    await assert.rejects(prompterCall('GET', '/camframe/status'), /ECONNREFUSED/)
   } finally {
     await application?.close().catch(() => {})
     const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`

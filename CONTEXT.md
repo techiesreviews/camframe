@@ -19,6 +19,7 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 - **Active Scene**: the Scene most recently saved or applied, shown in Inline settings and the tray. Runtime only (`activePresetId` on the wire); any ordinary settings change clears it.
 - **Onboarding reserve**: the temporary 220 px of transparent window added above the compact Overlay while Onboarding is open. It is never persisted. **Compact bounds** are the Overlay window bounds without it.
 - **Chrome**: the toolbar, selection corners, and resize handles shown while the pointer is over the Overlay. The Overlay is **interactive** (accepts the mouse) while the chrome shows or an activity such as Inline settings, Onboarding, framing, resizing, or dragging holds it.
+- **Prompter link**: the opt-in, view-only HTTP endpoint on `127.0.0.1:47833` through which the Techies prompter switches Full screen, Compact position, or a Scene at camera cue lines (ADR 0031). Off by default.
 - **Demo hand-over**: the moment the user reaches for the control an Onboarding demo is showing. The demo stops and the user keeps the shape or framing it left.
 
 Retired term: **Compositor mask** (native window regions). The unapplied helpers were removed by ADR 0029.
@@ -31,6 +32,7 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/overlay.*`: Overlay markup, styles, DOM rendering, and event wiring.
 - `src/preload.cjs`: the sandboxed `window.camFrame` adapter for the bridge contract.
 - `src/bridge.js`: the bridge contract between main and the Overlay: channels, transports, argument checks, main registration, and the browser QA fake.
+- `src/prompter-link.js`: the Prompter link server, its origin/host/cue checks, and what a cue does.
 - `src/settings.js`: the Preferences schema, sanitizing, loading (`preferencesFromDocument`), and camera/window dimensions.
 - `src/scenes.js`: the Scene library: save, apply, cycle, delete, reorder, import, export, and the active Scene.
 - `src/overlay-geometry.js`: Overlay window geometry in main: Compact placement, Full screen, the onboarding reserve, drag/resize, bounds animation, z-order, and mouse pass-through.

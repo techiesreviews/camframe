@@ -31,6 +31,7 @@ ADRs explain what CamFrame has committed to. They are not experiment diaries. Pu
 - [`0028-prefer-smooth-camera-modes-without-frame-rate-limits.md`](0028-prefer-smooth-camera-modes-without-frame-rate-limits.md)
 - [`0029-remove-the-unapplied-compositor-mask.md`](0029-remove-the-unapplied-compositor-mask.md)
 - [`0030-deep-modules-behind-injected-adapters.md`](0030-deep-modules-behind-injected-adapters.md)
+- [`0031-add-an-opt-in-local-prompter-link.md`](0031-add-an-opt-in-local-prompter-link.md)
 - [`0013-establish-overlay-accessibility-contract.md`](0013-establish-overlay-accessibility-contract.md)
 - [`0014-add-scoped-custom-frame-effects.md`](0014-add-scoped-custom-frame-effects.md)
 - [`0015-sign-releases-before-enabling-updates.md`](0015-sign-releases-before-enabling-updates.md)

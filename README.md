@@ -18,6 +18,39 @@ For an implementation-level product specification, architecture map, data contra
 - Tray controls and `Ctrl+Shift+C` to reveal the inline controls.
 - Four contextual first-run coach marks that reveal camera, placement, framing, and Scene controls, reopenable from tray Help.
 - Remembers the selected camera, crop position, appearance, and screen position.
+- Optional Prompter link: the Techies prompter can switch CamFrame to full screen, to the small view in a corner, or to a saved Scene when you reach a cue line in your script. Off until you turn it on.
+
+## Prompter link (optional)
+
+CamFrame can follow the camera cues in your prompter script, so you don't have to press shortcuts while you talk.
+
+**Turn it on**
+
+1. In CamFrame, hover over the camera, open the controls (the sliders button), choose **Scenes**, and switch on **Prompter link**. The line under it should say "On. Listening for the prompter on this computer".
+2. In the prompter (https://prompter.techies.tools), open **Settings** and tick **CamFrame link**. It should say "Connected to CamFrame" and list your Scenes.
+3. The first time, Chrome may ask whether the prompter may reach apps on this device. Allow it.
+
+Turn either switch off to stop. With the link off, CamFrame listens for nothing.
+
+**Cue cheat-sheet** (write these as reminder lines in your script, in square brackets; capitals don't matter)
+
+| In your script | CamFrame does |
+| --- | --- |
+| `[Face full]` | Full screen (or the Scene you chose for "Face full") |
+| `[Face small]` | Back to the small camera where it was (or the place or Scene you chose for "Face small") |
+| `[Face small, bottom right]` | Small camera in that corner of the screen it is on. Places: top left, top right, bottom left, bottom right, left, right, center |
+| `[Face: Demo]` | Your saved Scene called "Demo" (its size, place and look) |
+
+You can put a cue after other words, like `[Share screen. Face small.]` or `[Stop share. Face full.]`. The cue fires once when that line reaches the prompter's reading line, and again if you scroll back above it and read it again.
+
+**Settings** (under the Prompter link switch): **Face full** (Full screen or a Scene), **Face small** (Where it was, one of the seven places, or a Scene) and **Corner margin** (how far the camera stays from the screen edges, 32 px by default). At the top places the camera sits a little lower, so its toolbar stays on screen.
+
+**Good to know**
+
+- The link only moves and resizes CamFrame's own camera view. It never records, streams or changes your camera.
+- It works only on this computer: CamFrame listens on `127.0.0.1` port 47833 and answers only the prompter. Your script never leaves the prompter; only the short cue does.
+- Use Chrome or Edge for the prompter. Safari may refuse to reach apps on this computer.
+- If the settings say the port is in use, another app took port 47833. Close it, then switch the link off and on.
 
 ## Run locally
 

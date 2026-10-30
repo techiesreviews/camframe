@@ -1,11 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ONBOARDING_TOP_RESERVE } from '../src/onboarding.js'
-import { DEFAULT_SETTINGS, overlayDimensionsFor, sanitizeSettings } from '../src/settings.js'
+import {
+  COMPACT_SPOTS,
+  DEFAULT_SETTINGS,
+  OVERLAY_CHROME,
+  overlayDimensionsFor,
+  sanitizeSettings,
+} from '../src/settings.js'
 import {
   OVERLAY_BOUNDS_TRANSITION_MS,
   alwaysOnTopLevelFor,
   compactBaseBounds,
+  compactPositionAt,
   createOverlayGeometry,
   isFullscreenExitInput,
 } from '../src/overlay-geometry.js'
@@ -424,4 +431,86 @@ test('a destroyed window ignores every intent', () => {
   assert.equal(geometry.isFullscreen(), false)
   assert.equal(geometry.setOnboardingReserve(true), 0)
   assert.equal(geometry.compactBounds(), undefined)
+})
+
+test('Prompter link spots put the camera surface a margin from the work area edges', () => {
+  const settings = sanitizeSettings({ size: 300 })
+  const size = overlayDimensionsFor(settings)
+  const margin = 40
+  const camera = (spot, workArea) => {
+    const { x, y } = compactPositionAt(spot, { workArea, size, margin })
+    return { left: x + OVERLAY_CHROME.left, top: y + OVERLAY_CHROME.top, right: x + size.width - OVERLAY_CHROME.right, bottom: y + size.height - OVERLAY_CHROME.bottom, window: { x, y } }
+  }
+
+  const bottomRight = camera('bottom-right', WORK_AREA)
+  assert.equal(bottomRight.right, WORK_AREA.width - margin)
+  assert.equal(bottomRight.bottom, WORK_AREA.height - margin)
+  const bottomLeft = camera('bottom-left', WORK_AREA)
+  assert.equal(bottomLeft.left, margin)
+  assert.equal(bottomLeft.bottom, WORK_AREA.height - margin)
+  const left = camera('left', WORK_AREA)
+  assert.equal(left.left, margin)
+  assert.equal(left.top + 150, WORK_AREA.height / 2)
+  const right = camera('right', WORK_AREA)
+  assert.equal(right.right, WORK_AREA.width - margin)
+  const center = camera('center', WORK_AREA)
+  assert.equal(center.left + 150, WORK_AREA.width / 2)
+  assert.equal(center.top + 150, WORK_AREA.height / 2)
+
+  // The hover toolbar above the camera stays on screen: a top spot never puts the window above the work area.
+  const topLeft = camera('top-left', WORK_AREA)
+  assert.equal(topLeft.left, margin)
+  assert.equal(topLeft.window.y, WORK_AREA.y)
+  assert.equal(topLeft.top, OVERLAY_CHROME.top)
+  const topRight = camera('top-right', { ...WORK_AREA, y: 0 })
+  assert.equal(topRight.right, WORK_AREA.width - margin)
+  assert.equal(compactPositionAt('middle', { workArea: WORK_AREA, size, margin }), undefined)
+  assert.deepEqual(COMPACT_SPOTS, ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'left', 'right', 'center'])
+})
+
+test('Prompter link spots use the given display, also left of or above the primary one', () => {
+  const settings = sanitizeSettings({ size: 240, shape: 'landscape' })
+  const size = overlayDimensionsFor(settings)
+  const leftOfPrimary = { x: -2560, y: -200, width: 2560, height: 1400 }
+  const abovePrimary = { x: 300, y: -1080, width: 1920, height: 1040 }
+
+  const bottomRight = compactPositionAt('bottom-right', { workArea: leftOfPrimary, size, margin: 24 })
+  assert.equal(bottomRight.x + size.width - OVERLAY_CHROME.right, -24)
+  assert.equal(bottomRight.y + size.height - OVERLAY_CHROME.bottom, -200 + 1400 - 24)
+  const topLeft = compactPositionAt('top-left', { workArea: leftOfPrimary, size, margin: 120 })
+  assert.deepEqual(topLeft, { x: -2560 + 120 - OVERLAY_CHROME.left, y: -200 + 120 - OVERLAY_CHROME.top })
+  const center = compactPositionAt('center', { workArea: abovePrimary, size, margin: 24 })
+  assert.ok(center.x >= 300 && center.x + size.width <= 300 + 1920)
+  assert.ok(center.y >= -1080 && center.y + size.height <= -40)
+
+  // A margin of 0 still keeps the whole window (and its transparent chrome) on that display.
+  const flush = compactPositionAt('bottom-left', { workArea: leftOfPrimary, size, margin: 0 })
+  assert.equal(flush.x, -2560)
+  assert.equal(flush.y + size.height, -200 + 1400)
+})
+
+test('the current work area is the display the Overlay is on, Full screen included', () => {
+  const secondary = { bounds: { x: 1920, y: 0, width: 2560, height: 1440 }, workArea: { x: 1920, y: 0, width: 2560, height: 1400 } }
+  const { geometry, screen, window } = overlay()
+  screen.getDisplayMatching = (bounds) => (bounds.x >= 1920 ? secondary : { bounds: DISPLAY, workArea: WORK_AREA })
+  assert.deepEqual(geometry.currentWorkArea(), WORK_AREA)
+  window.setBounds({ x: 2400, y: 300 })
+  assert.deepEqual(geometry.currentWorkArea(), secondary.workArea)
+})
+
+test('showCompact leaves Full screen for the new compact position', () => {
+  const { geometry, window, patch, settings, settle, events } = overlay()
+  geometry.setFullscreen(true)
+  settle()
+  patch({ position: { x: 1500, y: 700 } })
+  geometry.showCompact()
+  assert.equal(geometry.isFullscreen(), false)
+  assert.deepEqual(events.fullscreen, [true, false])
+  settle()
+  assert.deepEqual(window.bounds, compact(settings()))
+
+  patch({ position: { x: 100, y: 120 } })
+  geometry.showCompact()
+  settle()
+  assert.deepEqual(window.bounds, compact(settings()))
 })

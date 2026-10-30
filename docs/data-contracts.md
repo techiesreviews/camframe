@@ -2,13 +2,13 @@
 
 ## Preferences schema
 
-Preferences are the only durable application state. `sanitizeSettings()` always starts from defaults, selectively accepts known values, deep-copies nested objects, and drops unknown keys. The current schema version is 12.
+Preferences are the only durable application state. `sanitizeSettings()` always starts from defaults, selectively accepts known values, deep-copies nested objects, and drops unknown keys. The current schema version is 13.
 
 The executable form of this section is `test/fixtures/preferences/`: `sanitize.json`, `load.json`, and `scene-import.json` hold input/expected cases that any implementation of Preferences must pass (ADR 0030). Their `README.md` describes the format. Strings are measured in UTF-16 code units and numbers round half away from zero. When this section and the fixtures disagree, the fixtures and source are the current behavior.
 
 | Field | Default | Accepted/sanitized value | Persisted | In Scene |
 | --- | --- | --- | --- | --- |
-| `schemaVersion` | `12` | Always current default; input is not copied | Yes | No |
+| `schemaVersion` | `13` | Always current default; input is not copied | Yes | No |
 | `cameraId` | `""` | String, first 512 characters | Yes | Yes |
 | `cameraLabel` | `"Default camera"` | String, first 120 characters | Yes | Yes |
 | `shape` | `"circle"` | `circle`, `rounded`, `portrait`, `landscape` | Yes | Yes |
@@ -30,6 +30,10 @@ The executable form of this section is `test/fixtures/preferences/`: `sanitize.j
 | `launchAtLogin` | `false` | Boolean | Yes | No |
 | `completedOnboardingVersion` | `0` | Finite number rounded/clamped 0?1 | Yes | No |
 | `position` | `null` | `null` or integer `{x,y}` in screen coordinates | Yes | Yes |
+| `prompterLink` | `false` | Boolean; the Prompter link listens only while `true` | Yes | No |
+| `prompterFaceFull` | `"fullscreen"` | `fullscreen` or `scene:<Scene id>` (id 1–64 characters) | Yes | No |
+| `prompterFaceSmall` | `"previous"` | `previous`, a place (`top-left`, `top-right`, `bottom-left`, `bottom-right`, `left`, `right`, `center`), or `scene:<Scene id>` | Yes | No |
+| `prompterMargin` | `32` | Finite number rounded/clamped 0–160 (px from the camera surface to the work-area edge) | Yes | No |
 | `presets` | `[]` | Up to six valid Scene records | Yes | No (no nesting) |
 
 Colors retain input case in persisted state when accepted. The live hex text editors send lowercase; the UI renders uppercase text. Numbers are sanitized even when the corresponding control is not currently visible.
@@ -43,6 +47,8 @@ The integration harness is the only exception to the normal user-data path: in a
 ### Legacy migration
 
 Before sanitization, a loaded document with `schemaVersion < 3` receives `borderWidth = 0` and `size = 288`. A successfully loaded Preferences document without `completedOnboardingVersion` receives the current onboarding version so existing users are not interrupted. A missing or invalid Preferences document retains the default version 0. Explicit saved version 0 remains incomplete across restart. Legacy `fullscreenResolution` values are ignored; `overlayResolution` becomes the one retained Camera quality. Other fields continue to rely on defaults and sanitization for forward compatibility.
+
+Schema 13 added the four `prompter*` fields. Older documents load with their defaults, so the link stays off until the user turns it on.
 
 ## Scene record
 
@@ -161,6 +167,21 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 | `quit()` | `app:quit` | send ? on | Marks quitting and exits |
 
 Callback registration returns an unsubscribe function. Current renderer code registers these for the page lifetime and relies on page destruction rather than invoking the returned functions.
+
+## Prompter link HTTP contract
+
+Served by `src/prompter-link.js` only while `prompterLink` is `true`, on `http://127.0.0.1:47833` (never another interface). ADR 0031 records the decision.
+
+| Request | Answer |
+| --- | --- |
+| `GET /camframe/status` | `200 {"app":"camframe","version":"<app version>","scenes":["<Scene name>", …]}` |
+| `POST /camframe/cue`, `Content-Type: application/json`, body ≤ 1024 bytes | `200 {"ok":true,"cue":{…}}` after applying it; `400 {"ok":false,"error":…}` for a malformed cue; `404` for an unknown Scene; `413` too large; `415` not JSON |
+| `OPTIONS` (CORS preflight) | `204` with `Access-Control-Allow-Origin: <origin>`, `-Methods: GET, POST`, `-Headers: Content-Type`, `-Max-Age: 600`, and `Access-Control-Allow-Private-Network: true` when the request asks for it (Chrome Private Network Access) |
+| Wrong method / other path | `405` with `Allow` / `404` |
+| `Host` other than `127.0.0.1:47833` or `localhost:47833` | `403` (DNS-rebinding guard) |
+| `Origin` other than `https://prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, or `null` | `403`, no CORS headers. A request without `Origin` (a local program) is allowed. |
+
+A cue is a JSON object with only these fields: `size` (`"full"` or `"small"`), `position` (one of the seven places, only with `"small"`), and `scene` (a Scene name, 1–40 characters after trimming; no `position`; `size` absent or `"small"`). It needs `size` or `scene`. Anything else is a `400`. What a valid cue does follows `prompterFaceFull`, `prompterFaceSmall`, and `prompterMargin` (`cueAction()` and `compactPositionAt()`; see the product specification).
 
 ## Window definitions
 

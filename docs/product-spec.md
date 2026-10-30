@@ -34,7 +34,7 @@ Inline settings open over the Overlay and use three mutually exclusive sections:
 
 - **Camera**: camera device; one Camera quality used in Compact and Full screen; Mirror camera; Always on top.
 - **Style**: frame effect and contextual effect controls; frame width.
-- **Scenes**: create/update/apply/reorder/delete/import/export Scenes; Start at login; shortcut reference.
+- **Scenes**: create/update/apply/reorder/delete/import/export Scenes; Start at login; shortcut reference; Prompter link (off by default) with its status, what "Face full" and a bare "Face small" do, and the corner margin.
 
 Camera is the default section. Opening settings keeps the Overlay interactive. Saving, applying, or deleting a Scene closes Inline settings.
 
@@ -147,6 +147,19 @@ Presentation entry points:
 | Tray “Help & onboarding” | Show/focus Overlay and reopen onboarding |
 | Tray “Quit CamFrame” | Quit process |
 
+## Prompter link
+
+An optional link that lets the Techies teleprompter (https://prompter.techies.tools, a local copy, or a file:// copy) switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it never records, streams, or changes the camera itself (ADR 0031).
+
+- Off by default. Turning it on in Inline settings → Scenes starts a tiny HTTP server bound to `127.0.0.1` only, on port `47833`. Turning it off, or quitting, closes the port. With it off nothing listens.
+- The status line under the switch says Off, On (listening on port 47833), or why it could not start (for example "Port 47833 is in use by another app."); turning the switch off and on retries.
+- **Face full** (cue `{size:"full"}`): Full screen by default, or a chosen Scene.
+- **Face small** without a place (cue `{size:"small"}`): by default "Where it was" (leave Full screen back to the previous Compact size and position; nothing changes when already Compact), or one of the seven places, or a chosen Scene.
+- **Face small at a place** (`position`: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `left`, `right`, `center`): Compact mode on the display the Overlay is on now, keeping its shape and size, with the camera surface **Corner margin** px (default 32, 0–160) from the edges it touches. The whole Overlay window stays inside the display's work area so the hover toolbar stays reachable; at the top places that puts the camera a little lower than the margin. The move animates like a Scene (immediately under reduced motion) and leaves Full screen first when needed. It is an ordinary position change: it is saved and clears the active Scene.
+- **Scene** (`{scene:"Demo"}`): applies the saved Scene with that name (case-insensitive) like the Scene shortcuts do, and leaves Full screen for it. An unknown name is refused with an error and changes nothing.
+- A Face full/Face small choice that names a deleted Scene falls back to its default.
+- Requests are accepted only from the prompter's site, `http://localhost:*`, `http://127.0.0.1:*`, file:// copies (`Origin: null`), and local programs that send no `Origin`. The `Host` must be `127.0.0.1:47833` or `localhost:47833`.
+
 ## Contrast and reduced motion
 
 - The Overlay follows live OS/Chromium `prefers-reduced-motion`, forced-colors, and increased-contrast signals; neither preference is persisted or captured by Scenes.
@@ -168,6 +181,7 @@ Start at login is applied only in packaged builds. Development runs never regist
 - Both BrowserWindow definitions use context isolation, sandboxing, and no Node integration.
 - The preload exposes a narrow IPC bridge; renderers do not receive `ipcRenderer` directly.
 - Media permission is granted only to the Overlay web contents and only for `media`.
+- The only network listener is the opt-in Prompter link: `127.0.0.1` only, view changes only, strict origin, host, and body checks, no logging (ADR 0031).
 - Release contents are limited to `src/**/*` and `package.json` inside ASAR, with English Chromium locale only.
 - Windows targets are NSIS and portable executables. macOS targets are unsigned DMG and ZIP for Intel and Apple Silicon and include the camera usage description.
 - GPU acceleration remains enabled.

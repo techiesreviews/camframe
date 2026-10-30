@@ -1,0 +1,98 @@
+#!/usr/bin/env node
+// kit: screenshot the Overlay's Inline settings in the browser QA preview (Scenes tab, Prompter link)
+// Usage: kit shots [--help]
+// Serves src/ on a free 127.0.0.1 port, opens overlay.html without Electron (its QA bridge fake),
+// opens Inline settings on the Scenes tab and captures the Prompter link off, on and with a busy port,
+// at the default Overlay window size (324x390) and a tall view. Evidence: .scratch/shots/<time>/.
+import { createServer } from 'node:http'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { extname, join, normalize, resolve, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { execFileSync } from 'node:child_process'
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`Usage: kit shots
+Serves src/ locally and opens overlay.html in Chromium without Electron (the browser QA preview), then captures
+Inline settings on the Scenes tab: the Prompter link off, on (Face full / Face small / Corner margin) and with
+its port busy, at the default Overlay size (324x390, scrolled to the link) and a tall 324x820 view.
+Fails on page errors or when a control is missing. Playwright comes from KIT_PLAYWRIGHT_MODULE, else
+"playwright" in scripts/agents/kit.json. Evidence: .scratch/shots/<time>/shots.json and *.png.`)
+  process.exit(0)
+}
+
+const root = process.env.KIT_ROOT || execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+const settings = JSON.parse(readFileSync(join(root, 'scripts/agents/kit.json'), 'utf8'))
+const playwrightPath = process.env.KIT_PLAYWRIGHT_MODULE || settings.playwright
+const out = join(root, '.scratch', 'shots', new Date().toISOString().replace(/[:.]/g, '-'))
+mkdirSync(out, { recursive: true })
+const fail = (message) => {
+  console.log(`RESULT: fail shots ${message} evidence ${out}`)
+  process.exit(1)
+}
+if (!playwrightPath) fail('no Playwright (set KIT_PLAYWRIGHT_MODULE or "playwright" in kit.json)')
+
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png' }
+const srcRoot = resolve(root, 'src')
+const server = createServer((request, response) => {
+  const path = normalize(join(srcRoot, decodeURIComponent(new URL(request.url, 'http://x').pathname)))
+  if (!path.startsWith(srcRoot + sep)) {
+    response.writeHead(403).end()
+    return
+  }
+  try {
+    const body = readFileSync(path)
+    response.writeHead(200, { 'Content-Type': types[extname(path)] ?? 'application/octet-stream' }).end(body)
+  } catch {
+    response.writeHead(404).end()
+  }
+})
+await new Promise((done) => server.listen(0, '127.0.0.1', done))
+const base = `http://127.0.0.1:${server.address().port}/overlay.html`
+
+const { chromium } = await import(pathToFileURL(playwrightPath).href)
+const browser = await chromium.launch()
+const shots = []
+const errors = []
+try {
+  for (const view of [
+    { name: 'default', width: 324, height: 390 },
+    { name: 'tall', width: 324, height: 820 },
+  ]) {
+    for (const mode of ['off', 'on', 'busy']) {
+      const page = await browser.newPage({ viewport: { width: view.width, height: view.height } })
+      page.on('pageerror', (error) => errors.push(`${view.name}/${mode}: ${error.message}`))
+      await page.goto(mode === 'busy' ? `${base}?prompter=busy` : base)
+      await page.locator('#overlay').waitFor({ state: 'visible' })
+      await page.locator('#camera-surface').hover()
+      await page.locator('#controls-button').click()
+      await page.locator('#inline-settings').waitFor({ state: 'visible' })
+      await page.locator('[data-settings-tab="presets"]').click()
+      const toggle = page.locator('#overlay-prompter-toggle')
+      if (await toggle.count() !== 1) fail('the Prompter link switch is missing')
+      if (mode !== 'off') await toggle.check()
+      await page.locator('#overlay-prompter-status').scrollIntoViewIfNeeded()
+      if (mode !== 'off') await page.locator('#overlay-prompter-margin').scrollIntoViewIfNeeded()
+      const state = await page.evaluate(() => ({
+        status: document.querySelector('#overlay-prompter-status').textContent,
+        statusState: document.querySelector('#overlay-prompter-status').dataset.state,
+        optionsHidden: document.querySelector('#overlay-prompter-options').hidden,
+        faceFull: [...document.querySelector('#overlay-prompter-full').options].map((option) => option.text),
+        faceSmall: [...document.querySelector('#overlay-prompter-small').options].map((option) => option.text),
+      }))
+      if (mode === 'off' && !state.optionsHidden) fail('options show while the link is off')
+      if (mode !== 'off' && state.optionsHidden) fail('options stay hidden while the link is on')
+      const file = `prompter-link-${mode}-${view.name}.png`
+      await page.screenshot({ path: join(out, file) })
+      shots.push({ file, view, mode, ...state })
+      await page.close()
+    }
+  }
+} catch (error) {
+  errors.push(error.message.split('\n')[0])
+} finally {
+  await browser.close()
+  server.close()
+}
+writeFileSync(join(out, 'shots.json'), JSON.stringify({ shots, errors }, null, 2))
+if (errors.length) fail(`${errors.length} page error(s): ${errors[0]}`)
+console.log(`RESULT: ok shots ${shots.length} screenshots evidence ${out}`)

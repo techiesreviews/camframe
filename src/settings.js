@@ -8,6 +8,19 @@ export const SHAPES = new Set(['circle', 'rounded', 'portrait', 'landscape'])
 export const CAPTURE_RESOLUTIONS = new Set(['480p', '720p', '1080p', '2160p'])
 export const FRAME_EFFECTS = new Set(['none', 'glow', 'blur'])
 export const SCENE_LIMIT = 6
+// The places a Prompter link cue can put the Compact Overlay on its current display.
+export const COMPACT_SPOTS = Object.freeze([
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+  'left',
+  'right',
+  'center',
+])
+export const PROMPTER_MARGIN_MIN = 0
+export const PROMPTER_MARGIN_MAX = 160
+const SCENE_CHOICE_PATTERN = /^scene:[\s\S]{1,64}$/
 export const PRESET_SETTING_KEYS = Object.freeze([
   'cameraId',
   'cameraLabel',
@@ -29,7 +42,7 @@ export const PRESET_SETTING_KEYS = Object.freeze([
 ])
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  schemaVersion: 12,
+  schemaVersion: 13,
   cameraId: '',
   cameraLabel: 'Default camera',
   shape: 'circle',
@@ -51,6 +64,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   launchAtLogin: false,
   completedOnboardingVersion: 0,
   position: null,
+  prompterLink: false,
+  prompterFaceFull: 'fullscreen',
+  prompterFaceSmall: 'previous',
+  prompterMargin: 32,
   presets: Object.freeze([]),
 })
 
@@ -103,6 +120,26 @@ export function sanitizeSettings(input = {}, includePresets = true) {
   if (typeof input.alwaysOnTop === 'boolean') settings.alwaysOnTop = input.alwaysOnTop
   if (typeof input.overlayVisible === 'boolean') settings.overlayVisible = input.overlayVisible
   if (typeof input.launchAtLogin === 'boolean') settings.launchAtLogin = input.launchAtLogin
+  if (typeof input.prompterLink === 'boolean') settings.prompterLink = input.prompterLink
+  if (
+    typeof input.prompterFaceFull === 'string' &&
+    (input.prompterFaceFull === 'fullscreen' || SCENE_CHOICE_PATTERN.test(input.prompterFaceFull))
+  ) {
+    settings.prompterFaceFull = input.prompterFaceFull
+  }
+  if (
+    typeof input.prompterFaceSmall === 'string' &&
+    (input.prompterFaceSmall === 'previous' ||
+      COMPACT_SPOTS.includes(input.prompterFaceSmall) ||
+      SCENE_CHOICE_PATTERN.test(input.prompterFaceSmall))
+  ) {
+    settings.prompterFaceSmall = input.prompterFaceSmall
+  }
+  if (Number.isFinite(input.prompterMargin)) {
+    settings.prompterMargin = Math.round(
+      clamp(input.prompterMargin, PROMPTER_MARGIN_MIN, PROMPTER_MARGIN_MAX),
+    )
+  }
   settings.completedOnboardingVersion = sanitizeCompletedOnboardingVersion(
     input.completedOnboardingVersion,
   )

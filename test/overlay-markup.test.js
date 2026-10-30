@@ -196,3 +196,17 @@ test('high contrast preserves boundaries, selection, focus, and status without e
   assert.match(highContrast, /\.presentation-toast/)
   assert.doesNotMatch(highContrast, /var\(--effect-color\)/)
 })
+
+test('the Prompter link is an opt-in Scenes setting that closes with the app', () => {
+  const scenesPanel = overlayHtml.match(/<div class="inline-prompter" data-settings-panel="presets">[\s\S]*?<\/div>\n {8}<\/div>/)?.[0] ?? ''
+  assert.match(scenesPanel, /id="overlay-prompter-toggle"[^>]*type="checkbox"/)
+  assert.doesNotMatch(scenesPanel, /id="overlay-prompter-toggle"[^>]*checked/)
+  assert.match(scenesPanel, /id="overlay-prompter-status"[^>]*aria-live="polite"/)
+  assert.match(scenesPanel, /id="overlay-prompter-options" hidden/)
+  assert.match(scenesPanel, /id="overlay-prompter-full"/)
+  assert.match(scenesPanel, /id="overlay-prompter-small"/)
+  assert.match(scenesPanel, /id="overlay-prompter-margin"[^>]*min="0" max="160"/)
+  assert.match(mainSource, /prompterLink\.setEnabled\(settings\.prompterLink\)/)
+  assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\.prompterLink\)/)
+  assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
+})

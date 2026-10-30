@@ -16,6 +16,7 @@ import {
 import {
   DEFAULT_SETTINGS,
   SCENE_LIMIT,
+  overlayDimensionsFor,
   preferencesFromDocument,
   sanitizeSettings,
   settingsPatchChangesOverlayGeometry,
@@ -26,9 +27,11 @@ import { CURRENT_ONBOARDING_VERSION } from './onboarding.js'
 import {
   alwaysOnTopLevelFor,
   compactBaseBounds,
+  compactPositionAt,
   createOverlayGeometry,
   isFullscreenExitInput,
 } from './overlay-geometry.js'
+import { createPrompterLink, cueAction, linkStatusBody } from './prompter-link.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const integrationUserDataDirectory = process.env.CAMFRAME_E2E_USER_DATA_DIR
@@ -47,6 +50,8 @@ let tray
 let saveTimer
 let settings = { ...DEFAULT_SETTINGS }
 let activeSceneId = ''
+let prompterLink
+let prompterLinkStatus = { state: 'off', port: 0, message: '' }
 
 function loadSettings() {
   let documentText
@@ -65,11 +70,13 @@ function saveSettings() {
   }, 120)
 }
 
+// Runtime-only fields ride along with Preferences: the active Scene and the Prompter link state.
+function overlayState() {
+  return { ...settings, activePresetId: activeSceneId, prompterLinkStatus }
+}
+
 function emitState() {
-  sendBridgeEvent(overlayWindow?.webContents, 'onStateChanged', {
-    ...settings,
-    activePresetId: activeSceneId,
-  })
+  sendBridgeEvent(overlayWindow?.webContents, 'onStateChanged', overlayState())
 }
 
 function emitFullscreen() {
@@ -93,6 +100,7 @@ function updateSettings(patch) {
   const updateBounds = settingsPatchChangesOverlayGeometry(patch)
   ;({ settings, activeSceneId } = sceneLibrary.patchSettings(sceneState(), patch))
   if (Object.hasOwn(patch, 'launchAtLogin')) applyLaunchAtLoginSetting()
+  if (Object.hasOwn(patch, 'prompterLink')) prompterLink?.setEnabled(settings.prompterLink)
   overlayGeometry?.apply({ updateBounds })
   emitState()
   setTrayMenu()
@@ -103,17 +111,46 @@ function sceneState() {
   return { settings, activeSceneId }
 }
 
-function commitScenes(result) {
+// `compact` moves an applied Scene into Compact mode even from Full screen (Prompter link cues).
+function commitScenes(result, { compact = false } = {}) {
   if (!result) return
   if (result.settings) {
     settings = result.settings
     activeSceneId = result.activeSceneId
-    if (result.appliedScene) overlayGeometry?.showScene()
+    if (result.appliedScene) {
+      if (compact) overlayGeometry?.showCompact()
+      else overlayGeometry?.showScene()
+    }
     emitState()
     setTrayMenu()
     saveSettings()
   }
   if (result.notice) showPresentationNotice(result.notice)
+}
+
+// Applies a checked Prompter link cue to the Overlay view only: Full screen, Compact mode at a
+// spot, back to the previous Compact geometry, or a Scene.
+function applyPrompterCue(cue) {
+  if (!overlayGeometry) return { error: 'CamFrame is not ready yet.', status: 503 }
+  const plan = cueAction(cue, settings)
+  if (plan.error) return plan
+  if (plan.action === 'fullscreen') overlayGeometry.setFullscreen(true)
+  else if (plan.action === 'compact') overlayGeometry.setFullscreen(false)
+  else if (plan.action === 'scene') {
+    commitScenes(sceneLibrary.applyScene(sceneState(), plan.sceneId), { compact: true })
+  } else {
+    const position = compactPositionAt(plan.spot, {
+      workArea: overlayGeometry.currentWorkArea(),
+      size: overlayDimensionsFor(settings),
+      margin: settings.prompterMargin,
+    })
+    ;({ settings, activeSceneId } = sceneLibrary.patchSettings(sceneState(), { position }))
+    overlayGeometry.showCompact()
+    emitState()
+    setTrayMenu()
+    saveSettings()
+  }
+  return { ok: true }
 }
 
 function savePreset(name, id) {
@@ -321,7 +358,7 @@ function registerIpc() {
   registerBridgeHandlers(ipcMain, {
     isOverlaySender: (event) => Boolean(overlayWindow) && event.sender === overlayWindow.webContents,
     handlers: {
-      getState: () => ({ ...settings, activePresetId: activeSceneId }),
+      getState: overlayState,
       updateState: updateSettings,
       reportAccessibilityPreferences: ({ reducedMotion }) => {
         overlayGeometry?.setReducedMotion(reducedMotion)
@@ -370,6 +407,16 @@ app.whenReady().then(() => {
   createOverlayWindow()
   createTray()
 
+  prompterLink = createPrompterLink({
+    status: () => linkStatusBody(settings, app.getVersion()),
+    applyCue: applyPrompterCue,
+    onState(state) {
+      prompterLinkStatus = state
+      emitState()
+    },
+  })
+  prompterLink.setEnabled(settings.prompterLink)
+
   globalShortcut.register('CommandOrControl+Shift+C', showControls)
   globalShortcut.register('CommandOrControl+Shift+H', () => {
     updateSettings({ overlayVisible: !settings.overlayVisible })
@@ -387,6 +434,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   app.isQuitting = true
+  prompterLink?.close()
   overlayGeometry?.stopDrag()
   overlayGeometry?.stopResize()
   clearTimeout(saveTimer)
