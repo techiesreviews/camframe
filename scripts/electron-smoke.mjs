@@ -254,6 +254,17 @@ test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', 
     assert.deepEqual(await linkControls(), { pressed: 'true', linkState: 'on', switchOn: true })
     assert.equal((await prompterCall('GET', '/camframe/status')).status, 200)
 
+    // A quick double click before main answers ends where it started (on), not stuck on one value.
+    await page.evaluate(() => {
+      const button = document.querySelector('#prompter-button')
+      button.click()
+      button.click()
+    })
+    await page.waitForTimeout(300)
+    await page.waitForFunction(() => document.querySelector('#prompter-button').dataset.linkState === 'on')
+    assert.equal((await page.evaluate(() => window.camFrame.getState())).prompterLink, true)
+    assert.equal((await prompterCall('GET', '/camframe/status')).status, 200)
+
     await page.evaluate(() => document.querySelector('#overlay-prompter-toggle').click())
     await page.waitForFunction(() => document.querySelector('#prompter-button').dataset.linkState === 'off')
     assert.deepEqual(await linkControls(), { pressed: 'false', linkState: 'off', switchOn: false })

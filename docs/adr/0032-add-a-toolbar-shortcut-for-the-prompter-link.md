@@ -20,5 +20,5 @@ The toolbar has been kept to a few icon buttons on purpose (ADR 0004 moved Mirro
 ## Consequences
 
 - The Prompter link can be turned on without opening settings, and its state is visible whenever the toolbar is. Onboarding still points at the same four controls; its Toolbar now has six buttons.
-- At the smallest Portrait camera (135 px wide) the six buttons shrink to about 18 px each, a little narrower than before (about 20 px).
+- At the smallest Portrait camera (135 px wide) the six buttons shrink to about 18 px each, a little narrower than before (about 22 px).
 - The settings panel no longer uses the browser's own checkbox anywhere; the switch look is ours to keep consistent.

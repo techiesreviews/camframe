@@ -123,6 +123,17 @@ try {
         }
         state.marginUpdateKeptChoices = kept
       }
+      if (view.forcedColors && mode === 'on') {
+        // Keyboard focus on the switch stays visible in high contrast.
+        await page.keyboard.press('Shift')
+        await toggle.focus()
+        const focus = await toggle.evaluate((item) => ({
+          visible: item.matches(':focus-visible'),
+          outline: getComputedStyle(item).outlineStyle,
+        }))
+        if (!focus.visible || focus.outline === 'none') fail(`no visible keyboard focus on the switch in high contrast (${JSON.stringify(focus)})`)
+        state.highContrastFocus = focus
+      }
       const file = `prompter-link-${mode}-${view.name}.png`
       await page.screenshot({ path: join(out, file), animations: 'disabled' })
       shots.push({ file, view, mode, ...state })

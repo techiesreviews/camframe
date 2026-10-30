@@ -226,8 +226,8 @@ test('the toolbar Prompter link button flips the same stored setting as the sett
   assert.match(button, /<span class="link-dot" aria-hidden="true"><\/span>/)
   assert.match(read('assets/icons.css'), /\.ph-scroll::before\s*\{\s*content:\s*'\\eb7a';/)
   // One stored setting, one IPC path: both controls send `prompterLink` and render from prompterLinkView.
-  assert.match(overlaySource, /prompterToggle\.addEventListener\('change', \(\) => \{\n {2}camFrame\.updateState\(\{ prompterLink: prompterToggle\.checked \}\)/)
-  assert.match(overlaySource, /prompterButton\.addEventListener\('click', \(\) => \{\n {2}if \(state\) camFrame\.updateState\(\{ prompterLink: !state\.prompterLink \}\)/)
+  assert.match(overlaySource, /prompterToggle\.addEventListener\('change', \(\) => \{\n {2}pendingPrompterLink = undefined\n {2}camFrame\.updateState\(\{ prompterLink: prompterToggle\.checked \}\)/)
+  assert.match(overlaySource, /pendingPrompterLink = !\(pendingPrompterLink \?\? state\.prompterLink\)\n {2}camFrame\.updateState\(\{ prompterLink: pendingPrompterLink \}\)/)
   assert.match(overlaySource, /const link = prompterLinkView\(state\)/)
   assert.match(overlaySource, /prompterToggle\.checked = link\.on/)
   assert.match(overlaySource, /prompterButton\.setAttribute\('aria-pressed', String\(link\.on\)\)/)
@@ -242,4 +242,7 @@ test('on/off settings are switches, with a forced-colors fallback and no motion 
   assert.match(overlayCss, /\.inline-toggle input\[role='switch'\]\s*\{[^}]*appearance:\s*none/)
   assert.match(overlayCss, /\.overlay\[data-high-contrast='true'\] \.inline-toggle input\[role='switch'\]:checked\s*\{[^}]*background:\s*Highlight/)
   assert.match(overlayCss, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.inline-toggle input\[role='switch'\]::before\s*\{\s*animation:\s*none;\s*transition:\s*none/)
+  // High contrast: pressed toolbar icons stay visible, and keyboard focus beats the control rule's `outline: 0`.
+  assert.match(overlayCss, /\.overlay\[data-high-contrast='true'\] \.hover-toolbar i\s*\{\s*forced-color-adjust:\s*none/)
+  assert.match(overlayCss, /\.overlay\.overlay\[data-high-contrast='true'\] :is\(button, input, select, summary\):focus-visible\s*\{[^}]*outline:\s*3px solid CanvasText/)
 })

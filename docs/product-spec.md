@@ -24,7 +24,8 @@ The toolbar order and actions are:
 2. Enter or exit Full screen.
 3. Cycle shape: Circle → Square → Portrait → Wide → Circle.
 4. Enter or exit camera-framing mode.
-5. Open or close Inline settings.
+5. Turn the Prompter link on or off.
+6. Open or close Inline settings.
 
 The normal toolbar is 234 px or the camera width minus 8 px, whichever is smaller. It is 44 px high, centered over the camera, and positioned 22 px from the top of the outer window. In framing mode it expands up to 240 px to show the zoom value and “Drag · Scroll · Double-click resets” guidance.
 

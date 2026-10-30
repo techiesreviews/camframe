@@ -50,6 +50,11 @@ test('a problem without a message still says what to do', () => {
   assert.equal(view.status, 'The Prompter link stopped. Turn it off and on to retry.')
 })
 
+test('a ready link without a port never shows "undefined"', () => {
+  const view = prompterLinkView({ prompterLink: true, prompterLinkStatus: { state: 'on' } })
+  assert.equal(view.status, 'On. Waiting for prompter cues.')
+})
+
 test('only a stored true turns the view on', () => {
   for (const prompterLink of [undefined, 'true', 1]) assert.equal(prompterLinkView({ prompterLink }).on, false)
   assert.equal(prompterLinkView().state, 'off')

@@ -2,12 +2,6 @@
 // toolbar button all read this one view of `prompterLink` (the stored choice) and
 // `prompterLinkStatus` (what main's link is doing), so they can never disagree.
 
-const STATE_TITLES = Object.freeze({
-  off: 'Prompter link: off',
-  starting: 'Prompter link: starting',
-  on: 'Prompter link: on, waiting for cues',
-})
-
 // `state` is 'off' | 'starting' | 'on' | 'error'. A switched-on link whose status has not caught up
 // yet (no status, or still 'off') reads as starting; a switched-off link always reads as off.
 export function prompterLinkView({ prompterLink, prompterLinkStatus } = {}) {
@@ -15,16 +9,12 @@ export function prompterLinkView({ prompterLink, prompterLinkStatus } = {}) {
   const reported = prompterLinkStatus?.state
   const state = !on ? 'off' : ['starting', 'on', 'error'].includes(reported) ? reported : 'starting'
   const message = prompterLinkStatus?.message || 'The Prompter link stopped.'
-  const status = {
-    off: 'Off. Turn it on so the prompter can switch this view.',
-    starting: 'Starting…',
-    on: `On. Waiting for prompter cues on port ${prompterLinkStatus?.port}.`,
-    error: `${message} Turn it off and on to retry.`,
+  const port = prompterLinkStatus?.port ? ` on port ${prompterLinkStatus.port}` : ''
+  const { status, title } = {
+    off: { status: 'Off. Turn it on so the prompter can switch this view.', title: 'Prompter link: off' },
+    starting: { status: 'Starting…', title: 'Prompter link: starting' },
+    on: { status: `On. Waiting for prompter cues${port}.`, title: 'Prompter link: on, waiting for cues' },
+    error: { status: `${message} Turn it off and on to retry.`, title: `Prompter link: problem. ${message}` },
   }[state]
-  return {
-    on,
-    state,
-    status,
-    title: state === 'error' ? `Prompter link: problem. ${message}` : STATE_TITLES[state],
-  }
+  return { on, state, status, title }
 }

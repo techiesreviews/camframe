@@ -63,6 +63,9 @@ const fullscreenButton = document.querySelector('#fullscreen-button')
 const shapeButton = document.querySelector('#shape-button')
 const positionButton = document.querySelector('#position-button')
 const prompterButton = document.querySelector('#prompter-button')
+// The toolbar button's last request while main has not answered it yet, so a quick second click
+// flips that request instead of repeating it.
+let pendingPrompterLink
 const video = document.querySelector('#camera')
 const effectVideo = document.querySelector('#effect-camera')
 const cameraState = document.querySelector('#camera-state')
@@ -546,6 +549,7 @@ function fillChoices(select, options, value, fallback) {
 // "Face full" and a bare "Face small" do. All of them render from the stored `prompterLink`.
 // A choice naming a deleted Scene shows the default, which is also what a cue then does.
 function renderPrompterLink() {
+  if (state.prompterLink === pendingPrompterLink) pendingPrompterLink = undefined
   const link = prompterLinkView(state)
   prompterToggle.checked = link.on
   prompterStatus.dataset.state = link.state
@@ -966,12 +970,15 @@ topToggle.addEventListener('change', () => {
 })
 
 prompterToggle.addEventListener('change', () => {
+  pendingPrompterLink = undefined
   camFrame.updateState({ prompterLink: prompterToggle.checked })
 })
 
 // The toolbar shortcut flips the same stored setting the Inline settings switch does.
 prompterButton.addEventListener('click', () => {
-  if (state) camFrame.updateState({ prompterLink: !state.prompterLink })
+  if (!state) return
+  pendingPrompterLink = !(pendingPrompterLink ?? state.prompterLink)
+  camFrame.updateState({ prompterLink: pendingPrompterLink })
 })
 
 prompterFull.addEventListener('change', () => {

@@ -1250,6 +1250,12 @@ video {
   background: Highlight;
 }
 
+/* Icon glyphs are text: forced colors would paint a Canvas backplate behind them, which hides the
+   HighlightText icon of a pressed button. They already use system colors through `currentColor`. */
+.overlay[data-high-contrast='true'] .hover-toolbar i {
+  forced-color-adjust: none;
+}
+
 .overlay[data-high-contrast='true'] .inline-toggle input[role='switch'] {
   forced-color-adjust: none;
 }
@@ -1296,7 +1302,9 @@ video {
   background: Highlight;
 }
 
-.overlay[data-high-contrast='true'] :is(button, input, select, summary):focus-visible {
+/* `.overlay.overlay` matches the high-contrast control rule above (it sets `outline: 0`) and wins by
+   coming later, so keyboard focus stays visible in high contrast. */
+.overlay.overlay[data-high-contrast='true'] :is(button, input, select, summary):focus-visible {
   outline: 3px solid CanvasText;
   outline-offset: 2px;
 }
