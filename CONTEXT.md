@@ -33,7 +33,7 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/preload.cjs`: the sandboxed `window.camFrame` adapter for the bridge contract.
 - `src/bridge.js`: the bridge contract between main and the Overlay: channels, transports, argument checks, main registration, and the browser QA fake.
 - `src/prompter-link.js`: the Prompter link server, its origin/host/cue checks, and what a cue does.
-- `src/prompter-link-view.js`: what the Overlay's Prompter link switch, status line and toolbar button show, and the one recent request both controls flip.
+- `src/prompter-link-view.js`: what the Overlay's Prompter link switch, status line and toolbar button show, and the one request both controls flip.
 - `src/settings.js`: the Preferences schema, sanitizing, loading (`preferencesFromDocument`), and camera/window dimensions.
 - `src/scenes.js`: the Scene library: save, apply, cycle, delete, reorder, import, export, and the active Scene.
 - `src/overlay-geometry.js`: Overlay window geometry in main: Compact placement, Full screen, the onboarding reserve, drag/resize, bounds animation, z-order, and mouse pass-through.

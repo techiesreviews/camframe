@@ -63,7 +63,7 @@ const fullscreenButton = document.querySelector('#fullscreen-button')
 const shapeButton = document.querySelector('#shape-button')
 const positionButton = document.querySelector('#position-button')
 const prompterButton = document.querySelector('#prompter-button')
-// The Overlay's last Prompter link request, `{ value, at }` (see toggledPrompterLink).
+// The Overlay's last Prompter link request (see toggledPrompterLink).
 let pendingPrompterLink
 const video = document.querySelector('#camera')
 const effectVideo = document.querySelector('#effect-camera')
@@ -968,17 +968,20 @@ topToggle.addEventListener('change', () => {
 })
 
 prompterToggle.addEventListener('change', () => {
-  if (!state) return
-  pendingPrompterLink = toggledPrompterLink(pendingPrompterLink, state.prompterLink, performance.now())
-  prompterToggle.checked = pendingPrompterLink.value
-  camFrame.updateState({ prompterLink: pendingPrompterLink.value })
+  if (!state) {
+    prompterToggle.checked = !prompterToggle.checked
+    return
+  }
+  pendingPrompterLink = toggledPrompterLink(pendingPrompterLink, state.prompterLink)
+  prompterToggle.checked = pendingPrompterLink
+  camFrame.updateState({ prompterLink: pendingPrompterLink })
 })
 
 // The toolbar shortcut flips the same stored setting the Inline settings switch does.
 prompterButton.addEventListener('click', () => {
   if (!state) return
-  pendingPrompterLink = toggledPrompterLink(pendingPrompterLink, state.prompterLink, performance.now())
-  camFrame.updateState({ prompterLink: pendingPrompterLink.value })
+  pendingPrompterLink = toggledPrompterLink(pendingPrompterLink, state.prompterLink)
+  camFrame.updateState({ prompterLink: pendingPrompterLink })
 })
 
 prompterFull.addEventListener('change', () => {
