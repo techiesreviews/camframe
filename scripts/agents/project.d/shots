@@ -124,14 +124,23 @@ try {
         state.marginUpdateKeptChoices = kept
       }
       if (view.forcedColors && mode === 'on') {
-        // Keyboard focus on the switch stays visible in high contrast.
-        await page.keyboard.press('Shift')
+        // Keyboard focus stays visible in high contrast on the switch, a select, a settings tab and
+        // the toolbar button, and the pressed toolbar button's icon has no forced-colors backplate.
+        const focus = {}
+        for (const selector of ['#overlay-prompter-toggle', '#overlay-prompter-full', '[data-settings-tab="presets"]', '#prompter-button']) {
+          await page.keyboard.press('Shift')
+          await page.locator(selector).focus()
+          focus[selector] = await page.locator(selector).evaluate((item) => ({
+            visible: item.matches(':focus-visible'),
+            outline: getComputedStyle(item).outlineStyle,
+          }))
+          if (!focus[selector].visible || focus[selector].outline === 'none') {
+            fail(`no visible keyboard focus on ${selector} in high contrast (${JSON.stringify(focus[selector])})`)
+          }
+        }
+        const icon = await page.evaluate(() => getComputedStyle(document.querySelector('#prompter-button.selected i')).forcedColorAdjust)
+        if (icon !== 'none') fail(`the pressed toolbar icon gets a forced-colors backplate (${icon})`)
         await toggle.focus()
-        const focus = await toggle.evaluate((item) => ({
-          visible: item.matches(':focus-visible'),
-          outline: getComputedStyle(item).outlineStyle,
-        }))
-        if (!focus.visible || focus.outline === 'none') fail(`no visible keyboard focus on the switch in high contrast (${JSON.stringify(focus)})`)
         state.highContrastFocus = focus
       }
       const file = `prompter-link-${mode}-${view.name}.png`

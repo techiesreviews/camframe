@@ -14,7 +14,7 @@ import {
   createOnboardingTour,
   onboardingStepsFor,
 } from './onboarding.js'
-import { prompterLinkView } from './prompter-link-view.js'
+import { prompterLinkView, settledPrompterLink, toggledPrompterLink } from './prompter-link-view.js'
 
 const overlay = document.querySelector('#overlay')
 const cameraSurface = document.querySelector('#camera-surface')
@@ -63,8 +63,7 @@ const fullscreenButton = document.querySelector('#fullscreen-button')
 const shapeButton = document.querySelector('#shape-button')
 const positionButton = document.querySelector('#position-button')
 const prompterButton = document.querySelector('#prompter-button')
-// The toolbar button's last request while main has not answered it yet, so a quick second click
-// flips that request instead of repeating it.
+// The Prompter link request main has not answered yet (see toggledPrompterLink).
 let pendingPrompterLink
 const video = document.querySelector('#camera')
 const effectVideo = document.querySelector('#effect-camera')
@@ -549,7 +548,7 @@ function fillChoices(select, options, value, fallback) {
 // "Face full" and a bare "Face small" do. All of them render from the stored `prompterLink`.
 // A choice naming a deleted Scene shows the default, which is also what a cue then does.
 function renderPrompterLink() {
-  if (state.prompterLink === pendingPrompterLink) pendingPrompterLink = undefined
+  pendingPrompterLink = settledPrompterLink(pendingPrompterLink, state.prompterLink)
   const link = prompterLinkView(state)
   prompterToggle.checked = link.on
   prompterStatus.dataset.state = link.state
@@ -970,14 +969,14 @@ topToggle.addEventListener('change', () => {
 })
 
 prompterToggle.addEventListener('change', () => {
-  pendingPrompterLink = undefined
-  camFrame.updateState({ prompterLink: prompterToggle.checked })
+  pendingPrompterLink = prompterToggle.checked
+  camFrame.updateState({ prompterLink: pendingPrompterLink })
 })
 
 // The toolbar shortcut flips the same stored setting the Inline settings switch does.
 prompterButton.addEventListener('click', () => {
   if (!state) return
-  pendingPrompterLink = !(pendingPrompterLink ?? state.prompterLink)
+  pendingPrompterLink = toggledPrompterLink(pendingPrompterLink, state.prompterLink)
   camFrame.updateState({ prompterLink: pendingPrompterLink })
 })
 

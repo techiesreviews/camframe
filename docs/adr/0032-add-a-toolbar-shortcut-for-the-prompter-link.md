@@ -6,7 +6,7 @@ Accepted — 2026-10-30 (Lex).
 
 ## Context
 
-Lex tested the Prompter link (ADR 0031) and it works, but he asked for two things. Turning it on meant hover → sliders → Scenes → scroll to the bottom, every recording session; he wanted one icon in CamFrame to do it directly. And the setting looked bolted on: a bright orange browser checkbox, two plain selects and a long sentence, with no heading, next to a panel of quiet grey controls.
+Lex tested the Prompter link (ADR 0031) and it works, but asked for two things. Turning it on meant hover → sliders → Scenes → scroll to the bottom, every recording session; Lex wanted one icon in CamFrame to do it directly. And the setting looked bolted on: a bright orange browser checkbox, two plain selects and a long sentence, with no heading, next to a panel of quiet grey controls.
 
 The toolbar has been kept to a few icon buttons on purpose (ADR 0004 moved Mirror out of it; 0.4.2 tightened it to five). The other on/off settings (Mirror camera, Always on top, Start at login) used the same orange browser checkbox.
 

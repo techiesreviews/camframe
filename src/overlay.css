@@ -1302,7 +1302,7 @@ video {
   background: Highlight;
 }
 
-/* `.overlay.overlay` matches the high-contrast control rule above (it sets `outline: 0`) and wins by
+/* `.overlay.overlay` ties the high-contrast control rule above (it sets `outline: 0`) and wins by
    coming later, so keyboard focus stays visible in high contrast. */
 .overlay.overlay[data-high-contrast='true'] :is(button, input, select, summary):focus-visible {
   outline: 3px solid CanvasText;

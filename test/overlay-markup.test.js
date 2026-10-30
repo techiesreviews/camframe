@@ -226,8 +226,8 @@ test('the toolbar Prompter link button flips the same stored setting as the sett
   assert.match(button, /<span class="link-dot" aria-hidden="true"><\/span>/)
   assert.match(read('assets/icons.css'), /\.ph-scroll::before\s*\{\s*content:\s*'\\eb7a';/)
   // One stored setting, one IPC path: both controls send `prompterLink` and render from prompterLinkView.
-  assert.match(overlaySource, /prompterToggle\.addEventListener\('change', \(\) => \{\n {2}pendingPrompterLink = undefined\n {2}camFrame\.updateState\(\{ prompterLink: prompterToggle\.checked \}\)/)
-  assert.match(overlaySource, /pendingPrompterLink = !\(pendingPrompterLink \?\? state\.prompterLink\)\n {2}camFrame\.updateState\(\{ prompterLink: pendingPrompterLink \}\)/)
+  assert.match(overlaySource, /prompterToggle\.addEventListener\('change', \(\) => \{\n {2}pendingPrompterLink = prompterToggle\.checked\n {2}camFrame\.updateState\(\{ prompterLink: pendingPrompterLink \}\)/)
+  assert.match(overlaySource, /pendingPrompterLink = toggledPrompterLink\(pendingPrompterLink, state\.prompterLink\)\n {2}camFrame\.updateState\(\{ prompterLink: pendingPrompterLink \}\)/)
   assert.match(overlaySource, /const link = prompterLinkView\(state\)/)
   assert.match(overlaySource, /prompterToggle\.checked = link\.on/)
   assert.match(overlaySource, /prompterButton\.setAttribute\('aria-pressed', String\(link\.on\)\)/)

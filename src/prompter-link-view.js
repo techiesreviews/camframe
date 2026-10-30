@@ -18,3 +18,15 @@ export function prompterLinkView({ prompterLink, prompterLinkStatus } = {}) {
   }[state]
   return { on, state, status, title }
 }
+
+// The Overlay's last `prompterLink` request that main has not answered yet (`undefined` when none),
+// shared by the toolbar button and the settings switch, so a quick second press flips that request
+// instead of repeating the one before it.
+export function toggledPrompterLink(pending, stored) {
+  return !(pending ?? stored)
+}
+
+// Clears the pending request once the stored setting has caught up with it.
+export function settledPrompterLink(pending, stored) {
+  return pending === stored ? undefined : pending
+}

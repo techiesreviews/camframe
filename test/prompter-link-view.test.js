@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { prompterLinkView } from '../src/prompter-link-view.js'
+import { prompterLinkView, settledPrompterLink, toggledPrompterLink } from '../src/prompter-link-view.js'
 
 // The Inline settings switch, its status line and the toolbar button all render this one view.
 
@@ -58,4 +58,56 @@ test('a ready link without a port never shows "undefined"', () => {
 test('only a stored true turns the view on', () => {
   for (const prompterLink of [undefined, 'true', 1]) assert.equal(prompterLinkView({ prompterLink }).on, false)
   assert.equal(prompterLinkView().state, 'off')
+})
+
+// A small model of the Overlay: presses record a pending request and send it; main answers each
+// request in order with the stored value; every answer settles the pending request.
+function overlayModel(stored) {
+  const model = { stored, pending: undefined, sent: [] }
+  const send = (value) => {
+    model.pending = value
+    model.sent.push(value)
+  }
+  return Object.assign(model, {
+    toolbar: () => send(toggledPrompterLink(model.pending, model.stored)),
+    // The switch shows `stored` until main answers, so a click asks for the opposite of that.
+    settingsSwitch: () => send(!model.stored),
+    answer: () => {
+      model.stored = model.sent.shift()
+      model.pending = settledPrompterLink(model.pending, model.stored)
+    },
+  })
+}
+
+test('quick toolbar presses flip the pending request instead of repeating it', () => {
+  const model = overlayModel(true)
+  model.toolbar()
+  model.toolbar()
+  assert.deepEqual(model.sent, [false, true])
+  model.answer()
+  model.toolbar()
+  assert.deepEqual(model.sent, [true, false])
+  model.answer()
+  model.answer()
+  assert.equal(model.stored, false)
+  assert.equal(model.pending, undefined)
+})
+
+test('the toolbar after the settings switch flips the switch\'s request', () => {
+  const model = overlayModel(true)
+  model.toolbar()
+  model.settingsSwitch()
+  model.toolbar()
+  assert.deepEqual(model.sent, [false, false, true])
+  while (model.sent.length) model.answer()
+  assert.equal(model.stored, true)
+  assert.equal(model.pending, undefined)
+})
+
+test('a pending request clears only when the stored setting matches it', () => {
+  assert.equal(settledPrompterLink(undefined, true), undefined)
+  assert.equal(settledPrompterLink(false, true), false)
+  assert.equal(settledPrompterLink(false, false), undefined)
+  assert.equal(toggledPrompterLink(undefined, false), true)
+  assert.equal(toggledPrompterLink(true, true), false)
 })
