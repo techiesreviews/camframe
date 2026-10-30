@@ -498,6 +498,46 @@ test('the current work area is the display the Overlay is on, Full screen includ
   assert.deepEqual(geometry.currentWorkArea(), secondary.workArea)
 })
 
+test('a move during the Full screen exit does not leave a stale Compact base for the next Full screen', () => {
+  const { geometry, window, patch, settings, clock, settle } = overlay()
+  geometry.setFullscreen(true)
+  settle()
+  // A bare cue leaves Full screen, then a placed cue moves the window while that animation runs.
+  geometry.setFullscreen(false)
+  clock.advance(OVERLAY_BOUNDS_TRANSITION_MS / 3)
+  patch({ position: { x: 1500, y: 700 } })
+  geometry.showCompact()
+  settle()
+  assert.deepEqual(window.bounds, compact(settings()))
+
+  geometry.setFullscreen(true)
+  settle()
+  geometry.setFullscreen(false)
+  settle()
+  assert.deepEqual(window.bounds, compact(settings(), { x: 1500, y: 700 }))
+  assert.equal(window.alwaysOnTop.flag, settings().alwaysOnTop)
+  assert.equal(clock.activeTimers(), 0)
+})
+
+test('a Scene applied in Full screen lands with its size and shape, and without a position where it was', () => {
+  const { geometry, window, patch, settings, settle } = overlay()
+  geometry.setFullscreen(true)
+  settle()
+  patch({ size: 240, shape: 'rounded', position: { x: 120, y: 140 } })
+  geometry.showCompact()
+  settle()
+  assert.equal(geometry.isFullscreen(), false)
+  assert.deepEqual(window.bounds, compact(settings(), { x: 120, y: 140 }))
+
+  geometry.setFullscreen(true)
+  settle()
+  patch({ size: 200, shape: 'portrait', position: null })
+  geometry.showCompact()
+  settle()
+  assert.equal(geometry.isFullscreen(), false)
+  assert.deepEqual(window.bounds, compact(settings(), { x: 120, y: 140 }))
+})
+
 test('showCompact leaves Full screen for the new compact position', () => {
   const { geometry, window, patch, settings, settle, events } = overlay()
   geometry.setFullscreen(true)

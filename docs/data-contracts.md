@@ -143,10 +143,10 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 
 | Bridge method/event | Main channel | Direction | Payload/result |
 | --- | --- | --- | --- |
-| `getState()` | `state:get` | invoke ? handle | Full Preferences plus runtime `activePresetId` |
+| `getState()` | `state:get` | invoke ? handle | Full Preferences plus runtime `activePresetId` and `prompterLinkStatus` `{state,port,message}` (`state`: `off`, `starting`, `on` or `error`) |
 | `updateState(patch)` | `state:update` | send ? on | Partial untrusted settings patch |
 | `reportAccessibilityPreferences(preferences)` | `accessibility:preferences` | send ? on | Live `{reducedMotion,highContrast}` booleans; main retains reduced motion only; not persisted |
-| `onStateChanged(cb)` | `state:changed` | main ? renderer | Full state snapshot |
+| `onStateChanged(cb)` | `state:changed` | main ? renderer | Full state snapshot, the same shape as `getState()` (with `activePresetId` and `prompterLinkStatus`) |
 | `savePreset(name,id)` | `preset:save` | send ? on | Name and optional Scene ID |
 | `applyPreset(id)` | `preset:apply` | send ? on | Scene ID |
 | `deletePreset(id)` | `preset:delete` | send ? on | Scene ID |

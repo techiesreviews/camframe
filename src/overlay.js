@@ -536,16 +536,25 @@ function prompterStatusText(status = { state: 'off' }) {
   return 'Off. When on, the prompter can switch this view at [Face …] cue lines.'
 }
 
+// Rebuilds a select's options only when they change and sets its choice only when it differs, so
+// a state update (the Corner margin slider, a status change) never closes an open dropdown.
+const filledChoices = new WeakMap()
 function fillChoices(select, options, value, fallback) {
-  select.replaceChildren(...options.map(([optionValue, label]) => new Option(label, optionValue)))
-  select.value = options.some(([optionValue]) => optionValue === value) ? value : fallback
+  const chosen = options.some(([optionValue]) => optionValue === value) ? value : fallback
+  const key = JSON.stringify(options)
+  if (filledChoices.get(select) !== key) {
+    filledChoices.set(select, key)
+    select.replaceChildren(...options.map(([optionValue, label]) => new Option(label, optionValue)))
+  }
+  if (select.value !== chosen) select.value = chosen
 }
 
 function renderPrompterLink() {
   const status = state.prompterLinkStatus ?? { state: 'off' }
   prompterToggle.checked = state.prompterLink
   prompterStatus.dataset.state = state.prompterLink ? status.state : 'off'
-  prompterStatus.textContent = prompterStatusText(state.prompterLink ? status : undefined)
+  const statusText = prompterStatusText(state.prompterLink ? status : undefined)
+  if (prompterStatus.textContent !== statusText) prompterStatus.textContent = statusText
   prompterOptions.hidden = !state.prompterLink
   const scenes = state.presets.map((preset) => [`scene:${preset.id}`, `Scene: ${preset.name}`])
   fillChoices(prompterFull, [['fullscreen', 'Full screen'], ...scenes], state.prompterFaceFull, 'fullscreen')

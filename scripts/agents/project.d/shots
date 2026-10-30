@@ -5,7 +5,7 @@
 // opens Inline settings on the Scenes tab and captures the Prompter link off, on and with a busy port,
 // at the default Overlay window size (324x390) and a tall view. Evidence: .scratch/shots/<time>/.
 import { createServer } from 'node:http'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { execFileSync } from 'node:child_process'
@@ -16,13 +16,16 @@ Serves src/ locally and opens overlay.html in Chromium without Electron (the bro
 Inline settings on the Scenes tab: the Prompter link off, on (Face full / Face small / Corner margin) and with
 its port busy, at the default Overlay size (324x390, scrolled to the link) and a tall 324x820 view.
 Fails on page errors or when a control is missing. Playwright comes from KIT_PLAYWRIGHT_MODULE, else
-"playwright" in scripts/agents/kit.json. Evidence: .scratch/shots/<time>/shots.json and *.png.`)
+"playwright" in scripts/agents/kit.json (the repo's own playwright-core after npm ci; Chromium for it comes
+from npx playwright-core install chromium). Evidence: .scratch/shots/<time>/shots.json and *.png.`)
   process.exit(0)
 }
 
 const root = process.env.KIT_ROOT || execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
 const settings = JSON.parse(readFileSync(join(root, 'scripts/agents/kit.json'), 'utf8'))
-const playwrightPath = process.env.KIT_PLAYWRIGHT_MODULE || settings.playwright
+// A relative "playwright" is inside this repo (its own playwright-core devDependency, after npm ci).
+const playwrightSetting = process.env.KIT_PLAYWRIGHT_MODULE || settings.playwright
+const playwrightPath = playwrightSetting && resolve(root, playwrightSetting)
 const out = join(root, '.scratch', 'shots', new Date().toISOString().replace(/[:.]/g, '-'))
 mkdirSync(out, { recursive: true })
 const fail = (message) => {
@@ -30,6 +33,7 @@ const fail = (message) => {
   process.exit(1)
 }
 if (!playwrightPath) fail('no Playwright (set KIT_PLAYWRIGHT_MODULE or "playwright" in kit.json)')
+if (!existsSync(playwrightPath)) fail(`no Playwright at ${playwrightPath} (run npm ci, or set KIT_PLAYWRIGHT_MODULE)`)
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png' }
 const srcRoot = resolve(root, 'src')

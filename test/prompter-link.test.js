@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { createServer, request as httpRequest } from 'node:http'
 import { DEFAULT_SETTINGS, sanitizeSettings } from '../src/settings.js'
 import {
@@ -101,6 +102,54 @@ test('turning the link on listens on 127.0.0.1 only; turning it off closes the p
   await assert.rejects(call(port), /ECONNREFUSED/)
 })
 
+test('turning the link on and off in the same tick leaves no listener behind', async (t) => {
+  const probe = createServer()
+  await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve))
+  const port = probe.address().port
+  await new Promise((resolve) => probe.close(resolve))
+  const states = []
+  const link = createPrompterLink({ port, status: () => ({}), applyCue: () => ({ ok: true }), onState: (s) => states.push(s) })
+  t.after(() => link.close())
+  link.setEnabled(true)
+  link.setEnabled(false)
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.equal(link.state().state, 'off')
+  assert.deepEqual(states.map((state) => state.state), ['starting', 'off'])
+  await assert.rejects(call(port), /ECONNREFUSED/)
+
+  // The port is free for the next "on".
+  link.setEnabled(true)
+  await new Promise((resolve) => {
+    const wait = () => (link.state().state === 'starting' ? setTimeout(wait, 5) : resolve())
+    wait()
+  })
+  assert.equal(link.state().state, 'on')
+})
+
+test('a port that opens after the link was turned off is closed at once', async () => {
+  // Some Node versions still bind after close() when the host lookup was pending; model that.
+  const server = new EventEmitter()
+  Object.assign(server, {
+    listening: false,
+    listen(port, host, done) {
+      setImmediate(() => {
+        server.listening = true
+        done()
+      })
+    },
+    close() {
+      server.listening = false
+    },
+    address: () => ({ address: '127.0.0.1', port: 47833 }),
+  })
+  const link = createPrompterLink({ createServer: () => server, status: () => ({}), applyCue: () => ({ ok: true }) })
+  link.setEnabled(true)
+  link.setEnabled(false)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(server.listening, false)
+  assert.equal(link.state().state, 'off')
+})
+
 test('a busy port is reported, not thrown', async (t) => {
   const blocker = createServer()
   await new Promise((resolve) => blocker.listen(0, '127.0.0.1', resolve))
@@ -158,6 +207,28 @@ test('other sites are refused, and so is a rebound host name', async (t) => {
   const rebound = await call(port, { headers: { Host: `evil.example:${port}`, Origin: `http://evil.example:${port}` } })
   assert.equal(rebound.status, 403)
   assert.deepEqual(cues, [])
+})
+
+test('a file:// copy (Origin null) and a localhost Host reach the endpoint', async (t) => {
+  const { port, cues } = await startLink(t)
+  const fromFile = await call(port, {
+    method: 'POST',
+    path: '/camframe/cue',
+    headers: { ...json, Origin: 'null' },
+    body: { size: 'full' },
+  })
+  assert.equal(fromFile.status, 200)
+  assert.equal(fromFile.headers['access-control-allow-origin'], 'null')
+
+  const localhost = await call(port, {
+    method: 'POST',
+    path: '/camframe/cue',
+    headers: { ...json, Host: `localhost:${port}`, Origin: PROMPTER },
+    body: { size: 'small' },
+  })
+  assert.equal(localhost.status, 200)
+  assert.equal(localhost.headers['access-control-allow-origin'], PROMPTER)
+  assert.deepEqual(cues, [{ size: 'full' }, { size: 'small' }])
 })
 
 test('preflights answer the prompter, including Chrome Private Network Access', async (t) => {

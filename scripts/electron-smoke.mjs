@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { request as httpRequest } from 'node:http'
+import { createServer, request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { _electron as electron } from 'playwright-core'
@@ -155,7 +155,21 @@ function prompterCall(method, path, body) {
   })
 }
 
+// The smoke drives the real link port, so a CamFrame already running with the link on would get
+// these cues (and move its Overlay). Stop before launching instead.
+function portFree(port) {
+  return new Promise((resolve) => {
+    const probe = createServer()
+    probe.once('error', () => resolve(false))
+    probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)))
+  })
+}
+
 test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', async () => {
+  assert.ok(
+    await portFree(47833),
+    'Port 47833 is busy (is CamFrame running with the Prompter link on?). Quit it and run the smoke again.',
+  )
   await mkdir(artifactDirectory, { recursive: true })
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
   await writeFile(
@@ -207,6 +221,17 @@ test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', 
     await page.waitForTimeout(400)
     const sceneBounds = await overlayBounds(application)
     assert.deepEqual({ x: sceneBounds.x, y: sceneBounds.y, width: sceneBounds.width }, { x: 120, y: 140, width: 240 + 36 })
+    assert.equal((await page.evaluate(() => window.camFrame.getState())).activePresetId, 'preset-demo')
+
+    // A placed cue saves the new position in Preferences and clears the active Scene.
+    assert.equal((await prompterCall('POST', '/camframe/cue', { size: 'small', position: 'top-left' })).status, 200)
+    await page.waitForTimeout(400)
+    const topLeft = await overlayBounds(application)
+    const placedState = await page.evaluate(() => window.camFrame.getState())
+    assert.equal(placedState.activePresetId, '')
+    assert.deepEqual(placedState.position, { x: topLeft.x, y: topLeft.y })
+    const saved = JSON.parse(await readFile(join(userDataDirectory, 'preferences.json'), 'utf8'))
+    assert.deepEqual(saved.position, { x: topLeft.x, y: topLeft.y })
 
     const missing = await prompterCall('POST', '/camframe/cue', { scene: 'Outro' })
     assert.equal(missing.status, 404)

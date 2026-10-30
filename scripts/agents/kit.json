@@ -1,6 +1,5 @@
 {
   "project": "camframe",
-  "mainRoot": "/home/ubulex/Projects/camframe",
   "branches": {
     "land": "main"
   },
@@ -12,6 +11,6 @@
     "run": "node --test",
     "files": "test/**/*.test.js"
   },
-  "playwright": "/home/ubulex/Projects/native-site-editor-dev/node_modules/playwright/index.mjs",
+  "playwright": "node_modules/playwright-core/index.mjs",
   "standards": ["AGENTS.md", "CONTEXT.md"]
 }

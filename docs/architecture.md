@@ -155,7 +155,7 @@ Scene writes and imports run in main so file dialogs and Preferences remain priv
 
 ## Prompter link flow
 
-`settings.prompterLink` starts the link at launch and every `updateState` patch that contains it turns the server on or off; `before-quit` closes it. A cue request passes the host, origin, method, content-type, size, and `parseCue()` checks inside `prompter-link.js`, then main's `applyPrompterCue()` asks `cueAction()` what to do and applies it with the existing paths: `setFullscreen(true/false)`, the Scene library's `applyScene()` committed with `showCompact()` (leaves Full screen), or a position from `compactPositionAt()` on `currentWorkArea()` committed like an ordinary settings patch and moved with `showCompact()`. Every change still goes through `emitState()`, the tray refresh, and `saveSettings()`.
+`settings.prompterLink` starts the link at launch and every `updateState` patch that contains it turns the server on or off; `before-quit` closes it. A cue request passes the host, origin, method, content-type, size, and `parseCue()` checks inside `prompter-link.js`, then main's `applyPrompterCue()` asks `cueAction()` what to do and applies it with the existing paths: `setFullscreen(true/false)`, the Scene library's `applyScene()` committed with `showCompact()` (leaves Full screen), or a position from `compactPositionAt()` on `currentWorkArea()` committed like an ordinary settings patch and moved with `showCompact()`. A new bounds animation runs the finishing step of the one it replaces, so a burst of cues during the Full screen exit never leaves a stale saved Compact base. Every change still goes through `emitState()`, the tray refresh, and `saveSettings()`.
 
 ## Packaging and release flow
 

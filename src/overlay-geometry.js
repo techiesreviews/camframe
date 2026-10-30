@@ -200,7 +200,12 @@ export function createOverlayGeometry({
 
   function animateTo(target, onComplete) {
     if (!alive()) return
+    // A new animation replaces the running one, but its finishing step still runs (leaving Full
+    // screen clears the saved Compact base and restores the z-order there), or a burst of moves
+    // would keep a stale base for the next Full screen.
+    const replaced = animation?.onComplete
     stopAnimation()
+    replaced?.()
     if (reducedMotion) {
       window.setBounds({ ...target })
       onComplete?.()
@@ -270,14 +275,13 @@ export function createOverlayGeometry({
           workArea: screen.getPrimaryDisplay().workArea,
           keepCenter: false,
         })
-    const stayOnTop = current.alwaysOnTop
-    const visible = current.overlayVisible
     fullscreen = false
     applyZOrder({ stayOnTop: true })
     window.show()
     onFullscreenChanged(false)
     animateTo(windowFromBase(base), () => {
       if (fullscreen || !alive()) return
+      const { alwaysOnTop: stayOnTop, overlayVisible: visible } = settings()
       applyZOrder({ stayOnTop })
       if (visible) {
         window.showInactive()
@@ -352,7 +356,8 @@ export function createOverlayGeometry({
         showScene()
         return
       }
-      compactBase = undefined
+      // A Scene without a position keeps the place the Overlay had before Full screen.
+      if (settings().position) compactBase = undefined
       exitFullscreen()
     },
 

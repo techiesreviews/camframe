@@ -90,6 +90,7 @@ function readBody(request) {
       size += chunk.length
       if (size > MAX_BODY_BYTES) {
         request.removeAllListeners('data')
+        request.removeAllListeners('end')
         request.resume()
         reject(Object.assign(new Error('too large'), { status: 413 }))
         return
@@ -226,7 +227,12 @@ export function createPrompterLink({
       })
     })
     next.listen(port, host, () => {
-      if (server !== next) return
+      // Turned off before the port opened (listen resolves the host on a later tick, so stop()
+      // could not close it yet): close it now instead of leaving an unseen listener.
+      if (server !== next) {
+        next.close()
+        return
+      }
       setState({ state: 'on', port: next.address().port })
     })
   }
