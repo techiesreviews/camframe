@@ -100,7 +100,7 @@ During the Onboarding framing step, `Escape` turns framing mode off and keeps th
 
 ## KG-13 — The Prompter link lacks manual Windows and macOS evidence
 
-**Status:** Open verification gap, 2026-10-30.
-**Evidence:** Automated: unit tests (server, origins, host, cue checks, placement on several displays) and real-Electron cue runs on Linux (`docs/verification/runs/2026-10-30-prompter-link.md`, `2026-10-30-prompter-link-review.md`, `2026-10-30-prompter-link-toolbar.md`). Lex reported on 2026-10-30 that the link works on Lex's Windows PC (browser, prompts and display layout not recorded); not yet observed on macOS.
+**Status:** Open verification gap, 2026-10-30; updated 2026-10-31 (the preview origin, ADR 0033).
+**Evidence:** Automated: unit tests (server, origins including the prompter's preview, host, cue checks, placement on several displays) and real-Electron cue runs on Linux (`docs/verification/runs/2026-10-30-prompter-link.md`, `2026-10-30-prompter-link-review.md`, `2026-10-30-prompter-link-toolbar.md`; the preview origin in `2026-10-31-prompter-link-preview-origin.md`, unit tests only). Lex reported on 2026-10-30 that the link works on Lex's Windows PC (browser, prompts and display layout not recorded); not yet observed on macOS.
 
 Still to confirm by hand: Chrome's one-time Local Network Access prompt when https://prompter.techies.tools, and again when its preview https://preview.prompter.techies.tools (ADR 0033), first reaches `127.0.0.1:47833`; whether the Windows Defender Firewall or macOS firewall prompts for a `127.0.0.1`-only listener (not expected); Safari reaching `http://127.0.0.1` from an https page (may be refused, so Chrome or Edge is the supported pairing); corner placement with mixed display scaling, a display left of or above the primary one, and a taskbar or Dock on the side. These are the manual rows W-30 and M-12 in `docs/verification/README.md`.

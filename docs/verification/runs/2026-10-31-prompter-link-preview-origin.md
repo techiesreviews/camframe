@@ -1,6 +1,6 @@
 # Verification run: build/ke-80-preview-origin — 2026-10-31
 
-- **Commit:** `54369c5` and `3725702` on base `2df0d20`, plus the review-fix commit after them that adds two preview checks (status read, look-alike preflight); the counts below are for that last commit
+- **Commit:** `533c426e9c03852dbb6e3396d2bd4ca775c2b3ca` (the counts below), after `54369c5213e6e7c9b0de39ecec2fa72e7c3b7322` and `37257021f3a62a2280663168b81a2eb47bebc40e`, on base `2df0d206`; later commits on the PR change only documents
 - **Version:** unreleased after 0.6.0
 - **Observer:** agent (Claude Opus 5.5, ticket ke-80)
 - **Environment:** Linux 7.0.0-42-generic, Node v24.21.0, dev checkout (no packaged build)
