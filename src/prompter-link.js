@@ -22,9 +22,10 @@ const LOCAL_ORIGIN_PATTERN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?$
 const isPlainObject = (value) =>
   Boolean(value) && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
 
+const PROMPTER_ORIGINS = new Set([PROMPTER_SITE, PROMPTER_PREVIEW_SITE, 'null'])
+
 // Browsers send `Origin` on every cross-origin request. `null` is a file:// copy of the prompter.
 // A request without `Origin` comes from a program on this computer, not from a web page.
-const PROMPTER_ORIGINS = new Set([PROMPTER_SITE, PROMPTER_PREVIEW_SITE, 'null'])
 export function originAllowed(origin) {
   if (origin === undefined) return true
   return PROMPTER_ORIGINS.has(origin) || LOCAL_ORIGIN_PATTERN.test(origin)
