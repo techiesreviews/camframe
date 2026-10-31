@@ -9,7 +9,7 @@ import { ONBOARDING_STEP_COUNT } from '../src/onboarding.js'
 // Behavior lives in the module suites; keep these to what only the source text can show.
 
 const sourceRoot = join(import.meta.dirname, '..', 'src')
-// A Windows checkout may turn line endings into CRLF; the contracts below match LF.
+// .gitattributes keeps new checkouts LF; an older Windows checkout may still hold CRLF, and the contracts below match LF.
 const read = (file) => readFileSync(join(sourceRoot, file), 'utf8').replace(/\r\n/g, '\n')
 const overlayHtml = read('overlay.html')
 const overlayCss = read('overlay.css')
