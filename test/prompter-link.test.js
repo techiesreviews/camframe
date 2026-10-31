@@ -43,6 +43,7 @@ function call(port, { method = 'GET', path = '/camframe/status', headers = {}, b
 
 const json = { 'Content-Type': 'application/json' }
 const PROMPTER = 'https://prompter.techies.tools'
+const PREVIEW = 'https://preview.prompter.techies.tools'
 
 async function startLink(t, { settings = withScenes(), applyCue } = {}) {
   const cues = []
@@ -210,7 +211,7 @@ test('a busy port is reported, not thrown', async (t) => {
 
 test('origins: the prompter site, its preview, localhost pages and file:// copies only', () => {
   assert.equal(originAllowed(PROMPTER), true)
-  assert.equal(originAllowed('https://preview.prompter.techies.tools'), true, "the prompter's preview")
+  assert.equal(originAllowed(PREVIEW), true, "the prompter's preview")
   assert.equal(originAllowed('null'), true)
   assert.equal(originAllowed('http://localhost:8787'), true)
   assert.equal(originAllowed('http://127.0.0.1:5173'), true)
@@ -302,7 +303,10 @@ test('preflights answer the prompter, including Chrome Private Network Access', 
 
 test("the prompter's preview gets the same answers as the live site; a look-alike does not", async (t) => {
   const { port, cues } = await startLink(t)
-  const PREVIEW = 'https://preview.prompter.techies.tools'
+  const status = await call(port, { headers: { Origin: PREVIEW } })
+  assert.equal(status.status, 200)
+  assert.equal(status.headers['access-control-allow-origin'], PREVIEW)
+
   const preflight = await call(port, {
     method: 'OPTIONS',
     path: '/camframe/cue',
@@ -329,6 +333,18 @@ test("the prompter's preview gets the same answers as the live site; a look-alik
   })
   assert.equal(lookAlike.status, 403)
   assert.equal(lookAlike.headers['access-control-allow-origin'], undefined)
+  const lookAlikePreflight = await call(port, {
+    method: 'OPTIONS',
+    path: '/camframe/cue',
+    headers: {
+      Origin: 'https://evil.preview.prompter.techies.tools',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Private-Network': 'true',
+    },
+  })
+  assert.equal(lookAlikePreflight.status, 403)
+  assert.equal(lookAlikePreflight.headers['access-control-allow-origin'], undefined)
+  assert.equal(lookAlikePreflight.headers['access-control-allow-private-network'], undefined)
   assert.deepEqual(cues, [{ size: 'full' }])
 })
 
