@@ -210,6 +210,7 @@ test('a busy port is reported, not thrown', async (t) => {
 
 test('origins: the prompter site, localhost pages and file:// copies only', () => {
   assert.equal(originAllowed(PROMPTER), true)
+  assert.equal(originAllowed('https://preview.prompter.techies.tools'), true, "the prompter's preview")
   assert.equal(originAllowed('null'), true)
   assert.equal(originAllowed('http://localhost:8787'), true)
   assert.equal(originAllowed('http://127.0.0.1:5173'), true)
@@ -219,6 +220,10 @@ test('origins: the prompter site, localhost pages and file:// copies only', () =
     'https://evil.example',
     'http://prompter.techies.tools',
     'https://prompter.techies.tools.evil.example',
+    'http://preview.prompter.techies.tools',
+    'https://preview.prompter.techies.tools.evil.example',
+    'https://evil.preview.prompter.techies.tools',
+    'https://preview.prompter.techies.tools:8443',
     'https://localhost:8787',
     'http://localhost.evil.example',
     'http://127.0.0.1.evil.example',

@@ -179,7 +179,7 @@ Served by `src/prompter-link.js` only while `prompterLink` is `true`, on `http:/
 | `OPTIONS` (CORS preflight) | `204` with `Access-Control-Allow-Origin: <origin>`, `-Methods: GET, POST`, `-Headers: Content-Type`, `-Max-Age: 600`, and `Access-Control-Allow-Private-Network: true` when the request asks for it (Chrome Private Network Access) |
 | Wrong method / other path | `405` with `Allow` / `404` |
 | `Host` other than `127.0.0.1:47833` or `localhost:47833` | `403` (DNS-rebinding guard) |
-| `Origin` other than `https://prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, or `null` | `403`, no CORS headers. A request without `Origin` (a local program) is allowed. |
+| `Origin` other than `https://prompter.techies.tools`, `https://preview.prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, or `null` | `403`, no CORS headers. A request without `Origin` (a local program) is allowed. |
 
 A cue is a JSON object with only these fields: `size` (`"full"` or `"small"`), `position` (one of the seven places, only with `"small"`), and `scene` (a Scene name, 1–40 characters after trimming; no `position`; `size` absent or `"small"`). It needs `size` or `scene`. Anything else is a `400`. What a valid cue does follows `prompterFaceFull`, `prompterFaceSmall`, and `prompterMargin` (`cueAction()` and `compactPositionAt()`; see the product specification).
 
