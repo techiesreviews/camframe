@@ -208,7 +208,7 @@ test('a busy port is reported, not thrown', async (t) => {
   assert.equal(link.state().state, 'off')
 })
 
-test('origins: the prompter site, localhost pages and file:// copies only', () => {
+test('origins: the prompter site, its preview, localhost pages and file:// copies only', () => {
   assert.equal(originAllowed(PROMPTER), true)
   assert.equal(originAllowed('https://preview.prompter.techies.tools'), true, "the prompter's preview")
   assert.equal(originAllowed('null'), true)
@@ -298,6 +298,38 @@ test('preflights answer the prompter, including Chrome Private Network Access', 
   assert.equal(fileCopy.status, 204)
   assert.equal(fileCopy.headers['access-control-allow-origin'], 'null')
   assert.equal(fileCopy.headers['access-control-allow-private-network'], undefined)
+})
+
+test("the prompter's preview gets the same answers as the live site; a look-alike does not", async (t) => {
+  const { port, cues } = await startLink(t)
+  const PREVIEW = 'https://preview.prompter.techies.tools'
+  const preflight = await call(port, {
+    method: 'OPTIONS',
+    path: '/camframe/cue',
+    headers: {
+      Origin: PREVIEW,
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type',
+      'Access-Control-Request-Private-Network': 'true',
+    },
+  })
+  assert.equal(preflight.status, 204)
+  assert.equal(preflight.headers['access-control-allow-origin'], PREVIEW)
+  assert.equal(preflight.headers['access-control-allow-private-network'], 'true')
+
+  const cue = await call(port, { method: 'POST', path: '/camframe/cue', headers: { ...json, Origin: PREVIEW }, body: { size: 'full' } })
+  assert.equal(cue.status, 200)
+  assert.equal(cue.headers['access-control-allow-origin'], PREVIEW)
+
+  const lookAlike = await call(port, {
+    method: 'POST',
+    path: '/camframe/cue',
+    headers: { ...json, Origin: 'https://evil.preview.prompter.techies.tools' },
+    body: { size: 'small' },
+  })
+  assert.equal(lookAlike.status, 403)
+  assert.equal(lookAlike.headers['access-control-allow-origin'], undefined)
+  assert.deepEqual(cues, [{ size: 'full' }])
 })
 
 test('cues are checked strictly', () => {

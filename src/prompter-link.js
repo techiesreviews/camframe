@@ -24,9 +24,10 @@ const isPlainObject = (value) =>
 
 // Browsers send `Origin` on every cross-origin request. `null` is a file:// copy of the prompter.
 // A request without `Origin` comes from a program on this computer, not from a web page.
+const PROMPTER_ORIGINS = new Set([PROMPTER_SITE, PROMPTER_PREVIEW_SITE, 'null'])
 export function originAllowed(origin) {
   if (origin === undefined) return true
-  return origin === PROMPTER_SITE || origin === PROMPTER_PREVIEW_SITE || origin === 'null' || LOCAL_ORIGIN_PATTERN.test(origin)
+  return PROMPTER_ORIGINS.has(origin) || LOCAL_ORIGIN_PATTERN.test(origin)
 }
 
 // Refuses DNS rebinding: a page whose own name points at 127.0.0.1 still sends its name as Host.
