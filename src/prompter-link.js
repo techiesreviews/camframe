@@ -2,14 +2,17 @@ import { createServer as createHttpServer } from 'node:http'
 import { COMPACT_SPOTS } from './settings.js'
 
 // The Prompter link: an opt-in, view-only HTTP endpoint on this computer that lets the teleprompter
-// (https://prompter.techies.tools, a local copy, or a file:// copy) switch the Overlay between Full
-// screen, Compact mode at a chosen spot, and a saved Scene when its reading line reaches a cue line.
+// (https://prompter.techies.tools, its preview https://preview.prompter.techies.tools, a local copy, or
+// a file:// copy) switch the Overlay between Full screen, Compact mode at a chosen spot, and a saved
+// Scene when its reading line reaches a cue line.
 // It binds 127.0.0.1 only, answers only the prompter's origins, and never changes the camera
 // itself. Main owns the window effects through `applyCue`; this module owns the wire protocol.
 
 export const PROMPTER_LINK_HOST = '127.0.0.1'
 export const PROMPTER_LINK_PORT = 47833
 export const PROMPTER_SITE = 'https://prompter.techies.tools'
+// The prompter's own test copy (its Worker techies-prompter-preview), where Lex tries a build first.
+export const PROMPTER_PREVIEW_SITE = 'https://preview.prompter.techies.tools'
 const MAX_BODY_BYTES = 1024
 const SCENE_NAME_MAX = 40
 const CUE_KEYS = new Set(['size', 'position', 'scene'])
@@ -23,7 +26,7 @@ const isPlainObject = (value) =>
 // A request without `Origin` comes from a program on this computer, not from a web page.
 export function originAllowed(origin) {
   if (origin === undefined) return true
-  return origin === PROMPTER_SITE || origin === 'null' || LOCAL_ORIGIN_PATTERN.test(origin)
+  return origin === PROMPTER_SITE || origin === PROMPTER_PREVIEW_SITE || origin === 'null' || LOCAL_ORIGIN_PATTERN.test(origin)
 }
 
 // Refuses DNS rebinding: a page whose own name points at 127.0.0.1 still sends its name as Host.
