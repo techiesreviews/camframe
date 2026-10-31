@@ -150,7 +150,7 @@ Presentation entry points:
 
 ## Prompter link
 
-An optional link that lets the Techies teleprompter (https://prompter.techies.tools, its preview https://preview.prompter.techies.tools, a local copy, or a file:// copy) switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it never records, streams, or changes the camera itself (ADR 0031).
+An optional link that lets the Techies teleprompter (https://prompter.techies.tools, its preview https://preview.prompter.techies.tools (ADR 0033), a local copy, or a file:// copy) switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it never records, streams, or changes the camera itself (ADR 0031).
 
 - Off by default. Turning it on in Inline settings → Scenes, or with the toolbar's Prompter link button (scroll icon), starts a tiny HTTP server bound to `127.0.0.1` only, on port `47833`. Turning it off, or quitting, closes the port. With it off nothing listens.
 - The toolbar button and the settings switch are two views of the one stored setting and always agree. The button is pressed while the link is on and shows a dot: green ready, grey starting, orange a problem.
@@ -183,7 +183,7 @@ Start at login is applied only in packaged builds. Development runs never regist
 - Both BrowserWindow definitions use context isolation, sandboxing, and no Node integration.
 - The preload exposes a narrow IPC bridge; renderers do not receive `ipcRenderer` directly.
 - Media permission is granted only to the Overlay web contents and only for `media`.
-- The only network listener is the opt-in Prompter link: `127.0.0.1` only, view changes only, strict origin, host, and body checks, no logging (ADR 0031).
+- The only network listener is the opt-in Prompter link: `127.0.0.1` only, view changes only, strict origin, host, and body checks, no logging (ADR 0031; the preview origin, ADR 0033).
 - Release contents are limited to `src/**/*` and `package.json` inside ASAR, with English Chromium locale only.
 - Windows targets are NSIS and portable executables. macOS targets are unsigned DMG and ZIP for Intel and Apple Silicon and include the camera usage description.
 - GPU acceleration remains enabled.
