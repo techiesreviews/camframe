@@ -35,10 +35,18 @@ const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const namesVersion = (text, forVersion) => new RegExp(`^- \\*\\*Version:\\*\\* ${escapeRegExp(forVersion)}\\s*$`, 'm').test(text)
 const datedRuns = (names, forVersion) =>
   names.filter((name) => /^\d{4}-\d{2}-\d{2}-/.test(name) && name.includes(`-v${forVersion}-`)).sort()
-// The tag hold: the run that releases a version has exactly the line `- **Decision:** Go` (not No-go, not "Go pending ...").
-const saysGo = (text) => /^- \*\*Decision:\*\* Go\s*$/m.test(text)
-const goRun = (names, forVersion, readRun, row) =>
-  datedRuns(names, forVersion).find((name) => namesVersion(readRun(name), forVersion) && saysGo(readRun(name)) && row.includes(`verification/runs/${name}`))
+// The tag hold. A tag build must be for exactly v<version>, and the newest linked run in force (not "> Superseded ...")
+// that has a Decision line must say exactly `- **Decision:** Go` (not No-go, not "Go pending ..."). Non-tag builds skip it.
+const decisionLine = /^- \*\*Decision:\*\* (.*?)\s*$/m
+const tagHold = (ref, forVersion, names, readRun, row) => {
+  if (!ref.startsWith('refs/tags/')) return 'skip'
+  if (ref !== `refs/tags/v${forVersion}`) return `tag ${ref} is not v${forVersion}`
+  const decisions = datedRuns(names, forVersion)
+    .filter((name) => row.includes(`verification/runs/${name}`) && namesVersion(readRun(name), forVersion) && !/^> Superseded/m.test(readRun(name)) && decisionLine.test(readRun(name)))
+    .map((name) => [name, readRun(name).match(decisionLine)[1]])
+  const newest = decisions.at(-1)
+  return newest && newest[1] === 'Go' ? 'ok' : `the newest linked run's decision is ${newest ? `"${newest[1]}" (${newest[0]})` : 'missing'}, not Go`
+}
 const linkedRun = (names, forVersion, readRun, row) =>
   datedRuns(names, forVersion).find((name) => namesVersion(readRun(name), forVersion) && row.includes(`verification/runs/${name}`))
 
@@ -111,25 +119,36 @@ test('the Product version is read from the Baseline section only', () => {
   assert.equal(baselineNamesVersion(readme(other, baseline('- Product version: `9.9.9`')), '9.9.9'), true, 'Baseline last in the file')
 })
 
-test('on a v<version> tag the newest release row links a run that says Go', (t) => {
-  if (process.env.GITHUB_REF !== `refs/tags/v${version}`) return t.skip('not a tag build')
+test('a version tag build is for v<version> and the newest linked run says Go', (t) => {
   const runs = readdirSync(join(root, 'docs', 'verification', 'runs'))
   const { row } = firstReleaseRow(read('docs/product-history.md'))
-  assert.ok(goRun(runs, version, (name) => read(`docs/verification/runs/${name}`), row), `a linked *-v${version}-*.md run with "- **Decision:** Go"`)
+  const result = tagHold(process.env.GITHUB_REF ?? '', version, runs, (name) => read(`docs/verification/runs/${name}`), row)
+  if (result === 'skip') return t.skip('not a tag build')
+  assert.equal(result, 'ok')
 })
 
-test('the tag hold passes only for a linked run that says exactly Go', () => {
+test('the tag hold passes only for the newest linked run in force saying exactly Go on exactly v<version>', () => {
   const files = {
+    '2026-11-03-v9.9.9-go-old.md': '- **Version:** 9.9.9\n- **Decision:** Go',
     '2026-11-04-v9.9.9-nogo.md': '- **Version:** 9.9.9\n- **Decision:** No-go',
     '2026-11-05-v9.9.9-pending.md': '- **Version:** 9.9.9\n- **Decision:** Go pending the release workflow run',
     '2026-11-06-v9.9.9-go.md': '- **Version:** 9.9.9\n- **Decision:** Go',
+    '2026-11-07-v9.9.9-other.md': '- **Version:** 9.9.8\n- **Decision:** Go',
+    '2026-11-08-v9.9.9-old.md': '> Superseded by another run.\n- **Version:** 9.9.9\n- **Decision:** No-go',
   }
   const names = Object.keys(files)
   const readFixture = (name) => files[name]
   const link = (...runs) => `| 9.9.9 | outcome | See ${runs.map((run) => `\`verification/runs/${run}\``).join(' and ')} |`
-  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-04-v9.9.9-nogo.md')), undefined, 'a No-go run only')
-  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-05-v9.9.9-pending.md')), undefined, 'a "Go pending" run only')
-  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-04-v9.9.9-nogo.md', '2026-11-06-v9.9.9-go.md')), '2026-11-06-v9.9.9-go.md', 'a No-go run beside a Go run')
-  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-04-v9.9.9-nogo.md')), undefined)
-  assert.equal(goRun(names, '9.9.9', readFixture, '| 9.9.9 | outcome | no link |'), undefined, 'a Go run that the row does not link')
+  const hold = (ref, ...runs) => tagHold(ref, '9.9.9', names, readFixture, link(...runs))
+  const tag = 'refs/tags/v9.9.9'
+  assert.equal(hold(tag, '2026-11-04-v9.9.9-nogo.md'), "the newest linked run's decision is \"No-go\" (2026-11-04-v9.9.9-nogo.md), not Go", 'a No-go run only')
+  assert.match(hold(tag, '2026-11-05-v9.9.9-pending.md'), /Go pending/, 'a "Go pending" run only')
+  assert.equal(hold(tag, '2026-11-04-v9.9.9-nogo.md', '2026-11-06-v9.9.9-go.md'), 'ok', 'a No-go run beside a newer Go run')
+  assert.match(hold(tag, '2026-11-03-v9.9.9-go-old.md', '2026-11-04-v9.9.9-nogo.md'), /No-go/, 'an older Go run replaced by a newer No-go run')
+  assert.match(hold(tag, '2026-11-07-v9.9.9-other.md'), /missing/, 'a Go run that names another version')
+  assert.equal(hold(tag, '2026-11-06-v9.9.9-go.md', '2026-11-08-v9.9.9-old.md'), 'ok', 'a superseded run does not count')
+  assert.match(hold(tag), /missing/, 'a Go run the row does not link')
+  assert.match(hold('refs/tags/v9.9.90', '2026-11-06-v9.9.9-go.md'), /not v9\.9\.9/, 'a longer tag')
+  assert.match(hold('refs/tags/v9.9.9-rc.1', '2026-11-06-v9.9.9-go.md'), /not v9\.9\.9/, 'a release candidate tag')
+  assert.equal(hold('refs/heads/main', '2026-11-04-v9.9.9-nogo.md'), 'skip', 'a branch build')
 })
