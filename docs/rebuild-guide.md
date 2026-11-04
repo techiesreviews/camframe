@@ -37,7 +37,7 @@ npm test
 npm run dist:mac
 ```
 
-The CI release path is authoritative for cross-platform artifacts: tag `v<version>` (exactly the package version, with a `*-v<version>-go.md` run that says Go), test/build Windows x64 plus macOS arm64/x64, upload artifacts, then create a GitHub release.
+The CI release path is authoritative for cross-platform artifacts: tag `v<version>` (exactly the package version, with a dated `<date>-v<version>-go.md` run that says Go), test/build Windows x64 plus macOS arm64/x64, upload artifacts, then create a GitHub release.
 
 ## Greenfield reconstruction order
 
