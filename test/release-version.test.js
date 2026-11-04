@@ -92,6 +92,7 @@ test('the first release row is read from the Release timeline only', () => {
   assert.equal(firstReleaseRow('# History\n\n| --- | --- |\n| 9.9.9 | a |').found, false, 'no Release timeline heading')
   assert.equal(firstReleaseRow('# History\n\n## Release timeline\n\nNo table yet.').found, false, 'no header separator after the heading')
   assert.equal(firstReleaseRow('## Release timeline\n\nNo table yet.\n\n## Other\n\n| --- | --- |\n| 9.9.9 | a |').found, false, 'a table in the next section is not the timeline')
+  assert.deepEqual(firstReleaseRow('## Release timeline\n\n| --- | --- |\n| 9.9.9 | a |\n\n## Other\n\n| --- | --- |\n| 1.0.0 | b |'), { found: true, row: '| 9.9.9 | a |' }, 'the timeline table wins over a later section\'s table')
   assert.equal(firstReleaseRow('## Release timeline\n| --- | --- |').row, '', 'separator on the last line gives an empty row, not a crash')
 })
 
