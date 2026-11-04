@@ -10,7 +10,7 @@ Accepted — 2026-11-04 (Lex's lead, fleet-lead), after Lex asked for the 0.6.1 
 
 ## Decision
 
-- `test/release-version.test.js` fails a tag build (`GITHUB_REF` starting `refs/tags/`) unless the tag is exactly `v<version>` and there is exactly one `docs/verification/runs/*-v<version>-go.md` with the lines `- **Decision:** Go` and `- **Version:** <version>`. A tag build runs `npm test` before `release` (which needs `build`), so a failing hold publishes nothing.
+- `test/release-version.test.js` fails a tag build (`GITHUB_REF` starting `refs/tags/`) unless the tag is exactly `v<version>` and there is exactly one dated `docs/verification/runs/<date>-v<version>-go.md` with the lines `- **Decision:** Go` and `- **Version:** <version>`. A tag build runs `npm test` before `release` (which needs `build`), so a failing hold publishes nothing.
 - No Go file, more than one, or a wrong line fails with a plain reason. To take a Go back, rename its file so it no longer ends in `-go.md`.
 - Manual dispatch on a branch still builds without publishing; the hold is for tags.
 
