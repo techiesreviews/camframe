@@ -70,19 +70,19 @@ test('a second dated run for the same version does not break the check, in any l
     '2026-11-09-v9.9.90-release.md': '- **Version:** 9.9.9',
   }
   const names = Object.keys(files)
-  const read = (name) => files[name]
+  const readFixture = (name) => files[name]
   const link = (...runs) => `| 9.9.9 | outcome | See ${runs.map((run) => `\`verification/runs/${run}\``).join(' and ')} |`
   const both = link('2026-11-05-v9.9.9-artifacts.md', '2026-11-04-v9.9.9-release.md')
   // Both runs linked: the sorted-first one wins, whatever order the files are listed in.
-  assert.equal(linkedRun(names, '9.9.9', read, both), '2026-11-04-v9.9.9-release.md')
-  assert.equal(linkedRun([...names].reverse(), '9.9.9', read, both), '2026-11-04-v9.9.9-release.md')
-  assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-05-v9.9.9-artifacts.md')), '2026-11-05-v9.9.9-artifacts.md', 'only the second run linked')
-  assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-06-v9.9.9-notes.md')), undefined, 'a linked run that names another version')
-  assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-07-v9.9.9-x.md')), undefined, 'a linked run that names 9.9.90')
-  assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-08-v9.9.9-rc.md')), undefined, 'a linked run that names 9.9.9-rc.1')
-  assert.equal(linkedRun(names, '9.9.9', read, link('v9.9.9-release.md')), undefined, 'an undated run name')
-  assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-09-v9.9.90-release.md')), undefined, 'a run name for v9.9.90')
-  assert.equal(linkedRun(names, '9.9.9', read, '| 9.9.9 | outcome | no link |'), undefined, 'no linked run')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, both), '2026-11-04-v9.9.9-release.md')
+  assert.equal(linkedRun([...names].reverse(), '9.9.9', readFixture, both), '2026-11-04-v9.9.9-release.md')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, link('2026-11-05-v9.9.9-artifacts.md')), '2026-11-05-v9.9.9-artifacts.md', 'only the second run linked')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, link('2026-11-06-v9.9.9-notes.md')), undefined, 'a linked run that names another version')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, link('2026-11-07-v9.9.9-x.md')), undefined, 'a linked run that names 9.9.90')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, link('2026-11-08-v9.9.9-rc.md')), undefined, 'a linked run that names 9.9.9-rc.1')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, link('v9.9.9-release.md')), undefined, 'an undated run name')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, link('2026-11-09-v9.9.90-release.md')), undefined, 'a run name for v9.9.90')
+  assert.equal(linkedRun(names, '9.9.9', readFixture, '| 9.9.9 | outcome | no link |'), undefined, 'no linked run')
 })
 
 test('the first release row is read from the Release timeline only', () => {
