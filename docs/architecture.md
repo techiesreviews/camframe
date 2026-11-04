@@ -44,7 +44,7 @@ global shortcuts / tray
 | `test/*.test.js` | One suite per module, the Preferences fixture contract, static markup/CSS/wiring contracts (`overlay-markup.test.js`), and the release version agreement check (`release-version.test.js`) | `npm test` / CI |
 | `test/fixtures/preferences/` | Language-neutral sanitize, load, and Scene import cases every Preferences implementation must pass | Node tests; future ports |
 | `scripts/electron-smoke.mjs` | Real Electron lifecycle, preload/IPC, synthetic-camera, Full screen/profile, accessibility-emulation, and screenshot smoke | `npm run test:electron` / Windows CI; uses main-process-only `CAMFRAME_E2E*` environment hooks |
-| `.github/workflows/build-desktop.yml` | Tagged Windows/macOS build and GitHub release; a tag build must be for exactly `v<version>` and the newest linked run in force must say `- **Decision:** Go` (`test/release-version.test.js`) | Manual dispatch (builds, publishes nothing) or `v*` tag |
+| `.github/workflows/build-desktop.yml` | Tagged Windows/macOS build and GitHub release; a tag build must be for exactly `v<version>` and the newest linked run in force must say `- **Decision:** Go` (`test/release-version.test.js`) | Manual dispatch on a branch (builds, publishes nothing) or `v*` tag (ADR 0034) |
 
 ## State ownership
 
