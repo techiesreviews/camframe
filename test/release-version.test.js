@@ -35,13 +35,16 @@ const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const namesVersion = (text, forVersion) => new RegExp(`^- \\*\\*Version:\\*\\* ${escapeRegExp(forVersion)}\\s*$`, 'm').test(text)
 const datedRuns = (names, forVersion) =>
   names.filter((name) => /^\d{4}-\d{2}-\d{2}-/.test(name) && name.includes(`-v${forVersion}-`)).sort()
-// The tag hold: a tag build must be for exactly v<version>, and exactly one docs/verification/runs/*-v<version>-go.md must
+// The tag hold: a tag build must be for exactly v<version>, and exactly one dated docs/verification/runs/<date>-v<version>-go.md must
 // exist with the lines `- **Decision:** Go` and `- **Version:** <version>`. Branch builds skip it. To take a Go back, rename its file.
 const tagHold = (ref, forVersion, names, readRun) => {
   if (!ref.startsWith('refs/tags/')) return 'skip'
   if (ref !== `refs/tags/v${forVersion}`) return `tag ${ref} is not v${forVersion}`
   const goFiles = datedRuns(names, forVersion).filter((name) => name.endsWith(`-v${forVersion}-go.md`))
-  if (goFiles.length === 0) return `no docs/verification/runs/*-v${forVersion}-go.md`
+  if (goFiles.length === 0) {
+    const ignored = names.filter((name) => new RegExp(`(^|-)v${escapeRegExp(forVersion)}-go\\.md$`).test(name))
+    return `no dated <date>-v${forVersion}-go.md run in docs/verification/runs${ignored.length ? ` (ignored, no date: ${ignored.join(', ')})` : ''}`
+  }
   if (goFiles.length > 1) return `more than one *-v${forVersion}-go.md: ${goFiles.join(', ')}`
   const lines = readRun(goFiles[0]).split('\n').map((line) => line.replace(/\s+$/, ''))
   const only = (prefix, value) => lines.filter((line) => line.startsWith(prefix)).length === 1 && lines.includes(`${prefix} ${value}`)
@@ -133,16 +136,19 @@ test('the tag hold passes only for one valid Go file on exactly v<version>', () 
   const hold = (ref, files) => tagHold(ref, '9.9.9', Object.keys(files), (name) => files[name])
   const tag = 'refs/tags/v9.9.9'
   assert.equal(hold(tag, { '2026-11-05-v9.9.9-go.md': go }), 'ok', 'one valid Go file')
-  assert.equal(hold(tag, { '2026-11-04-v9.9.9-no-go.md': '- **Version:** 9.9.9\n- **Decision:** No-go' }), 'no docs/verification/runs/*-v9.9.9-go.md', 'no Go file (a No-go run)')
+  assert.equal(hold(tag, { '2026-11-04-v9.9.9-no-go.md': '- **Version:** 9.9.9\n- **Decision:** No-go' }), 'no dated <date>-v9.9.9-go.md run in docs/verification/runs', 'no Go file (a No-go run)')
   assert.match(hold(tag, { '2026-11-05-v9.9.9-go.md': go, '2026-11-06-v9.9.9-go.md': go }), /more than one/, 'two Go files')
   assert.match(hold(tag, { '2026-11-05-v9.9.9-go.md': '- **Version:** 9.9.9\n- **Decision:** Go pending the checks' }), /exactly one Decision line/, 'a wrong Decision line')
   assert.match(hold(tag, { '2026-11-05-v9.9.9-go.md': '- **Version:** 9.9.90\n- **Decision:** Go' }), /exactly one Version line/, 'a wrong Version line')
   assert.match(hold(tag, { '2026-11-05-v9.9.9-go.md': '- **Version:** 9.9.9\n- **Decision:** No-go\n- **Decision:** Go' }), /exactly one Decision line/, 'a No-go line and a Go line')
   assert.match(hold(tag, { '2026-11-05-v9.9.9-go.md': '- **Version:** 9.9.8\n- **Version:** 9.9.9\n- **Decision:** Go' }), /exactly one Version line/, 'two Version lines')
-  assert.match(hold(tag, { 'v9.9.9-go.md': go }), /no docs\/verification\/runs/, 'an undated Go file')
-  assert.match(hold(tag, { 'draft-v9.9.9-go.md': go }), /no docs\/verification\/runs/, 'a draft Go file')
-  assert.match(hold(tag, { '2026-11-05-v9.9.8-go.md': '- **Version:** 9.9.8\n- **Decision:** Go' }), /no docs\/verification\/runs/, 'another version\'s Go file')
+  assert.match(hold(tag, { 'v9.9.9-go.md': go }), /no dated <date>-v9\.9\.9-go\.md run.*ignored, no date: v9\.9\.9-go\.md/, 'an undated Go file')
+  assert.match(hold(tag, { 'draft-v9.9.9-go.md': go }), /ignored, no date: draft-v9\.9\.9-go\.md/, 'a draft Go file')
+  assert.match(hold(tag, { '2026-11-05-v9.9.8-go.md': '- **Version:** 9.9.8\n- **Decision:** Go' }), /no dated <date>-v9\.9\.9-go\.md run/, 'another version\'s Go file')
   assert.match(hold('refs/tags/v9.9.90', { '2026-11-05-v9.9.9-go.md': go }), /is not v9\.9\.9/, 'a longer tag')
   assert.match(hold('refs/tags/v9.9.9-rc.1', { '2026-11-05-v9.9.9-go.md': go }), /is not v9\.9\.9/, 'a release candidate tag')
+  assert.equal(hold(tag, { '2026-11-04-v9.9.9-no-go.md': '- **Version:** 9.9.9\n- **Decision:** No-go', '2026-11-06-v9.9.9-go.md': go }), 'ok', 'a No-go run stays beside the new Go run')
+  assert.equal(hold(tag, { '2026-11-05-v9.9.9-go.md': go, 'draft-v9.9.9-go.md': go }), 'ok', 'an undated file beside a valid Go file is ignored')
+  assert.equal(hold(tag, { '2026-11-05-v9.9.9-go.md': '- **Version:** 9.9.9  \r\n- **Decision:** Go\r' }), 'ok', 'trailing spaces and CRLF')
   assert.equal(hold('refs/heads/main', {}), 'skip', 'a branch build')
 })
