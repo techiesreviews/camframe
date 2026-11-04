@@ -43,8 +43,8 @@ const tagHold = (ref, forVersion, names, readRun, row) => {
   if (!ref.startsWith('refs/tags/')) return 'skip'
   if (ref !== `refs/tags/v${forVersion}`) return `tag ${ref} is not v${forVersion}`
   const decisions = datedRuns(names, forVersion)
-    .filter((name) => row.includes(`verification/runs/${name}`) && namesVersion(readRun(name), forVersion) && !/^> Superseded/m.test(readRun(name)) && decisionLine.test(readRun(name)))
-    .map((name) => [name, readRun(name).match(decisionLine)[1]])
+    .filter((name) => row.includes(`verification/runs/${name}`) && namesVersion(readRun(name), forVersion) && !/^> Superseded/m.test(readRun(name)))
+    .map((name) => [name, readRun(name).match(decisionLine)?.[1] ?? 'no Decision line'])
   // The newest date counts; on the same date a decision that is not Go beats a Go (filename order never decides).
   const day = decisions.map(([name]) => name.slice(0, 10)).sort().at(-1)
   const today = decisions.filter(([name]) => name.slice(0, 10) === day)
@@ -141,6 +141,9 @@ test('the tag hold passes only for the newest linked run in force saying exactly
     '2026-11-08-v9.9.9-old.md': '> Superseded by another run.\n- **Version:** 9.9.9\n- **Decision:** No-go',
     '2026-11-09-v9.9.9-release.md': '- **Version:** 9.9.9\n- **Decision:** Go',
     '2026-11-09-v9.9.9-no-go.md': '- **Version:** 9.9.9\n- **Decision:** No-go',
+    '2026-11-11-v9.9.9-bad.md': '- **Version:** 9.9.9\n**Decision:** No-go',
+    '2026-11-12-v9.9.9-docs.md': '- **Version:** 9.9.9\n- **Decision:** Documentation baseline only',
+    '2026-11-12-v9.9.9-go.md': '- **Version:** 9.9.9\n- **Decision:** Go',
     '2026-11-10-v9.9.9-go-void.md': '> Superseded by another run.\n- **Version:** 9.9.9\n- **Decision:** Go',
   }
   const names = Object.keys(files)
@@ -158,6 +161,8 @@ test('the tag hold passes only for the newest linked run in force saying exactly
   assert.match(hold(tag, '2026-11-09-v9.9.9-no-go.md', '2026-11-09-v9.9.9-release.md'), /No-go/, 'same date, the other link order')
   assert.equal(hold(tag, '2026-11-06-v9.9.9-go.md', '2026-11-10-v9.9.9-go-void.md'), 'ok', 'a superseded Go is ignored, not counted as newer')
   assert.match(hold(tag, '2026-11-04-v9.9.9-nogo.md', '2026-11-10-v9.9.9-go-void.md'), /No-go/, 'a superseded Go does not release a No-go')
+  assert.match(hold(tag, '2026-11-06-v9.9.9-go.md', '2026-11-11-v9.9.9-bad.md'), /no Decision line/, 'a newer run with a badly written Decision line blocks an older Go')
+  assert.match(hold(tag, '2026-11-12-v9.9.9-docs.md', '2026-11-12-v9.9.9-go.md'), /Documentation baseline only/, 'same date: Documentation baseline only beats a Go')
   assert.match(hold(tag), /missing/, 'a Go run the row does not link')
   assert.match(hold('refs/tags/v9.9.90', '2026-11-06-v9.9.9-go.md'), /not v9\.9\.9/, 'a longer tag')
   assert.match(hold('refs/tags/v9.9.9-rc.1', '2026-11-06-v9.9.9-go.md'), /not v9\.9\.9/, 'a release candidate tag')
