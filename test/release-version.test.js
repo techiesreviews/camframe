@@ -35,6 +35,10 @@ const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const namesVersion = (text, forVersion) => new RegExp(`^- \\*\\*Version:\\*\\* ${escapeRegExp(forVersion)}\\s*$`, 'm').test(text)
 const datedRuns = (names, forVersion) =>
   names.filter((name) => /^\d{4}-\d{2}-\d{2}-/.test(name) && name.includes(`-v${forVersion}-`)).sort()
+// The tag hold: the run that releases a version has exactly the line `- **Decision:** Go` (not No-go, not "Go pending ...").
+const saysGo = (text) => /^- \*\*Decision:\*\* Go\s*$/m.test(text)
+const goRun = (names, forVersion, readRun, row) =>
+  datedRuns(names, forVersion).find((name) => namesVersion(readRun(name), forVersion) && saysGo(readRun(name)) && row.includes(`verification/runs/${name}`))
 const linkedRun = (names, forVersion, readRun, row) =>
   datedRuns(names, forVersion).find((name) => namesVersion(readRun(name), forVersion) && row.includes(`verification/runs/${name}`))
 
@@ -105,4 +109,27 @@ test('the Product version is read from the Baseline section only', () => {
   assert.equal(baselineNamesVersion(readme(baseline('- Product version: `9.9.9`'), other), '9.9.90'), false, 'a longer version is not the version')
   assert.equal(baselineNamesVersion(readme(other), '9.9.9'), false, 'no Baseline section')
   assert.equal(baselineNamesVersion(readme(other, baseline('- Product version: `9.9.9`')), '9.9.9'), true, 'Baseline last in the file')
+})
+
+test('on a v<version> tag the newest release row links a run that says Go', (t) => {
+  if (process.env.GITHUB_REF !== `refs/tags/v${version}`) return t.skip('not a tag build')
+  const runs = readdirSync(join(root, 'docs', 'verification', 'runs'))
+  const { row } = firstReleaseRow(read('docs/product-history.md'))
+  assert.ok(goRun(runs, version, (name) => read(`docs/verification/runs/${name}`), row), `a linked *-v${version}-*.md run with "- **Decision:** Go"`)
+})
+
+test('the tag hold passes only for a linked run that says exactly Go', () => {
+  const files = {
+    '2026-11-04-v9.9.9-nogo.md': '- **Version:** 9.9.9\n- **Decision:** No-go',
+    '2026-11-05-v9.9.9-pending.md': '- **Version:** 9.9.9\n- **Decision:** Go pending the release workflow run',
+    '2026-11-06-v9.9.9-go.md': '- **Version:** 9.9.9\n- **Decision:** Go',
+  }
+  const names = Object.keys(files)
+  const readFixture = (name) => files[name]
+  const link = (...runs) => `| 9.9.9 | outcome | See ${runs.map((run) => `\`verification/runs/${run}\``).join(' and ')} |`
+  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-04-v9.9.9-nogo.md')), undefined, 'a No-go run only')
+  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-05-v9.9.9-pending.md')), undefined, 'a "Go pending" run only')
+  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-04-v9.9.9-nogo.md', '2026-11-06-v9.9.9-go.md')), '2026-11-06-v9.9.9-go.md', 'a No-go run beside a Go run')
+  assert.equal(goRun(names, '9.9.9', readFixture, link('2026-11-04-v9.9.9-nogo.md')), undefined)
+  assert.equal(goRun(names, '9.9.9', readFixture, '| 9.9.9 | outcome | no link |'), undefined, 'a Go run that the row does not link')
 })
