@@ -41,7 +41,7 @@ global shortcuts / tray
 | `src/camera-framing.js` | Camera framing pan/zoom math and its single CSS rendering | Overlay, onboarding, tests |
 | `src/onboarding.js` | Onboarding version/migration predicates, step content, and the tour controller (steps, reveals, demos, hand-over, completion) | Settings, geometry, main, Overlay; the tour takes an Overlay port, a view, and `timers` |
 | `src/overlay.html` / `.css` | Reachable UI semantics and visual implementation | Loaded by the Overlay BrowserWindow; can render in a browser with the QA fake |
-| `test/*.test.js` | One suite per module, the Preferences fixture contract, and static markup/CSS/wiring contracts (`overlay-markup.test.js`) | `npm test` / CI |
+| `test/*.test.js` | One suite per module, the Preferences fixture contract, and static markup/CSS/wiring contracts (`overlay-markup.test.js`), and the release version agreement check (`release-version.test.js`) | `npm test` / CI |
 | `test/fixtures/preferences/` | Language-neutral sanitize, load, and Scene import cases every Preferences implementation must pass | Node tests; future ports |
 | `scripts/electron-smoke.mjs` | Real Electron lifecycle, preload/IPC, synthetic-camera, Full screen/profile, accessibility-emulation, and screenshot smoke | `npm run test:electron` / Windows CI; uses main-process-only `CAMFRAME_E2E*` environment hooks |
 | `.github/workflows/build-desktop.yml` | Tagged Windows/macOS build and GitHub release | Manual dispatch or `v*` tag |
