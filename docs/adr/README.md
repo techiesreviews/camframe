@@ -34,6 +34,7 @@ ADRs explain what CamFrame has committed to. They are not experiment diaries. Pu
 - [`0031-add-an-opt-in-local-prompter-link.md`](0031-add-an-opt-in-local-prompter-link.md)
 - [`0032-add-a-toolbar-shortcut-for-the-prompter-link.md`](0032-add-a-toolbar-shortcut-for-the-prompter-link.md)
 - [`0033-trust-the-prompters-preview-origin.md`](0033-trust-the-prompters-preview-origin.md)
+- [`0034-hold-a-version-tag-until-its-run-says-go.md`](0034-hold-a-version-tag-until-its-run-says-go.md)
 - [`0013-establish-overlay-accessibility-contract.md`](0013-establish-overlay-accessibility-contract.md)
 - [`0014-add-scoped-custom-frame-effects.md`](0014-add-scoped-custom-frame-effects.md)
 - [`0015-sign-releases-before-enabling-updates.md`](0015-sign-releases-before-enabling-updates.md)
