@@ -16,5 +16,6 @@ Accepted — 2026-11-04 (Lex's lead, fleet-lead), after Lex asked for the 0.6.1 
 
 ## Consequences
 
-- Every future release needs one `*-v<version>-go.md` run before its tag; `docs/verification/README.md` (Release version row) lists the rule.
+- Every future release needs one `<date>-v<version>-go.md` run before its tag; `docs/verification/README.md` (Release version row) lists the rule.
+- The hold only protects commits that contain it; a tag on an older commit publishes unchecked (closing that is a GitHub tag rule, which is Lex's decision; only the lead tags).
 - The hold reads only those two lines. It does not check the release page or whether the checks behind the Go were done.
