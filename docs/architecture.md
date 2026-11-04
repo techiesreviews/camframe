@@ -44,7 +44,7 @@ global shortcuts / tray
 | `test/*.test.js` | One suite per module, the Preferences fixture contract, static markup/CSS/wiring contracts (`overlay-markup.test.js`), and the release version agreement check (`release-version.test.js`) | `npm test` / CI |
 | `test/fixtures/preferences/` | Language-neutral sanitize, load, and Scene import cases every Preferences implementation must pass | Node tests; future ports |
 | `scripts/electron-smoke.mjs` | Real Electron lifecycle, preload/IPC, synthetic-camera, Full screen/profile, accessibility-emulation, and screenshot smoke | `npm run test:electron` / Windows CI; uses main-process-only `CAMFRAME_E2E*` environment hooks |
-| `.github/workflows/build-desktop.yml` | Tagged Windows/macOS build and GitHub release | Manual dispatch or `v*` tag |
+| `.github/workflows/build-desktop.yml` | Tagged Windows/macOS build and GitHub release; a tag build must be for exactly `v<version>` and the newest linked run in force must say `- **Decision:** Go` (`test/release-version.test.js`) | Manual dispatch (builds, publishes nothing) or `v*` tag |
 
 ## State ownership
 
@@ -160,7 +160,7 @@ Scene writes and imports run in main so file dialogs and Preferences remain priv
 
 ## Packaging and release flow
 
-`npm ci` restores the exactly pinned lockfile. `npm test` runs before each CI platform build; Windows also runs the Playwright Electron smoke and uploads its screenshots. Electron Builder creates Windows x64 NSIS/portable outputs and macOS arm64/x64 DMG/ZIP outputs. A tag beginning with `v` makes the release job merge artifacts and create a GitHub release. Code signing discovery is disabled; the macOS identity is explicitly null.
+`npm ci` restores the exactly pinned lockfile. `npm test` runs before each CI platform build; Windows also runs the Playwright Electron smoke and uploads its screenshots. Electron Builder creates Windows x64 NSIS/portable outputs and macOS arm64/x64 DMG/ZIP outputs. A tag beginning with `v` makes the release job merge artifacts and create a GitHub release, but only if the tag is exactly `v<version>` and the newest linked run in force says `- **Decision:** Go`; otherwise `npm test` fails and nothing publishes. Code signing discovery is disabled; the macOS identity is explicitly null.
 
 ## Architectural constraints worth preserving
 
