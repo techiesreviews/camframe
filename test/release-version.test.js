@@ -36,7 +36,8 @@ const namesVersion = (text, forVersion) => new RegExp(`^- \\*\\*Version:\\*\\* $
 const datedRuns = (names, forVersion) =>
   names.filter((name) => /^\d{4}-\d{2}-\d{2}-/.test(name) && name.includes(`-v${forVersion}-`)).sort()
 // The tag hold. A tag build must be for exactly v<version>, and the newest linked run in force (not "> Superseded ...")
-// that has a Decision line must say exactly `- **Decision:** Go` (not No-go, not "Go pending ..."). Non-tag builds skip it.
+// that has a Decision line must say exactly `- **Decision:** Go` (not No-go, not "Go pending ..."); on the same date a
+// No-go beats a Go. Non-tag builds skip it.
 const decisionLine = /^- \*\*Decision:\*\* (.*?)\s*$/m
 const tagHold = (ref, forVersion, names, readRun, row) => {
   if (!ref.startsWith('refs/tags/')) return 'skip'
@@ -44,8 +45,11 @@ const tagHold = (ref, forVersion, names, readRun, row) => {
   const decisions = datedRuns(names, forVersion)
     .filter((name) => row.includes(`verification/runs/${name}`) && namesVersion(readRun(name), forVersion) && !/^> Superseded/m.test(readRun(name)) && decisionLine.test(readRun(name)))
     .map((name) => [name, readRun(name).match(decisionLine)[1]])
-  const newest = decisions.at(-1)
-  return newest && newest[1] === 'Go' ? 'ok' : `the newest linked run's decision is ${newest ? `"${newest[1]}" (${newest[0]})` : 'missing'}, not Go`
+  // The newest date counts; on the same date a decision that is not Go beats a Go (filename order never decides).
+  const day = decisions.map(([name]) => name.slice(0, 10)).sort().at(-1)
+  const today = decisions.filter(([name]) => name.slice(0, 10) === day)
+  const blocking = today.find(([, decision]) => decision !== 'Go')
+  return !blocking && today.length > 0 ? 'ok' : `the newest linked run's decision is ${blocking ? `"${blocking[1]}" (${blocking[0]})` : 'missing'}, not Go`
 }
 const linkedRun = (names, forVersion, readRun, row) =>
   datedRuns(names, forVersion).find((name) => namesVersion(readRun(name), forVersion) && row.includes(`verification/runs/${name}`))
@@ -135,6 +139,9 @@ test('the tag hold passes only for the newest linked run in force saying exactly
     '2026-11-06-v9.9.9-go.md': '- **Version:** 9.9.9\n- **Decision:** Go',
     '2026-11-07-v9.9.9-other.md': '- **Version:** 9.9.8\n- **Decision:** Go',
     '2026-11-08-v9.9.9-old.md': '> Superseded by another run.\n- **Version:** 9.9.9\n- **Decision:** No-go',
+    '2026-11-09-v9.9.9-release.md': '- **Version:** 9.9.9\n- **Decision:** Go',
+    '2026-11-09-v9.9.9-no-go.md': '- **Version:** 9.9.9\n- **Decision:** No-go',
+    '2026-11-10-v9.9.9-go-void.md': '> Superseded by another run.\n- **Version:** 9.9.9\n- **Decision:** Go',
   }
   const names = Object.keys(files)
   const readFixture = (name) => files[name]
@@ -147,6 +154,10 @@ test('the tag hold passes only for the newest linked run in force saying exactly
   assert.match(hold(tag, '2026-11-03-v9.9.9-go-old.md', '2026-11-04-v9.9.9-nogo.md'), /No-go/, 'an older Go run replaced by a newer No-go run')
   assert.match(hold(tag, '2026-11-07-v9.9.9-other.md'), /missing/, 'a Go run that names another version')
   assert.equal(hold(tag, '2026-11-06-v9.9.9-go.md', '2026-11-08-v9.9.9-old.md'), 'ok', 'a superseded run does not count')
+  assert.match(hold(tag, '2026-11-09-v9.9.9-release.md', '2026-11-09-v9.9.9-no-go.md'), /No-go/, 'same date: a No-go beats a Go, whatever the filenames')
+  assert.match(hold(tag, '2026-11-09-v9.9.9-no-go.md', '2026-11-09-v9.9.9-release.md'), /No-go/, 'same date, the other link order')
+  assert.equal(hold(tag, '2026-11-06-v9.9.9-go.md', '2026-11-10-v9.9.9-go-void.md'), 'ok', 'a superseded Go is ignored, not counted as newer')
+  assert.match(hold(tag, '2026-11-04-v9.9.9-nogo.md', '2026-11-10-v9.9.9-go-void.md'), /No-go/, 'a superseded Go does not release a No-go')
   assert.match(hold(tag), /missing/, 'a Go run the row does not link')
   assert.match(hold('refs/tags/v9.9.90', '2026-11-06-v9.9.9-go.md'), /not v9\.9\.9/, 'a longer tag')
   assert.match(hold('refs/tags/v9.9.9-rc.1', '2026-11-06-v9.9.9-go.md'), /not v9\.9\.9/, 'a release candidate tag')
