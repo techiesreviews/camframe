@@ -13,7 +13,9 @@ const { version } = JSON.parse(read('package.json'))
 function firstReleaseRow(history) {
   const lines = history.split('\n')
   const timeline = lines.indexOf('## Release timeline')
-  const separator = lines.findIndex((line, index) => index > timeline && line.startsWith('| ---'))
+  const next = lines.findIndex((line, index) => index > timeline && line.startsWith('## '))
+  const end = next < 0 ? lines.length : next
+  const separator = lines.findIndex((line, index) => index > timeline && index < end && line.startsWith('| ---'))
   return { found: timeline >= 0 && separator > timeline, row: lines[separator + 1] ?? '' }
 }
 
@@ -89,6 +91,7 @@ test('the first release row is read from the Release timeline only', () => {
   assert.equal(firstReleaseRow(table(['| Unreleased | a |', '| 9.9.9 | b |'])).row, '| Unreleased | a |', 'an Unreleased row on top is the first row')
   assert.equal(firstReleaseRow('# History\n\n| --- | --- |\n| 9.9.9 | a |').found, false, 'no Release timeline heading')
   assert.equal(firstReleaseRow('# History\n\n## Release timeline\n\nNo table yet.').found, false, 'no header separator after the heading')
+  assert.equal(firstReleaseRow('## Release timeline\n\nNo table yet.\n\n## Other\n\n| --- | --- |\n| 9.9.9 | a |').found, false, 'a table in the next section is not the timeline')
   assert.equal(firstReleaseRow('## Release timeline\n| --- | --- |').row, '', 'separator on the last line gives an empty row, not a crash')
 })
 
