@@ -21,12 +21,17 @@ test('the docs baseline and the newest release row name the package version', ()
   const lines = read('docs/product-history.md').split('\n')
   const timeline = lines.indexOf('## Release timeline')
   const separator = lines.findIndex((line, index) => index > timeline && line.startsWith('| ---'))
-  const firstRow = lines[separator + 1]
+  const firstRow = lines[separator + 1] ?? ''
   assert.ok(timeline >= 0 && separator > timeline, 'Release timeline table found')
   assert.ok(firstRow.startsWith(`| ${version} |`), `first release row: ${firstRow.slice(0, 20)}`)
 })
 
-test('the version has a dated verification run', () => {
+test('the version has a dated verification run that the newest release row links', () => {
   const runs = readdirSync(join(root, 'docs', 'verification', 'runs'))
-  assert.ok(runs.some((name) => /^\d{4}-\d{2}-\d{2}-/.test(name) && name.includes(`-v${version}-`)), `a run named *-v${version}-*.md`)
+  const runName = runs.find((name) => /^\d{4}-\d{2}-\d{2}-/.test(name) && name.includes(`-v${version}-`))
+  assert.ok(runName, `a run named *-v${version}-*.md`)
+  assert.ok(read(`docs/verification/runs/${runName}`).includes(`- **Version:** ${version}`), `${runName} names Version ${version}`)
+  const lines = read('docs/product-history.md').split('\n')
+  const firstRow = lines[lines.findIndex((line, index) => index > lines.indexOf('## Release timeline') && line.startsWith('| ---')) + 1] ?? ''
+  assert.ok(firstRow.includes(`verification/runs/${runName}`), `the newest release row links verification/runs/${runName}`)
 })
