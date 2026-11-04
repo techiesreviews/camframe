@@ -15,7 +15,7 @@ Every execution gets a dated file under `runs/`; never overwrite the last known 
 
 ## Current automated suite
 
-Commands: `npm test` for 193 module and static contracts (169 behavioral through module interfaces with fakes, 24 static markup/CSS/wiring and release-version checks) and `npm run test:electron` for two real Electron integration smokes (Windows CI; they also run on a Linux X11/XWayland desktop).
+Commands: `npm test` for 194 module and static contracts (169 behavioral through module interfaces with fakes, 25 static markup/CSS/wiring and release-version checks) and `npm run test:electron` for two real Electron integration smokes (Windows CI; they also run on a Linux X11/XWayland desktop).
 
 | Coverage area | Tests demonstrate | Important limitation |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ Commands: `npm test` for 193 module and static contracts (169 behavioral through
 | Overlay interaction | Chrome/hide timing, activities holding interactivity, Full screen hotspot and delay, change-only messages | Real pointer forwarding is manual (W-08) |
 | Onboarding | Versioning/migration, step copy, offer once, reveal timing, shape and framing demos, hand-over, Back/Next restore, Escape order, reduced motion, completion, timer cleanup (fake Overlay port, view, clock) | No automated BrowserWindow focus, tray click, or visual/layout observation |
 | Camera framing | Pan direction/mirroring, wheel steps, shared CSS rendering | KG-10 is not yet asserted |
-| Release version | `test/release-version.test.js`: `package.json`, both version fields of `package-lock.json`, the docs baseline's Product version and the newest `product-history.md` row agree | Does not check the tag or the release page |
+| Release version | `test/release-version.test.js`: `package.json`, both version fields of `package-lock.json`, the docs baseline's Product version and the first row of `product-history.md`'s Release timeline agree, and a dated run named `*-v<version>-*.md` exists | Does not check the tag or the release page |
 | UI/wiring contracts | Controls/tabs/copy exist; removed controls absent; CSS variables, clip paths, high contrast, reduced motion; shortcut/tray text; a few `overlay.js` wiring lines | Regex over source; presence is not functionality |
 
 The Electron smoke launches the actual main process with an isolated Preferences directory and Chromium's synthetic camera. It verifies the BrowserWindow/preload/IPC path, onboarding completion, Inline Camera settings, one Camera quality across Full screen, native compact/Full screen bounds, live reduced-motion and forced-color propagation, and the absence of renderer errors. A second smoke turns the Prompter link on from Preferences and drives it over HTTP on `127.0.0.1:47833` (it fails at once when that port is already busy, for example with CamFrame running): status lists the Scenes, `{size:"full"}` reaches the display bounds, `{size:"small",position:"bottom-right"}` puts the camera 40 px from the work-area corner, a Scene cue applies its bounds and makes it active, a placed cue clears the active Scene and saves its position to `preferences.json`, an unknown Scene answers 404, and turning the link off closes the port. Together they write four PNGs under `qa/electron-smoke/` (`04-prompter-bottom-right.png` is the link's); Windows CI retains them as the `camframe-electron-smoke-windows-x64` artifact. It does not replace any manual OS/hardware row.
