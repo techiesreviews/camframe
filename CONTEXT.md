@@ -42,6 +42,6 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/cameras.js`: capture constraints (ADR 0028).
 - `src/camera-framing.js`: Camera framing math and its CSS rendering.
 - `src/onboarding.js`: onboarding version and migration rules, step content, and the tour controller.
-- `test/`: Node tests per module, `test/fixtures/preferences/` (the language-neutral Preferences contract), static markup/CSS/wiring contracts in `overlay-markup.test.js`, and the release version agreement check in `release-version.test.js`.
+- `test/`: Node tests per module, `test/fixtures/preferences/` (the language-neutral Preferences contract), static markup/CSS/wiring contracts in `overlay-markup.test.js`, and the release version agreement check and the tag hold (ADR 0034) in `release-version.test.js`.
 
 The reconstruction documentation index is `docs/README.md`. When it conflicts with accepted ADRs, add a superseding ADR. When prose conflicts with executable behavior, record the mismatch in `docs/known-gaps.md` and treat the checked-in source and tests as the current implementation evidence.
