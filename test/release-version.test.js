@@ -17,6 +17,15 @@ function firstReleaseRow(history) {
   return { found: timeline >= 0 && separator > timeline, row: lines[separator + 1] ?? '' }
 }
 
+// The Product version line must sit under "## Baseline represented here", not anywhere in the README.
+function baselineNamesVersion(readme, forVersion) {
+  const lines = readme.split('\n')
+  const start = lines.indexOf('## Baseline represented here')
+  if (start < 0) return false
+  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '))
+  return lines.slice(start + 1, end < 0 ? undefined : end).includes(`- Product version: \`${forVersion}\``)
+}
+
 // The dated runs of a version: every `<date>-v<version>-*.md` name, in sorted order so the answer never depends on
 // the order the file system lists them. One is enough when its `- **Version:**` line is exactly the version (not
 // 0.6.10 or 0.6.1-rc.1 for 0.6.1) and the newest row links it.
@@ -34,7 +43,7 @@ test('package-lock.json carries the package version', () => {
 })
 
 test('the docs baseline and the newest release row name the package version', () => {
-  assert.ok(read('docs/README.md').includes(`- Product version: \`${version}\``))
+  assert.ok(baselineNamesVersion(read('docs/README.md'), version), `Product version ${version} under "Baseline represented here"`)
   const { found, row } = firstReleaseRow(read('docs/product-history.md'))
   assert.ok(found, 'Release timeline table found')
   assert.ok(row.startsWith(`| ${version} |`), `first release row: ${row.slice(0, 20)}`)
@@ -55,6 +64,8 @@ test('a second dated run for the same version does not break the check, in any l
     '2026-11-06-v9.9.9-notes.md': '- **Version:** 9.9.8',
     '2026-11-07-v9.9.9-x.md': '- **Version:** 9.9.90',
     '2026-11-08-v9.9.9-rc.md': '- **Version:** 9.9.9-rc.1',
+    'v9.9.9-release.md': '- **Version:** 9.9.9',
+    '2026-11-09-v9.9.90-release.md': '- **Version:** 9.9.9',
   }
   const names = Object.keys(files)
   const read = (name) => files[name]
@@ -67,6 +78,8 @@ test('a second dated run for the same version does not break the check, in any l
   assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-06-v9.9.9-notes.md')), undefined, 'a linked run that names another version')
   assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-07-v9.9.9-x.md')), undefined, 'a linked run that names 9.9.90')
   assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-08-v9.9.9-rc.md')), undefined, 'a linked run that names 9.9.9-rc.1')
+  assert.equal(linkedRun(names, '9.9.9', read, link('v9.9.9-release.md')), undefined, 'an undated run name')
+  assert.equal(linkedRun(names, '9.9.9', read, link('2026-11-09-v9.9.90-release.md')), undefined, 'a run name for v9.9.90')
   assert.equal(linkedRun(names, '9.9.9', read, '| 9.9.9 | outcome | no link |'), undefined, 'no linked run')
 })
 
@@ -77,4 +90,15 @@ test('the first release row is read from the Release timeline only', () => {
   assert.equal(firstReleaseRow('# History\n\n| --- | --- |\n| 9.9.9 | a |').found, false, 'no Release timeline heading')
   assert.equal(firstReleaseRow('# History\n\n## Release timeline\n\nNo table yet.').found, false, 'no header separator after the heading')
   assert.equal(firstReleaseRow('## Release timeline\n| --- | --- |').row, '', 'separator on the last line gives an empty row, not a crash')
+})
+
+test('the Product version is read from the Baseline section only', () => {
+  const readme = (...sections) => sections.join('\n')
+  const baseline = (line) => `## Baseline represented here\n\n${line}\n- Git baseline inspected: x\n`
+  const other = '## Other section\n\n- Product version: `9.9.9`\n'
+  assert.equal(baselineNamesVersion(readme(baseline('- Product version: `9.9.9`'), other), '9.9.9'), true)
+  assert.equal(baselineNamesVersion(readme(other, baseline('- Product version: `9.9.8`')), '9.9.9'), false, 'only another section names it')
+  assert.equal(baselineNamesVersion(readme(baseline('- Product version: `9.9.9`'), other), '9.9.90'), false, 'a longer version is not the version')
+  assert.equal(baselineNamesVersion(readme(other), '9.9.9'), false, 'no Baseline section')
+  assert.equal(baselineNamesVersion(readme(other, baseline('- Product version: `9.9.9`')), '9.9.9'), true, 'Baseline last in the file')
 })
