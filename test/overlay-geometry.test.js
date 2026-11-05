@@ -585,6 +585,31 @@ test('a Scene without a position applied during the Full screen exit lands where
   assert.equal(clock.activeTimers(), 0)
 })
 
+test('two Scenes applied in Full screen, the last without a position, leave to the place before Full screen', () => {
+  const { geometry, window, patch, settings, settle } = overlay()
+  const before = window.getBounds()
+  geometry.setFullscreen(true)
+  settle()
+  patch({ position: { x: 1200, y: 300 } })
+  geometry.showScene()
+  patch({ position: null })
+  geometry.showScene()
+  const expected = geometry.fullscreenReturnBounds()
+  assert.deepEqual(expected, compact(settings(), { x: before.x, y: before.y }))
+  geometry.setFullscreen(false)
+  settle()
+  assert.deepEqual(window.bounds, expected)
+
+  // A Scene with a position still wins: that is where leaving Full screen lands.
+  geometry.setFullscreen(true)
+  settle()
+  patch({ position: { x: 1200, y: 300 } })
+  geometry.showScene()
+  geometry.setFullscreen(false)
+  settle()
+  assert.deepEqual(window.bounds, compact(settings(), { x: 1200, y: 300 }))
+})
+
 test('showCompact leaves Full screen for the new compact position', () => {
   const { geometry, window, patch, settings, settle, events } = overlay()
   geometry.setFullscreen(true)
