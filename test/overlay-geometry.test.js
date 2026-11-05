@@ -7,10 +7,12 @@ import {
   OVERLAY_CHROME,
   overlayDimensionsFor,
   sanitizeSettings,
+  settingsAfterHandResize,
 } from '../src/settings.js'
 import {
   OVERLAY_BOUNDS_TRANSITION_MS,
   alwaysOnTopLevelFor,
+  cameraRectFor,
   compactBaseBounds,
   compactPositionAt,
   createOverlayGeometry,
@@ -98,7 +100,7 @@ function overlay({ settings: initial = {}, reducedMotion = false } = {}) {
     getPrimaryDisplay: () => ({ workArea: WORK_AREA }),
     getDisplayMatching: () => ({ bounds: DISPLAY }),
   }
-  const events = { fullscreen: [], positions: [] }
+  const events = { fullscreen: [], positions: [], resizes: [] }
   const geometry = createOverlayGeometry({
     window,
     screen,
@@ -106,6 +108,7 @@ function overlay({ settings: initial = {}, reducedMotion = false } = {}) {
     alwaysOnTopLevel: 'floating',
     timers: clock.timers,
     onResize(patch) {
+      events.resizes.push({ size: patch.size })
       settings = sanitizeSettings({ ...settings, ...patch })
       geometry.apply({ keepCenter: false })
     },
@@ -496,6 +499,18 @@ test('the current work area is the display the Overlay is on, Full screen includ
   assert.deepEqual(geometry.currentWorkArea(), WORK_AREA)
   window.setBounds({ x: 2400, y: 300 })
   assert.deepEqual(geometry.currentWorkArea(), secondary.workArea)
+  assert.deepEqual(geometry.workAreaFor({ x: 2000, y: 10, width: 100, height: 100 }), secondary.workArea)
+  assert.deepEqual(geometry.workAreaFor({ x: 10, y: 10, width: 100, height: 100 }), WORK_AREA)
+})
+
+test('while the window moves, the current work area is the display it is heading to', () => {
+  const secondary = { bounds: { x: 1920, y: 0, width: 2560, height: 1440 }, workArea: { x: 1920, y: 0, width: 2560, height: 1400 } }
+  const view = overlay()
+  view.screen.getDisplayMatching = (bounds) => (bounds.x >= 1920 ? secondary : { bounds: DISPLAY, workArea: WORK_AREA })
+  view.patch({ position: { x: 2400, y: 300 } })
+  view.geometry.showScene()
+  assert.equal(view.geometry.isSettled(), false)
+  assert.deepEqual(view.geometry.currentWorkArea(), secondary.workArea)
 })
 
 test('a move during the Full screen exit does not leave a stale Compact base for the next Full screen', () => {
@@ -567,4 +582,256 @@ test('showCompact leaves Full screen for the new compact position', () => {
   geometry.showCompact()
   settle()
   assert.deepEqual(window.bounds, compact(settings()))
+})
+
+test('an exact Compact layout keeps the camera inside a right-hand share of the display', async () => {
+  const { planCompactLayout } = await import('../src/overlay-geometry.js')
+  const large = planCompactLayout(
+    { shape: 'circle', size: 432, spot: 'right', margin: 32, withinRight: 0.3 },
+    { workArea: WORK_AREA },
+  )
+  assert.deepEqual(large, {
+    size: 432,
+    position: { x: 1920 - 32 - 432 - OVERLAY_CHROME.left, y: (1040 - 432) / 2 - OVERLAY_CHROME.top },
+    requestedSize: 432,
+    clamped: false,
+  })
+  // The camera surface starts inside the right 30%.
+  assert.ok(large.position.x + OVERLAY_CHROME.left >= 1920 * 0.7)
+
+  const narrow = { x: 0, y: 0, width: 1280, height: 680 }
+  const clamped = planCompactLayout(
+    { shape: 'circle', size: 432, spot: 'right', margin: 32, withinRight: 0.3 },
+    { workArea: narrow },
+  )
+  assert.equal(clamped.size, Math.floor(1280 * 0.3 - 32))
+  assert.equal(clamped.clamped, true)
+  assert.ok(clamped.position.x + OVERLAY_CHROME.left >= 1280 * 0.7)
+  assert.equal(clamped.position.x + OVERLAY_CHROME.left + clamped.size, 1280 - 32)
+
+  const landscape = planCompactLayout(
+    { shape: 'landscape', size: 640, spot: 'top-right', margin: 0, withinRight: 0.25 },
+    { workArea: WORK_AREA },
+  )
+  // 25% of 1920 is 480, less the 18 px of chrome that always stays on screen at the right.
+  assert.equal(landscape.size, 480 - OVERLAY_CHROME.right)
+  assert.ok(landscape.position.x + OVERLAY_CHROME.left >= 1920 * 0.75)
+  const zeroMargin = planCompactLayout(
+    { shape: 'circle', size: 640, spot: 'right', margin: 0, withinRight: 0.3 },
+    { workArea: WORK_AREA },
+  )
+  assert.ok(zeroMargin.position.x + OVERLAY_CHROME.left >= 1920 * 0.7, 'a 0 margin still stays inside the share')
+
+  const tooNarrow = planCompactLayout(
+    { shape: 'circle', size: 300, spot: 'right', margin: 32, withinRight: 0.1 },
+    { workArea: narrow },
+  )
+  assert.equal(tooNarrow.code, 'does-not-fit')
+  assert.match(tooNarrow.error, /right 10% of this display is too narrow/)
+  assert.match(tooNarrow.error, /and the 32 px gap at the right edge/)
+  // Below 18 px the chrome that stays on screen sets the gap, and the refusal says so.
+  const noMargin = planCompactLayout(
+    { shape: 'circle', size: 300, spot: 'right', margin: 0, withinRight: 0.1 },
+    { workArea: { x: 0, y: 0, width: 800, height: 600 } },
+  )
+  assert.equal(noMargin.code, 'does-not-fit')
+  assert.match(noMargin.error, new RegExp(`and the ${OVERLAY_CHROME.right} px gap at the right edge`))
+
+  const point = planCompactLayout({ shape: 'circle', size: 300, point: { x: 100, y: 200 } }, { workArea: WORK_AREA })
+  assert.deepEqual(point.position, { x: 100 - OVERLAY_CHROME.left, y: 200 - OVERLAY_CHROME.top })
+  const outside = planCompactLayout({ shape: 'circle', size: 300, point: { x: 5000, y: -50 } }, { workArea: WORK_AREA })
+  assert.deepEqual(outside.position, { x: 1920 - 300 - OVERLAY_CHROME.left - OVERLAY_CHROME.right, y: 0 })
+
+  const current = { x: 1000, y: 400, width: 336, height: 390 }
+  const centred = planCompactLayout({ shape: 'circle', size: 200 }, { workArea: WORK_AREA, current })
+  assert.deepEqual(centred.position, { x: 1000 + (336 - 236) / 2, y: 400 + (390 - 302) / 2 })
+})
+
+test('portrait and landscape cameras fit the right share at the largest size and stay vertically centred', async () => {
+  const { planCompactLayout } = await import('../src/overlay-geometry.js')
+  const { dimensionsFor } = await import('../src/settings.js')
+  const narrow = { x: 0, y: 0, width: 1280, height: 680 }
+  const share = 1280 * 0.3
+  for (const shape of ['portrait', 'landscape']) {
+    const plan = planCompactLayout({ shape, size: 640, spot: 'right', margin: 32, withinRight: 0.3 }, { workArea: narrow })
+    assert.equal(plan.error, undefined, shape)
+    const camera = cameraRectFor({ ...plan.position, ...overlayDimensionsFor({ shape, size: plan.size }) })
+    assert.ok(camera.width + 32 <= share, `${shape}: ${camera.width} + 32 inside ${share}`)
+    assert.ok(camera.x >= 1280 - share, `${shape}: starts inside the right 30%`)
+    assert.equal(camera.x + camera.width, 1280 - 32, `${shape}: 32 px from the right edge`)
+    // One pixel more would no longer fit the share or the display.
+    const bigger = dimensionsFor({ shape, size: plan.size + 1 })
+    const biggerWindow = overlayDimensionsFor({ shape, size: plan.size + 1 })
+    assert.ok(bigger.width + 32 > share || biggerWindow.height > narrow.height, `${shape}: ${plan.size} is the largest that fits`)
+    assert.equal(plan.clamped, true, shape)
+    if (shape === 'landscape') {
+      // Vertically centred: the camera's middle is the work area's middle (340 of 680).
+      const middle = camera.y + camera.height / 2
+      assert.ok(Math.abs(middle - 340) <= 1, `landscape middle ${middle}, expected 340`)
+    }
+  }
+})
+
+test('targetBounds reports where an animated move is heading and isSettled when it is there', () => {
+  const view = overlay()
+  const start = view.window.getBounds()
+  assert.equal(view.geometry.isSettled(), true)
+  view.patch({ position: { x: 900, y: 300 } })
+  view.geometry.showScene()
+  assert.equal(view.geometry.isSettled(), false)
+  assert.deepEqual(view.geometry.targetBounds(), { ...start, x: 900, y: 300 })
+  view.settle()
+  assert.equal(view.geometry.isSettled(), true)
+  assert.deepEqual(view.window.getBounds(), { ...start, x: 900, y: 300 })
+})
+
+test('a held, dragged and dragged-back corner leaves the small size at the size let go at', () => {
+  const view = overlay({ settings: { size: 300 } })
+  let settings = sanitizeSettings({ size: 300, prompterSmallSize: 260 })
+  const feed = () => {
+    for (const resize of view.events.resizes.splice(0)) settings = settingsAfterHandResize(settings, { size: resize.size })
+  }
+  view.geometry.startResize('bottom-right')
+  view.clock.advance(50)
+  feed()
+  assert.equal(settings.prompterSmallSize, 260, 'holding a corner still changes nothing')
+  view.screen.cursor = { x: 40, y: 40 }
+  view.clock.advance(20)
+  feed()
+  assert.equal(settings.prompterSmallSize, 340)
+  view.screen.cursor = { x: 0, y: 0 }
+  view.clock.advance(20)
+  feed()
+  view.geometry.stopResize()
+  assert.equal(settings.size, 300)
+  assert.equal(settings.prompterSmallSize, 300, 'dragged back: the size let go at wins')
+})
+
+test('a cue that changes the size while a corner is only held keeps the cue size', () => {
+  const view = overlay({ settings: { size: 300 } })
+  view.geometry.startResize('bottom-right')
+  view.clock.advance(20)
+  // A Prompter cue makes the camera 432 px while the corner is held.
+  view.patch({ size: 432 })
+  view.geometry.showScene()
+  view.settle()
+  assert.deepEqual(view.events.resizes, [], 'a held corner reports no resize')
+  view.geometry.stopResize()
+  assert.equal(view.settings().size, 432)
+  assert.equal(view.window.getBounds().width, 432 + OVERLAY_CHROME.left + OVERLAY_CHROME.right)
+})
+
+test('a drag after a cue changed the size while the corner was held starts from the cue size', () => {
+  const view = overlay({ settings: { size: 300 } })
+  view.geometry.startResize('bottom-right')
+  view.clock.advance(20)
+  view.patch({ size: 432 })
+  view.geometry.showScene()
+  view.settle()
+  view.screen.cursor = { x: 5, y: 5 }
+  view.clock.advance(20)
+  const reported = view.events.resizes.at(-1)
+  assert.equal(reported.size, 437)
+  view.geometry.stopResize()
+  const settings = settingsAfterHandResize(sanitizeSettings({ ...view.settings(), size: 432, prompterSmallSize: 288 }), reported)
+  assert.equal(settings.prompterSmallSize, 437)
+})
+
+test('a drag that starts while a cue is still moving the window starts from where it is heading', () => {
+  const view = overlay({ settings: { size: 300 } })
+  view.geometry.startResize('top-left')
+  view.clock.advance(20)
+  view.patch({ size: 432, position: { x: 600, y: 400 } })
+  view.geometry.showScene()
+  assert.equal(view.geometry.isSettled(), false)
+  view.screen.cursor = { x: -5, y: -5 }
+  view.clock.advance(16)
+  const reported = view.events.resizes.at(-1)
+  assert.equal(reported.size, 437)
+  view.geometry.stopResize()
+  // The top-left corner grows up and left from the cue's target, not from half-way bounds.
+  assert.deepEqual(view.settings().position, { x: 595, y: 395 })
+})
+
+test('a drag started during a cue move and let go before it ends keeps the dragged size on screen', () => {
+  const view = overlay({ settings: { size: 300 } })
+  view.patch({ size: 432, position: { x: 600, y: 400 } })
+  view.geometry.showScene()
+  assert.equal(view.geometry.isSettled(), false)
+  view.geometry.startResize('top-left')
+  view.screen.cursor = { x: -5, y: -5 }
+  view.clock.advance(16)
+  assert.equal(view.events.resizes.at(-1).size, 437)
+  // Let go before the cue's move would have ended: the window shows the size that was saved.
+  view.geometry.stopResize()
+  view.settle()
+  assert.equal(view.settings().size, 437)
+  assert.deepEqual(view.window.bounds, compact(view.settings()))
+})
+
+test('a cue during a hand drag ends the drag: the cue size stays and the drag reports nothing more', () => {
+  const view = overlay({ settings: { size: 300 } })
+  view.settle()
+  view.geometry.startResize('bottom-right')
+  view.screen.cursor = { x: 10, y: 10 }
+  view.clock.advance(16)
+  const reported = view.events.resizes.length
+  assert.ok(reported > 0)
+  view.patch({ size: 432, position: { x: 600, y: 400 } })
+  view.geometry.showScene()
+  view.screen.cursor = { x: 20, y: 20 }
+  view.clock.advance(16)
+  view.settle()
+  view.geometry.stopResize()
+  assert.equal(view.events.resizes.length, reported, 'no hand resize after the cue')
+  assert.equal(view.settings().size, 432)
+  assert.deepEqual(view.window.bounds, compact(view.settings()))
+})
+
+test('a Scene applied in Full screen (tray or shortcut) is where Escape lands', () => {
+  const view = overlay()
+  view.geometry.setFullscreen(true)
+  view.settle()
+  view.patch({ size: 300, position: { x: 100, y: 120 } })
+  view.geometry.showScene()
+  view.geometry.setFullscreen(false)
+  view.settle()
+  assert.deepEqual(view.window.bounds, compact(view.settings()))
+  // A Scene without a place still returns to where the Overlay was before Full screen.
+  const other = overlay()
+  const before = other.window.getBounds()
+  other.geometry.setFullscreen(true)
+  other.settle()
+  other.patch({ size: 300, position: null })
+  other.geometry.showScene()
+  other.geometry.setFullscreen(false)
+  other.settle()
+  assert.deepEqual({ x: other.window.bounds.x, y: other.window.bounds.y }, { x: before.x, y: before.y })
+})
+
+test('left, right and center stay vertically centred on a short screen', async () => {
+  const { planCompactLayout } = await import('../src/overlay-geometry.js')
+  const short = { x: 0, y: 0, width: 1366, height: 728 }
+  for (const spot of ['right', 'left', 'center']) {
+    const plan = planCompactLayout({ shape: 'circle', size: 640, spot, margin: 32 }, { workArea: short })
+    const camera = cameraRectFor({ ...plan.position, ...overlayDimensionsFor({ shape: 'circle', size: plan.size }) })
+    assert.ok(Math.abs(camera.y + camera.height / 2 - 364) <= 1, `${spot}: middle ${camera.y + camera.height / 2}`)
+    assert.ok(plan.position.y >= short.y, `${spot}: toolbar on screen`)
+    assert.equal(plan.clamped, true)
+  }
+  // Top and bottom places keep using the full height.
+  const bottom = planCompactLayout({ shape: 'circle', size: 640, spot: 'bottom-right', margin: 32 }, { workArea: short })
+  assert.equal(bottom.size, 728 - OVERLAY_CHROME.top - OVERLAY_CHROME.bottom)
+})
+
+test('leaving Full screen for another display, the current work area is that display', () => {
+  const secondary = { bounds: { x: 1920, y: 0, width: 2560, height: 1440 }, workArea: { x: 1920, y: 0, width: 2560, height: 1400 } }
+  const view = overlay()
+  view.screen.getDisplayMatching = (bounds) => (bounds.x >= 1920 ? secondary : { bounds: DISPLAY, workArea: WORK_AREA })
+  view.geometry.setFullscreen(true)
+  view.settle()
+  view.patch({ position: { x: 2000, y: 100 } })
+  view.geometry.showCompact()
+  assert.equal(view.geometry.isSettled(), false)
+  assert.deepEqual(view.geometry.currentWorkArea(), secondary.workArea)
 })

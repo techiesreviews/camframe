@@ -561,7 +561,7 @@ function renderPrompterLink() {
   fillChoices(prompterFull, [['fullscreen', 'Full screen'], ...scenes], state.prompterFaceFull, 'fullscreen')
   fillChoices(
     prompterSmall,
-    [['previous', 'Where it was'], ...COMPACT_SPOTS.map((spot) => [spot, SPOT_LABELS[spot]]), ...scenes],
+    [['previous', 'Same place'], ...COMPACT_SPOTS.map((spot) => [spot, SPOT_LABELS[spot]]), ...scenes],
     state.prompterFaceSmall,
     'previous',
   )
