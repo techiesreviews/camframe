@@ -1,6 +1,6 @@
 # Verification run: Prompter link API 2 on the current dev (feat/prompter-scene-geometry) — 2026-11-05
 
-- **Commit:** 57e500814683cde2c49115f914e008569f80ad03 (all checks below ran at this commit; the commit after it changes only this run file). The earlier fourteen commits are squashed into one and rebased onto `origin/dev` `815cd88` (the land branch, which holds 0.6.1).
+- **Commit:** 974fe03c178b8914ea3692c3af850bce4b8e4cd3 (all checks below ran at this commit; the commit after it changes only this run file). The earlier fourteen commits are squashed into one and rebased onto `origin/dev` `815cd88` (the land branch, which holds 0.6.1).
 - **Version:** 0.6.1 (`package.json`), unreleased change
 - **Observer:** Claude (Sonnet 5.5), automated only
 - **Environment:** Linux, one display, Node v24.21.0, Electron 44.7.0, development build (as `2026-11-04-prompter-layout-scenes.md`)
@@ -12,6 +12,7 @@ This run replaces the commit, base and version lines of `2026-11-04-prompter-lay
 ## What changed since the 2026-11-04 runs
 
 - The rebase: docs conflicts with the 0.6.1 release resolved (README baseline stays 0.6.1 with schema 14, the ADR list, KG-13/KG-14, the test counts). ADR 0034 on dev is the tag hold, so this change's ADR is 0035.
+- Sixth round: README, guide and spec wording (what the link can do, a bare "small" at the same size does nothing even if dragged off screen); a Full screen cue with `margin` or `withinRight` names the field in its error; the guide's Scene name row and the docs index.
 - Fifth `kit pr` round: Full screen right after a move cue returns to the move's target, not the halfway point; a bare "small" that changes nothing no longer moves the camera in Compact mode; the guide and KG-14 say a very large margin at a bottom place may not be met; oversized bodies on the Scene and small-size routes are tested.
 - Fourth round: leaving Full screen goes to a position a Scene stored while in Full screen, else to the place the window really had (a hand drag whose `moved` event is late or never comes, as on Linux, is no longer lost; a bare "small" and Escape agree); the Full screen status shows the display bounds also with the onboarding reserve open; Scene names also refuse a joiner at either end and match ignoring joiners, variation selectors and emoji tags, with one shared name rule in `src/scenes.js`.
 - Third round: leaving Full screen keeps the place before it after two Scenes; invisible-character Scene names; a static check that the tray and both shortcuts pass the live display to a layout Scene.
