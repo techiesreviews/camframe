@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  settingsAfterHandResize,
   DEFAULT_SETTINGS,
   dimensionsFor,
   overlayDimensionsFor,
@@ -11,9 +12,9 @@ import {
 
 // Sanitizing and loading rules are covered by the shared fixtures in preferences-contract.test.js.
 
-test('Preferences use schema 13', () => {
-  assert.equal(DEFAULT_SETTINGS.schemaVersion, 13)
-  assert.equal(sanitizeSettings({ schemaVersion: 3 }).schemaVersion, 13)
+test('Preferences use schema 14', () => {
+  assert.equal(DEFAULT_SETTINGS.schemaVersion, 14)
+  assert.equal(sanitizeSettings({ schemaVersion: 3 }).schemaVersion, 14)
 })
 
 test('only shape, size, and position changes move the native Overlay', () => {
@@ -74,4 +75,13 @@ test('Scene snapshots keep reusable settings and drop global or transient state'
     cameraPosition: { x: 32, y: 68 },
     position: { x: 120, y: 80 },
   })
+})
+
+test('a hand resize sets the small size only when the size really changed', () => {
+  const large = sanitizeSettings({ size: 432, prompterSmallSize: 288 })
+  // The same size again (for example the pointer back where it was) changes nothing.
+  assert.equal(settingsAfterHandResize(large, { size: 432, position: { x: 1, y: 2 } }).prompterSmallSize, 288)
+  const resized = settingsAfterHandResize(large, { size: 400, position: { x: 1, y: 2 } })
+  assert.equal(resized.size, 400)
+  assert.equal(resized.prompterSmallSize, 400)
 })

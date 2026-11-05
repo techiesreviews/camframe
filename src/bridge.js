@@ -13,10 +13,12 @@ import { DEFAULT_SETTINGS } from './settings.js'
 const isPlainObject = (value) =>
   Boolean(value) && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
 
-// Renderer patches may change ordinary settings, never Scenes, onboarding completion, or schema.
+// Renderer patches may change ordinary settings, never Scenes, onboarding completion, schema, or
+// the Prompter link's small size (main changes it when the user resizes the Overlay by hand).
 const RENDERER_SETTING_KEYS = new Set(
   Object.keys(DEFAULT_SETTINGS).filter(
-    (key) => !['schemaVersion', 'presets', 'completedOnboardingVersion'].includes(key),
+    (key) =>
+      !['schemaVersion', 'presets', 'completedOnboardingVersion', 'prompterSmallSize'].includes(key),
   ),
 )
 

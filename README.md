@@ -37,13 +37,15 @@ Click the scroll button again, or turn either switch off, to stop. With the link
 | In your script | CamFrame does |
 | --- | --- |
 | `[Face full]` | Full screen (or the Scene you chose for "Face full") |
-| `[Face small]` | Back to the small camera where it was (or the place or Scene you chose for "Face small") |
+| `[Face small]` | The stored small size, where the camera was (or the place or Scene you chose for "Face small"). The small size is the size you last set by resizing CamFrame by hand; a larger layout never changes it |
 | `[Face small, bottom right]` | Small camera in that corner of the screen it is on. Places: top left, top right, bottom left, bottom right, left, right, center |
-| `[Face: Demo]` | Your saved Scene called "Demo" (its size, place and look) |
+| `[Face: Demo]` | Your saved Scene called "Demo" (its size and place; a Scene saved in CamFrame also brings back its look, a layout Scene saved by the prompter keeps the camera's current look) |
+
+For the two livestream layouts (a larger camera on the right, and the small camera bottom-right) saved as layout Scenes that keep the camera's look, see [docs/prompter-link-api.md](docs/prompter-link-api.md).
 
 You can put a cue after other words, like `[Share screen. Face small.]` or `[Stop share. Face full.]`. The cue fires once when that line reaches the prompter's reading line, and again if you scroll back above it and read it again.
 
-**Settings** (under the Prompter link switch, shown while it is on): **Face full** (Full screen or a Scene), **Face small** (Where it was, one of the seven places, or a Scene) and **Corner margin** (how far the camera stays from the screen edges, 32 px by default). At the top places the camera sits a little lower, so its toolbar stays on screen.
+**Settings** (under the Prompter link switch, shown while it is on): **Face full** (Full screen or a Scene), **Face small** (Same place: the stored small size where the camera was; one of the seven places; or a Scene) and **Corner margin** (how far the camera stays from the screen edges, 32 px by default). At the top places the camera sits a little lower, so its toolbar stays on screen.
 
 **Good to know**
 

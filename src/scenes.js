@@ -1,4 +1,5 @@
-import { SCENE_LIMIT, sanitizeSettings, settingsForPreset } from './settings.js'
+import { OVERLAY_CHROME, SCENE_LIMIT, sanitizeSettings, settingsForPreset } from './settings.js'
+import { planCompactLayout } from './overlay-geometry.js'
 
 // The Scene library owns every Scene rule: naming, ids, the Scene limit, ordering, import/export,
 // and which Scene is active. Each operation takes the current `{ settings, activeSceneId }` and
@@ -58,28 +59,115 @@ export function saveScene(
   }
 }
 
-export function applyScene({ settings }, idInput) {
+// The size and place a layout Scene gets now, planned with the live shape; else its saved size and
+// place (no work area known, or the display is too small even for the smallest camera).
+// A layout with a place is planned on the display the Overlay is on or heading to
+// (`context.workArea`). One without a place keeps its saved camera point on the display nearest
+// that point (`context.workAreaAt`), shrunk and kept on screen there.
+export function layoutSceneGeometry(scene, settings, { workArea, workAreaAt } = {}) {
+  const { layout } = scene
+  const requestedSize = layout.size === 'small' ? settings.prompterSmallSize : layout.size
+  const saved = { size: scene.settings.size, position: scene.settings.position }
+  const point =
+    !layout.position && saved.position
+      ? { x: saved.position.x + OVERLAY_CHROME.left, y: saved.position.y + OVERLAY_CHROME.top }
+      : undefined
+  const area = point && workAreaAt ? workAreaAt(point) : workArea
+  const plan =
+    area && (layout.position || point)
+      ? planCompactLayout(
+          {
+            shape: settings.shape,
+            size: requestedSize,
+            spot: layout.position,
+            point,
+            margin: layout.position ? (layout.margin ?? settings.prompterMargin) : 0,
+            withinRight: layout.withinRight,
+          },
+          { workArea: area },
+        )
+      : undefined
+  if (!plan || plan.error) return { ...saved, requestedSize, clamped: saved.size !== requestedSize }
+  return { size: plan.size, position: plan.position, clamped: plan.clamped, requestedSize }
+}
+
+// A layout Scene changes only size and place and keeps the live look; any other Scene applies
+// everything it saved. `context` (`workArea`, `workAreaAt`) lets a layout Scene fit the right display.
+export function applyScene({ settings }, idInput, context = {}) {
   const id = String(idInput ?? '')
   const scene = settings.presets.find((candidate) => candidate.id === id)
   if (!scene) return undefined
+  const geometry = scene.layout ? layoutSceneGeometry(scene, settings, context) : undefined
+  const applied = geometry
+    ? { ...settings, size: geometry.size, position: geometry.position }
+    : { ...settings, ...scene.settings, presets: settings.presets }
   return {
-    settings: sanitizeSettings({ ...settings, ...scene.settings, presets: settings.presets }),
+    settings: sanitizeSettings(applied),
     activeSceneId: scene.id,
     notice: scene.name,
     appliedScene: scene,
+    ...(geometry ? { layout: geometry } : {}),
   }
 }
 
-export function applySceneAt(state, index) {
-  const scene = state.settings.presets[index]
-  return scene ? applyScene(state, scene.id) : undefined
+// Saves a layout Scene (Prompter link). Never evicts a Scene: a new name past SCENE_LIMIT and an
+// existing name without `replace` are refused with `{ error, code, status }`. Replacing keeps the
+// Scene's id and order. The Active Scene stays, unless it was the Scene replaced.
+export function saveLayoutScene(
+  { settings, activeSceneId },
+  { name: nameInput, size, position, layout, replace = false, createId = defaultSceneId },
+) {
+  const name = String(nameInput ?? '').trim().slice(0, 40)
+  if (!name) return { error: 'A Scene needs a name.', code: 'bad-request', status: 400 }
+  const existing = settings.presets.find((scene) => sameName(scene.name, name))
+  if (existing && !replace) {
+    return {
+      error: `CamFrame already has a Scene named "${existing.name}". Send "replace": true to save over it.`,
+      code: 'scene-exists',
+      status: 409,
+    }
+  }
+  if (!existing && settings.presets.length >= SCENE_LIMIT) {
+    return {
+      error: `CamFrame already has ${SCENE_LIMIT} Scenes, the most it keeps. Delete one in CamFrame, or save over an existing name with "replace": true.`,
+      code: 'scene-limit',
+      status: 409,
+    }
+  }
+  // Two saves in the same millisecond would share a time-based id.
+  let id = existing?.id ?? createId()
+  for (let attempt = 2; !existing && settings.presets.some((candidate) => candidate.id === id); attempt += 1) {
+    id = `${createId()}-${attempt}`
+  }
+  const scene = {
+    id,
+    name,
+    settings: settingsForPreset({ ...settings, size, position }),
+    layout,
+  }
+  const scenes = existing
+    ? settings.presets.map((candidate) => (candidate.id === scene.id ? scene : candidate))
+    : [...settings.presets, scene]
+  const next = withScenes(settings, scenes)
+  return {
+    settings: next,
+    activeSceneId: existing && existing.id === activeSceneId ? '' : activeSceneId,
+    scene: next.presets.find((candidate) => candidate.id === scene.id),
+    replaced: Boolean(existing),
+    notice: `${name} saved`,
+  }
 }
 
-export function cycleScene(state) {
+export function applySceneAt(state, index, context = {}) {
+  const scene = state.settings.presets[index]
+  return scene ? applyScene(state, scene.id, context) : undefined
+}
+
+export function cycleScene(state, context = {}) {
   const scenes = state.settings.presets
   if (!scenes.length) return { notice: NO_SCENES_NOTICE }
   const currentIndex = scenes.findIndex((scene) => scene.id === state.activeSceneId)
-  return applyScene(state, scenes[(currentIndex + 1) % scenes.length].id)
+  return applyScene(state, scenes[(currentIndex + 1) % scenes.length].id, context)
 }
 
 export function deleteScene({ settings, activeSceneId }, idInput) {
