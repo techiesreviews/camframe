@@ -210,6 +210,11 @@ export function createOverlayGeometry({
 }) {
   let fullscreen = false
   let compactBase
+  // True once a Scene applied in Full screen stored a position: that is where leaving Full screen
+  // lands. Otherwise it lands where the Overlay was before Full screen (`compactBase`), because the
+  // stored position can be older than the window (a hand drag saves it from the native `moved`
+  // event, which can arrive late or, on Linux, never).
+  let positionFromScene = false
   let reserveOpen = false
   let interactive = false
   let reducedMotion = false
@@ -337,7 +342,10 @@ export function createOverlayGeometry({
   }
 
   function enterFullscreen() {
-    compactBase ??= baseFromWindow(window.getBounds())
+    if (!compactBase) {
+      compactBase = baseFromWindow(window.getBounds())
+      positionFromScene = false
+    }
     fullscreen = true
     stopDrag()
     stopResize()
@@ -350,10 +358,11 @@ export function createOverlayGeometry({
     animateTo(display)
   }
 
+  const storedPositionWins = () => positionFromScene && Boolean(settings().position)
+
   function exitFullscreen() {
     const current = settings()
-    // A stored position is where leaving Full screen lands; without one, the place before Full screen.
-    const base = compactBase && !current.position
+    const base = compactBase && !storedPositionWins()
       ? { ...compactBase, ...overlayDimensionsFor(current) }
       : compactBaseBounds({
           settings: current,
@@ -384,6 +393,7 @@ export function createOverlayGeometry({
     endHandResize()
     // In Full screen a Scene with a place is where leaving Full screen lands (Escape, toggle); the
     // place before Full screen is kept, for a later Scene without a position.
+    if (fullscreen) positionFromScene = Boolean(settings().position)
     if (fullscreen || !settings().overlayVisible) {
       apply({ keepCenter: false })
       return
@@ -442,7 +452,9 @@ export function createOverlayGeometry({
 
     // Moves the Overlay to the current settings' Compact geometry, leaving Full screen first when
     // it is on. Unlike `showScene`, a Scene or position applied in Full screen lands in Compact mode.
-    showCompact() {
+    // `keepBase`: the caller found the plan equal to the place Full screen returns to and stored
+    // nothing, so the stored position (possibly older than the window) must not decide the landing.
+    showCompact({ keepBase = false } = {}) {
       if (!alive()) return
       endHandResize()
       // A Scene without a position keeps the place the Overlay had before Full screen, also
@@ -451,7 +463,7 @@ export function createOverlayGeometry({
         showScene({ base: settings().position ? undefined : compactBase })
         return
       }
-      if (settings().position) compactBase = undefined
+      if (settings().position && !keepBase) compactBase = undefined
       exitFullscreen()
     },
 
@@ -476,20 +488,22 @@ export function createOverlayGeometry({
     },
 
     // Where the window is heading: the running animation's target, else its live bounds, both
-    // without the reserve. `isSettled()` is false while it is still on its way.
+    // without the reserve (in Full screen the window is the whole display, reserve or not).
+    // `isSettled()` is false while it is still on its way.
     targetBounds() {
       if (!alive()) return undefined
-      return baseFromWindow(animation ? animation.target : window.getBounds())
+      const bounds = animation ? animation.target : window.getBounds()
+      return fullscreen ? { ...bounds } : baseFromWindow(bounds)
     },
     isSettled: () => !animation,
 
     // Where leaving Full screen through `showCompact` puts the Compact window at the current size
-    // (bounds without the reserve): the stored position, else the place the Overlay had before Full
+    // (bounds without the reserve): a position a Scene stored while in Full screen, else the place the Overlay had before Full
     // screen. Undefined outside Full screen.
     fullscreenReturnBounds() {
       if (!alive() || !fullscreen) return undefined
       return compactBaseBounds({
-        settings: settings(),
+        settings: compactBase && !storedPositionWins() ? { ...settings(), position: null } : settings(),
         current: compactBase,
         workArea: screen.getPrimaryDisplay().workArea,
         keepCenter: false,
@@ -586,6 +600,7 @@ export function createOverlayGeometry({
       fullscreen = false
       reserveOpen = false
       compactBase = undefined
+      positionFromScene = false
     },
   }
 }
