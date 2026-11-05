@@ -79,6 +79,9 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
     if (!keepBase) {
       commit(sceneLibrary.patchSettings(sceneState(), { size: layout.size, position: layout.position }))
     }
+    // Back at the same size and place outside Full screen there is nothing to move, and the stored
+    // position can be older than the window, so the camera must not be sent to it.
+    if (keepBase && !overlay.isFullscreen()) return { size: layout.size, requestedSize: layout.requestedSize, clamped: layout.clamped }
     overlay.showCompact({ keepBase })
     return { size: layout.size, requestedSize: layout.requestedSize, clamped: layout.clamped }
   }

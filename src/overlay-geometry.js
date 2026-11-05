@@ -343,7 +343,8 @@ export function createOverlayGeometry({
 
   function enterFullscreen() {
     if (!compactBase) {
-      compactBase = baseFromWindow(window.getBounds())
+      // Where the window is heading, so a Full screen cue right after a move cue returns to the move's target.
+      compactBase = baseFromWindow(animation ? animation.target : window.getBounds())
       positionFromScene = false
     }
     fullscreen = true

@@ -631,6 +631,20 @@ test('in Full screen with the onboarding reserve open, the heading bounds are th
   assert.deepEqual(geometry.targetBounds(), DISPLAY)
 })
 
+test('Full screen right after a move cue returns to where the cue was sending the window', () => {
+  const { geometry, window, patch, settings, clock, settle } = overlay()
+  patch({ position: { x: 1300, y: 200 } })
+  geometry.showCompact()
+  clock.advance(OVERLAY_BOUNDS_TRANSITION_MS / 2)
+  assert.notDeepEqual(window.bounds, compact(settings()), 'still on its way')
+  geometry.setFullscreen(true)
+  settle()
+  assert.deepEqual(geometry.fullscreenReturnBounds(), compact(settings(), { x: 1300, y: 200 }))
+  geometry.setFullscreen(false)
+  settle()
+  assert.deepEqual(window.bounds, compact(settings(), { x: 1300, y: 200 }))
+})
+
 test('showCompact leaves Full screen for the new compact position', () => {
   const { geometry, window, patch, settings, settle, events } = overlay()
   geometry.setFullscreen(true)
