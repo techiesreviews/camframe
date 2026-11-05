@@ -31,6 +31,8 @@ export const PROMPTER_SITE = 'https://prompter.techies.tools'
 export const PROMPTER_PREVIEW_SITE = 'https://preview.prompter.techies.tools'
 const MAX_BODY_BYTES = 1024
 const SCENE_NAME_MAX = 40
+// Line breaks, control and invisible (zero-width) characters would make a blank-looking Scene.
+const HIDDEN_NAME_CHARACTER = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
 // The version of this wire protocol in the status body. 2 added exact sizes and places, layout
 // Scenes, the small size, and the live view in the status.
 export const PROMPTER_LINK_API = 2
@@ -154,8 +156,8 @@ export function parseSceneSave(body) {
   const unknown = unknownFields(body, SCENE_SAVE_KEYS, 'Scene')
   if (unknown) return { error: unknown }
   const { name, size = 'current', position = 'current', margin, withinRight, replace = false, apply = false } = body
-  if (typeof name !== 'string' || !name.trim() || name.trim().length > SCENE_NAME_MAX) {
-    return { error: `name must be a Scene name of 1 to ${SCENE_NAME_MAX} characters.` }
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > SCENE_NAME_MAX || HIDDEN_NAME_CHARACTER.test(name.trim())) {
+    return { error: `name must be a Scene name of 1 to ${SCENE_NAME_MAX} characters, without line breaks or invisible characters.` }
   }
   if (size !== 'small' && size !== 'current' && !isCameraSize(size)) {
     return { error: `size must be "small", "current", or ${SIZE_RANGE}.` }
