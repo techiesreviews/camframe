@@ -134,7 +134,7 @@ Changes the view now. Every cue that worked before API 2 is still accepted.
 What each cue does:
 
 - `{"size":"full"}`: Full screen, or the Scene chosen for Face full in CamFrame.
-- `{"size":"small"}`: the Face small choice in CamFrame. By default ("Same place"): out of Full screen back to the previous place, at the small size; already in Compact mode, it shrinks or grows to the small size around the camera's centre. Either way the whole window stays on the display (a small size too big for it shrinks, and `layout.clamped` says so).
+- `{"size":"small"}`: the Face small choice in CamFrame. By default ("Same place"): out of Full screen back to the previous place, at the small size; already in Compact mode, it shrinks or grows to the small size around the camera's centre, and does nothing when the camera already has that size (also if it was dragged partly off the display). When it moves the camera, the whole window stays on the display (a small size too big for it shrinks, and `layout.clamped` says so).
 - `{"size":"small","position":"bottom-right"}`: the small size at that place.
 - `{"size":432,"position":"right","withinRight":0.3}`: exactly 432 px (or less, to fit) at that place. It does not change the small size.
 - `{"size":400,"position":{"x":1200,"y":100}}`: exactly 400 px with its top-left at (1200, 100), kept on screen.
@@ -160,7 +160,7 @@ Saves a layout Scene. It does not move the camera unless `apply` is `true`.
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `name` | 1–40 characters | required |
+| `name` | 1–40 characters, no line breaks or invisible characters, no joiner at either end | required. A name that matches another Scene's (ignoring case, accents written two ways, joiners) is `409 scene-exists` without `replace` |
 | `size` | `"small"` (follows the small size, now and later), `"current"`, or 180–640 | `"current"` |
 | `position` | a place, a point `{x,y}`, or `"current"` | `"current"` |
 | `margin` | 0–160, only with a place | CamFrame's Corner margin when applied |
