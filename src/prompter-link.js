@@ -13,6 +13,7 @@ import {
   WITHIN_RIGHT_MIN,
   isWithinRightShare,
 } from './settings.js'
+import { sameName } from './scenes.js'
 
 // The Prompter link: an opt-in HTTP endpoint on this computer that lets the teleprompter
 // (https://prompter.techies.tools, its preview https://preview.prompter.techies.tools, a local copy, or
@@ -36,7 +37,11 @@ const SCENE_NAME_MAX = 40
 // Scene name: they make a name that looks like another or looks blank. Joiners (U+200C, U+200D),
 // variation selectors and emoji tag characters stay, since emoji, Persian and Indic text need them.
 const NEVER_IN_NAME = /[\p{Cc}\p{Zl}\p{Zp}\u200e\u200f\u202a-\u202e\u2066-\u2069]|(?![\u200c\u200d\ufe00-\ufe0f\u{e0020}-\u{e007f}\u{e0100}-\u{e01ef}])\p{Default_Ignorable_Code_Point}/u
-const isBlankLookingName = (name) => NEVER_IN_NAME.test(name) || name.replace(/[\u2800\s]/gu, '') === ''
+// A joiner at either end joins nothing (inside a name it is needed by emoji and Persian text).
+const JOINER_AT_AN_END = /^[\u200c\u200d]|[\u200c\u200d]$/u
+const ONLY_INVISIBLE = /[\p{Default_Ignorable_Code_Point}\u2800\s]/gu
+const isBlankLookingName = (name) =>
+  NEVER_IN_NAME.test(name) || JOINER_AT_AN_END.test(name) || name.replace(ONLY_INVISIBLE, '') === ''
 // The version of this wire protocol in the status body. 2 added exact sizes and places, layout
 // Scenes, the small size, and the live view in the status.
 export const PROMPTER_LINK_API = 2
@@ -190,8 +195,6 @@ export function parseSmallSize(body) {
 }
 
 const sceneById = (settings, id) => settings.presets.find((scene) => scene.id === id)
-// Same rule as the Scene library: case and composed versus decomposed accents do not matter.
-const sameName = (left, right) => left.normalize('NFC').toLocaleLowerCase() === right.normalize('NFC').toLocaleLowerCase()
 
 // What a checked cue does with the current Preferences: `fullscreen`, `compact` (back to the
 // previous Compact place at the small size), `place` (Compact at a size and a spot, a point, or the

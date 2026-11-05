@@ -13,8 +13,11 @@ export const SCENE_IMPORT_ERROR = 'That file is not a valid CamFrame scene expor
 export const NO_SCENES_NOTICE = 'No saved scenes'
 
 const defaultSceneId = () => `preset-${Date.now().toString(36)}`
-// Scene names match without regard to case or to composed versus decomposed accents.
-const sameName = (left, right) => left.normalize('NFC').toLocaleLowerCase() === right.normalize('NFC').toLocaleLowerCase()
+// Scene names match without regard to case, to composed versus decomposed accents, or to joiners,
+// variation selectors and emoji tags (invisible, so two such names look the same).
+const INVISIBLE_WHEN_MATCHING = /[\u200c\u200d\ufe00-\ufe0f\u{e0020}-\u{e007f}\u{e0100}-\u{e01ef}]/gu
+const nameKey = (name) => name.normalize('NFC').replace(INVISIBLE_WHEN_MATCHING, '').toLocaleLowerCase()
+export const sameName = (left, right) => nameKey(left) === nameKey(right)
 
 function withScenes(settings, scenes) {
   return sanitizeSettings({ ...settings, presets: scenes })

@@ -610,6 +610,27 @@ test('two Scenes applied in Full screen, the last without a position, leave to t
   assert.deepEqual(window.bounds, compact(settings(), { x: 1200, y: 300 }))
 })
 
+test('a hand drag the stored position has not seen yet still returns there after Full screen', () => {
+  const { geometry, window, settings, settle } = overlay()
+  // The window is dragged by hand; the native `moved` event has not reached the settings yet.
+  window.bounds = { ...window.bounds, x: 900, y: 250 }
+  geometry.setFullscreen(true)
+  settle()
+  const expected = geometry.fullscreenReturnBounds()
+  assert.deepEqual(expected, compact(settings(), { x: 900, y: 250 }))
+  geometry.setFullscreen(false)
+  settle()
+  assert.deepEqual(window.bounds, expected)
+})
+
+test('in Full screen with the onboarding reserve open, the heading bounds are the whole display', () => {
+  const { geometry, settle } = overlay()
+  geometry.setOnboardingReserve(true)
+  geometry.setFullscreen(true)
+  settle()
+  assert.deepEqual(geometry.targetBounds(), DISPLAY)
+})
+
 test('showCompact leaves Full screen for the new compact position', () => {
   const { geometry, window, patch, settings, settle, events } = overlay()
   geometry.setFullscreen(true)

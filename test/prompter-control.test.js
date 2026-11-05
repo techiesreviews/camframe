@@ -349,6 +349,30 @@ test('Full screen then a bare "small" at the same size and place keeps the Activ
   assert.equal((await live.status()).activeScene, null)
 })
 
+test('a hand drag not yet saved by the moved event is where Full screen then "small" returns', async (t) => {
+  const live = await harness(t)
+  await live.cue({ size: 288, position: 'bottom-right' })
+  live.settle()
+  live.window.bounds = { ...live.window.bounds, x: 700, y: 300 }
+  await live.cue({ size: 'full' })
+  live.settle()
+  await live.cue({ size: 'small' })
+  live.settle()
+  const view = (await live.status()).view
+  assert.equal(view.window.x, 700)
+  assert.equal(view.window.y, 300)
+
+  // A cue that names the old stored place still goes there, not to the dragged place.
+  const corner = (await live.status()).view.camera
+  await live.cue({ size: 'full' })
+  live.settle()
+  await live.cue({ size: 288, position: 'bottom-right' })
+  live.settle()
+  const placed = (await live.status()).view
+  assert.equal(placed.camera.x + placed.camera.width, 1920 - 32)
+  assert.notEqual(placed.camera.x, corner.x)
+})
+
 test('with no stored position, Full screen then a bare "small" goes back where the Overlay was', async (t) => {
   const live = await harness(t)
   await live.saveScene(SMALL_CORNER)
@@ -604,6 +628,8 @@ test('a look-alike name needs replace, and a cue finds a Scene by either form of
   assert.equal(hidden.status, 400)
   assert.equal((await live.cue({ scene: decomposed })).status, 200)
   assert.equal((await live.cue({ scene: composed })).status, 200)
+  // Allowed invisible characters (a variation selector) cannot make a look-alike either.
+  assert.equal((await live.saveScene({ name: 'Caf\u00e9\ufe0f', size: 300 })).status, 409)
   // Joiners that real text needs are still fine.
   assert.equal((await live.saveScene({ name: '\u{1F469}\u200d\u{1F4BB} Demo', size: 300 })).status, 200)
 })
