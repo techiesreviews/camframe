@@ -31,12 +31,12 @@ export const PROMPTER_SITE = 'https://prompter.techies.tools'
 export const PROMPTER_PREVIEW_SITE = 'https://preview.prompter.techies.tools'
 const MAX_BODY_BYTES = 1024
 const SCENE_NAME_MAX = 40
-// Control characters, line and paragraph separators and bidi controls are never part of a Scene
-// name, and a name that is only invisible characters (zero-width, Hangul filler, braille blank) or
-// spaces would look blank. Joiners inside a name (emoji, Persian, Indic text) are fine.
-const NEVER_IN_NAME = /[\p{Cc}\p{Zl}\p{Zp}\u200e\u200f\u202a-\u202e\u2066-\u2069]/u
-const INVISIBLE_ONLY = /[\p{Default_Ignorable_Code_Point}\u2800\s]/gu
-const isBlankLookingName = (name) => NEVER_IN_NAME.test(name) || name.replace(INVISIBLE_ONLY, '') === ''
+// Control characters, line and paragraph separators, bidi controls and invisible characters
+// (zero-width space, soft hyphen, word joiner, byte order mark, Hangul filler) are never part of a
+// Scene name: they make a name that looks like another or looks blank. Joiners (U+200C, U+200D),
+// variation selectors and emoji tag characters stay, since emoji, Persian and Indic text need them.
+const NEVER_IN_NAME = /[\p{Cc}\p{Zl}\p{Zp}\u200e\u200f\u202a-\u202e\u2066-\u2069]|(?![\u200c\u200d\ufe00-\ufe0f\u{e0020}-\u{e007f}\u{e0100}-\u{e01ef}])\p{Default_Ignorable_Code_Point}/u
+const isBlankLookingName = (name) => NEVER_IN_NAME.test(name) || name.replace(/[\u2800\s]/gu, '') === ''
 // The version of this wire protocol in the status body. 2 added exact sizes and places, layout
 // Scenes, the small size, and the live view in the status.
 export const PROMPTER_LINK_API = 2
@@ -161,7 +161,7 @@ export function parseSceneSave(body) {
   if (unknown) return { error: unknown }
   const { name, size = 'current', position = 'current', margin, withinRight, replace = false, apply = false } = body
   if (typeof name !== 'string' || !name.trim() || name.trim().length > SCENE_NAME_MAX || isBlankLookingName(name.trim())) {
-    return { error: `name must be a Scene name of 1 to ${SCENE_NAME_MAX} characters, without line breaks or invisible characters.` }
+    return { error: `name must be a Scene name of 1 to ${SCENE_NAME_MAX} characters, without line breaks or invisible characters (joiners are fine).` }
   }
   if (size !== 'small' && size !== 'current' && !isCameraSize(size)) {
     return { error: `size must be "small", "current", or ${SIZE_RANGE}.` }
@@ -190,7 +190,8 @@ export function parseSmallSize(body) {
 }
 
 const sceneById = (settings, id) => settings.presets.find((scene) => scene.id === id)
-const sameName = (left, right) => left.toLocaleLowerCase() === right.toLocaleLowerCase()
+// Same rule as the Scene library: case and composed versus decomposed accents do not matter.
+const sameName = (left, right) => left.normalize('NFC').toLocaleLowerCase() === right.normalize('NFC').toLocaleLowerCase()
 
 // What a checked cue does with the current Preferences: `fullscreen`, `compact` (back to the
 // previous Compact place at the small size), `place` (Compact at a size and a spot, a point, or the
