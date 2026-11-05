@@ -1,5 +1,5 @@
-import { OVERLAY_CHROME, SCENE_LIMIT, sanitizeSettings, settingsForPreset } from './settings.js'
-import { planCompactLayout } from './overlay-geometry.js'
+import { OVERLAY_CHROME, SCENE_LIMIT, overlayDimensionsFor, sanitizeSettings, settingsForPreset } from './settings.js'
+import { keepInside, planCompactLayout } from './overlay-geometry.js'
 
 // The Scene library owns every Scene rule: naming, ids, the Scene limit, ordering, import/export,
 // and which Scene is active. Each operation takes the current `{ settings, activeSceneId }` and
@@ -60,7 +60,8 @@ export function saveScene(
 }
 
 // The size and place a layout Scene gets now, planned with the live shape; else its saved size and
-// place (no work area known, or the display is too small even for the smallest camera).
+// place (no work area known, or the display is too small even for the smallest camera). With a work
+// area known, the saved place is kept inside it, so the camera never opens off screen.
 // A layout with a place is planned on the display the Overlay is on or heading to
 // (`context.workArea`). One without a place keeps its saved camera point on the display nearest
 // that point (`context.workAreaAt`), shrunk and kept on screen there.
@@ -87,7 +88,17 @@ export function layoutSceneGeometry(scene, settings, { workArea, workAreaAt } = 
           { workArea: area },
         )
       : undefined
-  if (!plan || plan.error) return { ...saved, requestedSize, clamped: saved.size !== requestedSize }
+  if (!plan || plan.error) {
+    const window = overlayDimensionsFor({ shape: settings.shape, size: saved.size })
+    const position =
+      area && saved.position
+        ? {
+            x: keepInside(saved.position.x, area.x, area.width, window.width),
+            y: keepInside(saved.position.y, area.y, area.height, window.height),
+          }
+        : saved.position
+    return { ...saved, position, requestedSize, clamped: saved.size !== requestedSize }
+  }
   return { size: plan.size, position: plan.position, clamped: plan.clamped, requestedSize }
 }
 

@@ -184,6 +184,24 @@ test('hiding the Overlay stops dragging and makes it click-through', () => {
   assert.deepEqual(window.bounds, before)
 })
 
+test('a cue sent during a move-drag ends the drag and keeps its own place', () => {
+  const { geometry, window, patch, screen, clock, settings, events, settle } = overlay()
+  geometry.startDrag()
+  screen.cursor = { x: 300, y: 300 }
+  clock.advance(32)
+  patch({ position: { x: 1500, y: 700 } })
+  geometry.showCompact()
+  settle()
+  assert.deepEqual(window.bounds, compact(settings(), { x: 1500, y: 700 }))
+
+  // The pointer keeps moving, but the drag is over: the camera stays at the cue's place.
+  screen.cursor = { x: 900, y: 900 }
+  clock.advance(100)
+  assert.deepEqual(window.bounds, compact(settings(), { x: 1500, y: 700 }))
+  assert.equal(clock.activeTimers(), 0)
+  assert.deepEqual(events.positions, [])
+})
+
 test('Full screen animates to the display and back to the compact position', () => {
   const { geometry, window, clock, events, settings, settle } = overlay()
   const compactBounds = window.getBounds()
