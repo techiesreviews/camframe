@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { OVERLAY_CHROME, SCENE_LIMIT, sanitizeSettings, settingsForPreset } from '../src/settings.js'
+import { OVERLAY_CHROME, SCENE_LIMIT, overlayDimensionsFor, sanitizeSettings, settingsForPreset } from '../src/settings.js'
 import {
   NO_SCENES_NOTICE,
   applyScene,
@@ -247,4 +247,23 @@ test('a layout Scene without a place plans on the display nearest its saved poin
   assert.ok(planned.position.x >= nearest.x && planned.position.x + planned.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= nearest.x + nearest.width)
   const fallback = layoutSceneGeometry(scene, settings, { workArea: current })
   assert.ok(fallback.position.x + fallback.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= current.width, 'without workAreaAt it uses workArea')
+})
+
+test('a layout Scene that cannot be planned keeps its saved place on the screen', () => {
+  const scene = {
+    id: 'right',
+    name: 'Right',
+    // Saved on a 1920 px display: the window sits near the right edge, x 1518.
+    settings: settingsForPreset({ size: 288, position: { x: 1518, y: 300 } }),
+    layout: { size: 'small', position: 'right', withinRight: 0.2 },
+  }
+  const settings = sanitizeSettings({ size: 288 })
+  // A lone 1024 px display: 20% of it is too narrow for the smallest camera, so planning fails.
+  const lone = { x: 0, y: 0, width: 1024, height: 768 }
+  const geometry = layoutSceneGeometry(scene, settings, { workArea: lone })
+  const window = overlayDimensionsFor({ shape: settings.shape, size: geometry.size })
+  assert.ok(geometry.position.x >= lone.x && geometry.position.x + window.width <= lone.x + lone.width, 'inside horizontally')
+  assert.ok(geometry.position.y >= lone.y && geometry.position.y + window.height <= lone.y + lone.height, 'inside vertically')
+  // With no work area known there is nothing to keep it inside: the saved place stays.
+  assert.deepEqual(layoutSceneGeometry(scene, settings).position, { x: 1518, y: 300 })
 })

@@ -87,7 +87,7 @@ export function compactBaseBounds({ settings, current, workArea, keepCenter = tr
   }
 }
 
-const keepInside = (value, start, length, windowLength) =>
+export const keepInside = (value, start, length, windowLength) =>
   Math.round(Math.max(start, Math.min(value, start + length - windowLength)))
 
 // The Compact window position that puts the camera surface at `spot` in `workArea`, `margin` px
@@ -314,10 +314,11 @@ export function createOverlayGeometry({
     resize = undefined
   }
 
-  // A Scene or cue moving the window ends a corner drag that has already moved, so the drag
-  // cannot undo the move or save its own size as the small size. A corner only held keeps
-  // waiting and starts from the new size when the pointer moves.
+  // A Scene or cue moving the window ends a move-drag and a corner drag that has already moved,
+  // so the drag cannot undo the move, save its own spot over the cue's, or save its size as the
+  // small size. A corner only held keeps waiting and starts from the new size when the pointer moves.
   function endHandResize() {
+    stopDrag()
     if (resize?.moved) stopResize()
   }
 
