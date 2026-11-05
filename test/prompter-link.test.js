@@ -498,6 +498,10 @@ test('Scene and small-size requests are checked strictly', () => {
     { name: '\u200b' },
     { name: 'A\nB' },
     { name: '\u3164' },
+    { name: 'De\u200bmo' },
+    { name: 'De\u00admo' },
+    { name: 'De\u2060mo' },
+    { name: 'De\ufeffmo' },
     { name: '\u2800' },
     { name: ' \u200b\u2800 ' },
     { name: 'A', size: 'big' },
@@ -511,7 +515,7 @@ test('Scene and small-size requests are checked strictly', () => {
   ]) {
     assert.ok(parseSceneSave(bad).error, JSON.stringify(bad))
   }
-  for (const good of ['\u{1F469}\u200d\u{1F4BB} Demo', '\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645', 'A\u200bB']) {
+  for (const good of ['\u{1F469}\u200d\u{1F4BB} Demo', '\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645', '\u{1F3F4}\u{E0067}\u{E0062}\u{E007F} flag']) {
     assert.equal(parseSceneSave({ name: good }).error, undefined, good)
   }
   assert.deepEqual(parseSmallSize({ size: 288 }), { request: { size: 288 } })
