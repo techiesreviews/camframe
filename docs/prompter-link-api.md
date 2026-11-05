@@ -18,7 +18,7 @@ API 2 needs a CamFrame build that contains it. Check before relying on it: `GET 
 | 404 | `unknown-scene` | No Scene has that name. Nothing changed. |
 | 409 | `scene-exists` | A Scene with that name exists and `replace` was not `true`. |
 | 409 | `scene-limit` | CamFrame already has 6 Scenes. Nothing was deleted. |
-| 422 | `does-not-fit` | Even the smallest camera (180 px) does not fit the place asked for in a cue. Nothing changed. (A saved layout Scene that cannot fit on the display it is cued on is not refused: it answers `200` with `"clamped": true`, and CamFrame uses its saved size and place, kept on screen.) |
+| 422 | `does-not-fit` | Even the smallest camera (180 px) does not fit the place asked for in a cue or a Scene save. Nothing changed. (A saved layout Scene that cannot fit on the display it is cued on is not refused: it answers `200` with `"clamped": true`, and CamFrame uses its saved size and place, kept on screen.) |
 | 503 | `not-ready` | CamFrame's window is not open yet. |
 
 Older errors (wrong host or page `403`, wrong method `405`, too large `413`, not JSON `415`, invalid JSON `400`, unknown path `404`) have no `code`.
@@ -170,7 +170,7 @@ Saves a layout Scene. It does not move the camera unless `apply` is `true`.
 
 The Scene keeps the size you ask for (`432`, even if a small display needs less, or `"small"`, which always means the small size) and the place name, so it fits whichever display it is applied on. With a point or `"current"`, it keeps that camera position on the display nearest to it, shrunk and kept on screen there if needed (for example after the small size grows).
 
-Only the named Scene changes. Saving never deletes another Scene: past 6 Scenes the answer is `409 scene-limit`.
+Only the named Scene changes. Saving never deletes another Scene: past 6 Scenes the answer is `409 scene-limit`. If the place asked for cannot fit even the smallest camera on the display, the answer is `422 does-not-fit` and nothing is saved.
 
 ```http
 POST /camframe/scenes

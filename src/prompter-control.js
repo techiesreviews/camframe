@@ -12,7 +12,7 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
   const notReady = { error: 'CamFrame is not ready yet.', code: 'not-ready', status: 503 }
 
   // Compact bounds to keep the centre of: where the window is heading, or the place Full screen
-  // returns to (the stored position, else where the Overlay was before Full screen).
+  // returns to (a position a Scene stored while in Full screen, else where the Overlay was before Full screen).
   function compactReference(overlay) {
     return overlay.isFullscreen() ? overlay.fullscreenReturnBounds() : overlay.targetBounds()
   }
@@ -75,10 +75,11 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
     if (layout.error) return { ...layout, status: 422 }
     const unchanged =
       layout.size === settings.size && layout.position.x === current?.x && layout.position.y === current?.y
-    if (!(keepActive && unchanged)) {
+    const keepBase = keepActive && unchanged
+    if (!keepBase) {
       commit(sceneLibrary.patchSettings(sceneState(), { size: layout.size, position: layout.position }))
     }
-    overlay.showCompact()
+    overlay.showCompact({ keepBase })
     return { size: layout.size, requestedSize: layout.requestedSize, clamped: layout.clamped }
   }
 
