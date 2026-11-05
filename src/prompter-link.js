@@ -142,7 +142,7 @@ export function parseCue(body) {
   if (size === undefined) return { error: 'A cue needs size ("full", "small" or pixels) or scene.' }
   if (size === 'full') {
     if (position !== undefined || margin !== undefined || withinRight !== undefined) {
-      return { error: 'position goes only with size "small" or a size in pixels.' }
+      return { error: 'position, margin and withinRight go only with size "small" or a size in pixels.' }
     }
     return { cue: { size } }
   }
