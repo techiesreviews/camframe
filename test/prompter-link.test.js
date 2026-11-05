@@ -47,7 +47,7 @@ const json = { 'Content-Type': 'application/json' }
 const PROMPTER = 'https://prompter.techies.tools'
 const PREVIEW = 'https://preview.prompter.techies.tools'
 
-async function startLink(t, { settings = withScenes(), applyCue } = {}) {
+async function startLink(t, { settings = withScenes(), applyCue, extra = {} } = {}) {
   const cues = []
   const states = []
   const link = createPrompterLink({
@@ -60,6 +60,7 @@ async function startLink(t, { settings = withScenes(), applyCue } = {}) {
       return plan.error ? plan : { ok: true }
     },
     onState: (state) => states.push(state),
+    ...extra,
   })
   link.setEnabled(true)
   t.after(() => link.close())
@@ -382,6 +383,19 @@ test('cues are checked strictly', () => {
     { size: 'full', extra: true },
   ]) {
     assert.ok(parseCue(bad).error, JSON.stringify(bad))
+  }
+})
+
+test('the Scene and small-size routes refuse an oversized body', async (t) => {
+  const { port } = await startLink(t, { extra: { saveScene: () => ({ ok: true }), setSmallSize: () => ({ ok: true }) } })
+  for (const path of ['/camframe/scenes', '/camframe/small-size']) {
+    const response = await call(port, {
+      method: 'POST',
+      path,
+      headers: { ...json, Origin: PROMPTER },
+      body: { name: 'x'.repeat(2000) },
+    })
+    assert.equal(response.status, 413, path)
   }
 })
 
