@@ -638,7 +638,7 @@ test('on a display too small for any camera, a layout Scene keeps its saved geom
   assert.deepEqual((await live.status()).view.workArea, tiny.workArea)
   const cue = await live.cue({ scene: 'Live right large' })
   assert.equal(cue.status, 200)
-  assert.deepEqual(cue.body.layout, { size: 432, requestedSize: 432, clamped: false })
+  assert.deepEqual(cue.body.layout, { size: 432, requestedSize: 432, clamped: true })
   live.settle()
   // A direct cue that cannot fit is refused instead.
   await live.cue({ size: 180, position: { x: 1930, y: 90 } })
