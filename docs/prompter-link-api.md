@@ -10,7 +10,7 @@ API 2 needs a CamFrame build that contains it. Check before relying on it: `GET 
 - `POST` bodies are JSON (`Content-Type: application/json`), at most 1024 bytes.
 - Allowed pages: `https://prompter.techies.tools`, `https://preview.prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, `file://` copies, and local programs that send no `Origin`.
 - `POST /camframe/scenes` and `POST /camframe/small-size` refuse `file://` copies (`Origin: null`, `403`). A `file://` copy may send cues, but its status has only `app`, `version`, `scenes` and `api`, and its cue answers have only `ok` and `cue`.
-- Every answer is JSON. Success is `200 {"ok":true,…}`. A refusal is `{"ok":false,"error":"<plain English>","code":"<code>"}`:
+- Every answer is JSON. Success is `200 {"ok":true,…}` (except `GET /camframe/status`, which is the status object itself). A refusal is `{"ok":false,"error":"<plain English>","code":"<code>"}`:
 
 | HTTP | `code` | Meaning |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ Read-only. The first three fields are the same as before API 2.
 ```json
 {
   "app": "camframe",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "scenes": ["Interview", "Live small corner", "Live right large"],
   "api": 2,
   "sceneLimit": 6,
@@ -227,7 +227,7 @@ POST /camframe/small-size
 | Plugin or advisory screen | `{"scene":"Live small corner"}` |
 | Same, with the older cue shape | `{"size":"small","position":"bottom-right"}` |
 
-Both small cues give exactly the same result, also after the large Scene: the small size, bottom-right. "Live small corner" follows the small size, so the two stay the same even after the small size changes. Each one-off request without a saved Scene also works: `{"size":432,"position":"right","withinRight":0.3}`.
+Both small cues give the same size and place, also after the large Scene: the small size, bottom-right. One difference: applying a Scene shows its name on the camera for about 1.6 s (CamFrame's existing Scene notice, as when a Scene is picked by hand); a size or place cue shows nothing. If the camera is captured on stream, use the size and place cue for a silent change. "Live small corner" follows the small size, so the two stay the same even after the small size changes. Each one-off request without a saved Scene also works: `{"size":432,"position":"right","withinRight":0.3}`.
 
 ### Checking a cue worked
 
