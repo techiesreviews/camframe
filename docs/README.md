@@ -8,7 +8,7 @@ This directory is the reconstruction dossier for CamFrame. Its goal is to preser
 2. [`product-spec.md`](product-spec.md) — the user-visible unreleased product contract based on v0.4.3.
 3. [`visual-spec.md`](visual-spec.md) — reachable layout, visual tokens, states, motion, and icon contract.
 4. [`architecture.md`](architecture.md) — runtime boundaries, module/caller map, and important flows.
-5. [`data-contracts.md`](data-contracts.md) — Preferences, Scenes, IPC, constraints, and geometry.
+5. [`data-contracts.md`](data-contracts.md) — Preferences, Scenes, IPC, constraints, and geometry. For the Prompter link, [`prompter-link-api.md`](prompter-link-api.md) is the guide for whoever drives it.
 6. [`rebuild-guide.md`](rebuild-guide.md) — dependency baseline and implementation sequence.
 7. [`verification/README.md`](verification/README.md) — automated coverage and the required manual matrix.
 8. [`product-history.md`](product-history.md) — what was added, retained, renamed, removed, or unsuccessful.

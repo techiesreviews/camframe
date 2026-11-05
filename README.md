@@ -49,7 +49,7 @@ You can put a cue after other words, like `[Share screen. Face small.]` or `[Sto
 
 **Good to know**
 
-- The link only moves and resizes CamFrame's own camera view. It never records, streams or changes your camera.
+- The link moves and resizes CamFrame's own camera view, can save layout Scenes and the small size, and lets the prompter read your camera's name and your display layout. It never records, streams or changes your camera.
 - It works only on this computer: CamFrame listens on `127.0.0.1` port 47833 and answers only the prompter. Your script never leaves the prompter; only the short cue does.
 - Use Chrome or Edge for the prompter. Safari may refuse to reach apps on this computer.
 - If the settings say the port is in use, another app took port 47833. Close it, then switch the link off and on.
