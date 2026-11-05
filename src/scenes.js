@@ -97,7 +97,9 @@ export function layoutSceneGeometry(scene, settings, { workArea, workAreaAt } = 
             y: keepInside(saved.position.y, area.y, area.height, window.height),
           }
         : saved.position
-    return { ...saved, position, requestedSize, clamped: saved.size !== requestedSize }
+    // `clamped` is also true when the Scene's rule could not be met (no room even for the smallest
+    // camera in its place), so a cue answer never reports a clean fit for the fallback.
+    return { ...saved, position, requestedSize, clamped: Boolean(plan?.error) || saved.size !== requestedSize }
   }
   return { size: plan.size, position: plan.position, clamped: plan.clamped, requestedSize }
 }
