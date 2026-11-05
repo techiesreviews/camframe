@@ -12,6 +12,8 @@ import {
   linkStatusBody,
   originAllowed,
   parseCue,
+  parseSceneSave,
+  parseSmallSize,
 } from '../src/prompter-link.js'
 
 const scenes = [
@@ -96,7 +98,11 @@ test('turning the link on listens on 127.0.0.1 only; turning it off closes the p
 
   const status = await call(port, { headers: { Origin: PROMPTER } })
   assert.equal(status.status, 200)
-  assert.deepEqual(status.body, { app: 'camframe', version: '0.6.0', scenes: ['Demo', 'Talking head'] })
+  // The original fields keep their meaning; API 2 only adds fields.
+  assert.equal(status.body.app, 'camframe')
+  assert.equal(status.body.version, '0.6.0')
+  assert.deepEqual(status.body.scenes, ['Demo', 'Talking head'])
+  assert.equal(status.body.api, 2)
 
   link.setEnabled(false)
   assert.equal(link.state().state, 'off')
@@ -395,7 +401,9 @@ test('the endpoint applies a valid cue and explains bad ones', async (t) => {
 
   const badValue = await post({ size: 'huge' })
   assert.equal(badValue.status, 400)
-  assert.equal(badValue.body.error, 'size must be "full" or "small".')
+  assert.equal(badValue.body.error, 'size must be "full", "small", or a whole number of pixels from 180 to 640.')
+  assert.equal(badValue.body.code, 'bad-request')
+  assert.equal(unknownScene.body.code, 'unknown-scene')
 
   assert.equal((await post('{"size":', json)).status, 400)
   assert.equal((await post({ size: 'full' }, { 'Content-Type': 'text/plain' })).status, 415)
@@ -410,8 +418,12 @@ test('the endpoint applies a valid cue and explains bad ones', async (t) => {
 test('cue actions follow the Face full and Face small settings', () => {
   const settings = withScenes()
   assert.deepEqual(cueAction({ size: 'full' }, settings), { action: 'fullscreen' })
-  assert.deepEqual(cueAction({ size: 'small' }, settings), { action: 'compact' })
-  assert.deepEqual(cueAction({ size: 'small', position: 'right' }, settings), { action: 'place', spot: 'right' })
+  assert.deepEqual(cueAction({ size: 'small' }, settings), { action: 'compact', size: 288 })
+  assert.deepEqual(cueAction({ size: 'small', position: 'right' }, settings), {
+    action: 'place',
+    size: 288,
+    spot: 'right',
+  })
   assert.deepEqual(cueAction({ size: 'small', scene: 'talking HEAD' }, settings), {
     action: 'scene',
     sceneId: 'preset-talk',
@@ -419,9 +431,10 @@ test('cue actions follow the Face full and Face small settings', () => {
 
   const chosen = withScenes({ prompterFaceFull: 'scene:preset-demo', prompterFaceSmall: 'bottom-left' })
   assert.deepEqual(cueAction({ size: 'full' }, chosen), { action: 'scene', sceneId: 'preset-demo' })
-  assert.deepEqual(cueAction({ size: 'small' }, chosen), { action: 'place', spot: 'bottom-left' })
+  assert.deepEqual(cueAction({ size: 'small' }, chosen), { action: 'place', size: 288, spot: 'bottom-left' })
   assert.deepEqual(cueAction({ size: 'small', position: 'top-right' }, chosen), {
     action: 'place',
+    size: 288,
     spot: 'top-right',
   })
 
@@ -430,5 +443,181 @@ test('cue actions follow the Face full and Face small settings', () => {
 
   const deleted = sanitizeSettings({ prompterFaceFull: 'scene:gone', prompterFaceSmall: 'scene:gone' })
   assert.deepEqual(cueAction({ size: 'full' }, deleted), { action: 'fullscreen' })
-  assert.deepEqual(cueAction({ size: 'small' }, deleted), { action: 'compact' })
+  assert.deepEqual(cueAction({ size: 'small' }, deleted), { action: 'compact', size: 288 })
+})
+
+test('cues take an exact size, an exact point, a margin and a right-hand share', () => {
+  assert.deepEqual(parseCue({ size: 432, position: 'right', withinRight: 0.3 }), {
+    cue: { size: 432, position: 'right', withinRight: 0.3 },
+  })
+  assert.deepEqual(parseCue({ size: 300 }), { cue: { size: 300 } })
+  assert.deepEqual(parseCue({ size: 'small', position: { x: 1500, y: 700 } }), {
+    cue: { size: 'small', position: { x: 1500, y: 700 } },
+  })
+  assert.deepEqual(parseCue({ size: 'small', position: 'bottom-right', margin: 0 }), {
+    cue: { size: 'small', position: 'bottom-right', margin: 0 },
+  })
+  for (const bad of [
+    { size: 179 },
+    { size: 641 },
+    { size: 300.5 },
+    { size: '432' },
+    { size: 432, position: { x: 1 } },
+    { size: 432, position: { x: 1, y: 2, z: 3 } },
+    { size: 432, position: { x: 1.5, y: 2 } },
+    { size: 432, position: { x: 1e9, y: 2 } },
+    { size: 432, margin: 20 },
+    { size: 432, position: { x: 1, y: 2 }, margin: 20 },
+    { size: 432, position: 'right', margin: 161 },
+    { size: 432, position: 'right', margin: -1 },
+    { size: 432, position: 'right', withinRight: 0 },
+    { size: 432, position: 'right', withinRight: 1.5 },
+    { size: 432, position: 'left', withinRight: 0.3 },
+    { size: 432, withinRight: 0.3 },
+    { size: 'full', withinRight: 0.3 },
+    { size: 'full', margin: 0 },
+    { scene: 'Demo', withinRight: 0.3 },
+    { scene: 'Demo', size: 432 },
+  ]) {
+    assert.ok(parseCue(bad).error, JSON.stringify(bad))
+  }
+})
+
+test('Scene and small-size requests are checked strictly', () => {
+  assert.deepEqual(parseSceneSave({ name: ' Live right large ', size: 432, position: 'right', withinRight: 0.3 }), {
+    request: { name: 'Live right large', size: 432, position: 'right', withinRight: 0.3, replace: false, apply: false },
+  })
+  assert.deepEqual(parseSceneSave({ name: 'Here' }), {
+    request: { name: 'Here', size: 'current', position: 'current', replace: false, apply: false },
+  })
+  for (const bad of [
+    null,
+    { size: 'small' },
+    { name: '' },
+    { name: 'x'.repeat(41) },
+    { name: 'A', size: 'big' },
+    { name: 'A', size: 100 },
+    { name: 'A', position: 'middle' },
+    { name: 'A', position: 'current', margin: 4 },
+    { name: 'A', position: 'top-left', withinRight: 0.3 },
+    { name: 'A', replace: 'yes' },
+    { name: 'A', apply: 1 },
+    { name: 'A', scene: 'B' },
+  ]) {
+    assert.ok(parseSceneSave(bad).error, JSON.stringify(bad))
+  }
+  assert.deepEqual(parseSmallSize({ size: 288 }), { request: { size: 288 } })
+  assert.deepEqual(parseSmallSize({ size: 'current' }), { request: { size: 'current' } })
+  for (const bad of [{}, { size: 'small' }, { size: 700 }, { size: 288, extra: 1 }, []]) {
+    assert.ok(parseSmallSize(bad).error, JSON.stringify(bad))
+  }
+})
+
+test('"small" means the small size, whatever size a Scene or cue set since', () => {
+  const large = withScenes({ size: 432, prompterSmallSize: 288 })
+  assert.deepEqual(cueAction({ size: 'small' }, large), { action: 'compact', size: 288 })
+  assert.deepEqual(cueAction({ size: 'small', position: 'bottom-right' }, large), {
+    action: 'place',
+    size: 288,
+    spot: 'bottom-right',
+  })
+  assert.deepEqual(cueAction({ size: 500, position: { x: 10, y: 20 } }, large), {
+    action: 'place',
+    size: 500,
+    point: { x: 10, y: 20 },
+  })
+  assert.deepEqual(cueAction({ size: 400, position: 'right', margin: 8, withinRight: 0.3 }, large), {
+    action: 'place',
+    size: 400,
+    spot: 'right',
+    margin: 8,
+    withinRight: 0.3,
+  })
+})
+
+test('routes without a handler answer 404; new routes report checked errors with a code', async (t) => {
+  const { port } = await startLink(t)
+  const post = (path, body) =>
+    call(port, { method: 'POST', path, headers: { ...json, Origin: PROMPTER }, body })
+  assert.equal((await post('/camframe/scenes', { name: 'A' })).status, 404)
+  assert.equal((await post('/camframe/small-size', { size: 288 })).status, 404)
+
+  const saved = []
+  const link = createPrompterLink({
+    port: 0,
+    status: () => ({}),
+    applyCue: () => ({ ok: true }),
+    saveScene: (request) => {
+      saved.push(request)
+      return request.name === 'Full'
+        ? { error: 'Too many.', code: 'scene-limit', status: 409 }
+        : { ok: true, scene: { name: request.name } }
+    },
+    setSmallSize: (request) => ({ ok: true, smallSize: request.size }),
+  })
+  link.setEnabled(true)
+  t.after(() => link.close())
+  await new Promise((resolve) => {
+    const wait = () => (link.state().state === 'starting' ? setTimeout(wait, 5) : resolve())
+    wait()
+  })
+  const other = link.address().port
+  const send = (path, body) =>
+    call(other, { method: 'POST', path, headers: { ...json, Origin: PROMPTER }, body })
+  assert.deepEqual((await send('/camframe/scenes', { name: 'A' })).body, { ok: true, scene: { name: 'A' } })
+  const full = await send('/camframe/scenes', { name: 'Full' })
+  assert.equal(full.status, 409)
+  assert.deepEqual(full.body, { ok: false, error: 'Too many.', code: 'scene-limit' })
+  const bad = await send('/camframe/scenes', { name: 'A', size: 9000 })
+  assert.equal(bad.status, 400)
+  assert.equal(bad.body.code, 'bad-request')
+  assert.deepEqual((await send('/camframe/small-size', { size: 300 })).body, { ok: true, smallSize: 300 })
+  assert.equal((await call(other, { path: '/camframe/scenes' })).status, 405)
+  // A file:// copy (or a sandboxed iframe anywhere) may cue the view but not save.
+  for (const path of ['/camframe/scenes', '/camframe/small-size']) {
+    const fromFile = await call(other, { method: 'POST', path, headers: { ...json, Origin: 'null' }, body: { name: 'A', size: 300 } })
+    assert.equal(fromFile.status, 403, path)
+  }
+  assert.equal(
+    (await call(other, { method: 'POST', path: '/camframe/cue', headers: { ...json, Origin: 'null' }, body: { size: 'full' } })).status,
+    200,
+  )
+  assert.equal(saved.length, 2)
+})
+
+test('a null Origin (a file:// copy or any sandboxed iframe) reads only the Scene names', async (t) => {
+  const link = createPrompterLink({
+    port: 0,
+    status: () => ({ app: 'camframe', version: '0.6.1', scenes: ['Demo'], api: 2, look: { cameraLabel: 'BRIO' }, view: {} }),
+    applyCue: () => ({ ok: true }),
+  })
+  link.setEnabled(true)
+  t.after(() => link.close())
+  await new Promise((resolve) => {
+    const wait = () => (link.state().state === 'starting' ? setTimeout(wait, 5) : resolve())
+    wait()
+  })
+  const port = link.address().port
+  const fromFile = await call(port, { headers: { Origin: 'null' } })
+  assert.deepEqual(fromFile.body, { app: 'camframe', version: '0.6.1', scenes: ['Demo'], api: 2 })
+  const fromSite = await call(port, { headers: { Origin: PROMPTER } })
+  assert.equal(fromSite.body.look.cameraLabel, 'BRIO')
+})
+
+test('a null Origin gets cue replies without the view or the layout', async (t) => {
+  // How far a size shrank (`layout`) would also give the display size away.
+  const { port } = await startLink(t, { applyCue: () => ({ ok: true, layout: { size: 172, clamped: true }, view: { workArea: {} } }) })
+  const cue = (origin) =>
+    call(port, { method: 'POST', path: '/camframe/cue', headers: { ...json, Origin: origin }, body: { size: 'small' } })
+  assert.deepEqual((await cue('null')).body, { ok: true, cue: { size: 'small' } })
+  assert.deepEqual((await cue(PROMPTER)).body.view, { workArea: {} })
+})
+
+test('a null Origin gets a does-not-fit refusal without the share or margin', async (t) => {
+  const refuse = () => ({ error: 'The right 10% of this display is too narrow…', code: 'does-not-fit', status: 422 })
+  const { port } = await startLink(t, { applyCue: refuse })
+  const send = (origin) =>
+    call(port, { method: 'POST', path: '/camframe/cue', headers: { ...json, Origin: origin }, body: { size: 300 } })
+  assert.deepEqual((await send('null')).body, { ok: false, error: 'That size and place do not fit this display.', code: 'does-not-fit' })
+  assert.match((await send(PROMPTER)).body.error, /right 10%/)
 })

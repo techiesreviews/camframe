@@ -20,6 +20,10 @@ export const COMPACT_SPOTS = Object.freeze([
 ])
 export const PROMPTER_MARGIN_MIN = 0
 export const PROMPTER_MARGIN_MAX = 160
+// The camera size range (px). For a circle or rounded square it is the side; portrait and
+// landscape derive their other side from it (`dimensionsFor`).
+export const CAMERA_SIZE_MIN = 180
+export const CAMERA_SIZE_MAX = 640
 const SCENE_CHOICE_PATTERN = /^scene:[\s\S]{1,64}$/
 export const PRESET_SETTING_KEYS = Object.freeze([
   'cameraId',
@@ -42,7 +46,7 @@ export const PRESET_SETTING_KEYS = Object.freeze([
 ])
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  schemaVersion: 13,
+  schemaVersion: 14,
   cameraId: '',
   cameraLabel: 'Default camera',
   shape: 'circle',
@@ -68,6 +72,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   prompterFaceFull: 'fullscreen',
   prompterFaceSmall: 'previous',
   prompterMargin: 32,
+  // The camera size a Prompter link "small" cue restores. Scenes and Prompter layouts never change
+  // it; resizing the Overlay by hand and `POST /camframe/small-size` do. Missing means `size`.
+  prompterSmallSize: 288,
   presets: Object.freeze([]),
 })
 
@@ -83,7 +90,9 @@ export function sanitizeSettings(input = {}, includePresets = true) {
   if (typeof input.cameraId === 'string') settings.cameraId = input.cameraId.slice(0, 512)
   if (typeof input.cameraLabel === 'string') settings.cameraLabel = input.cameraLabel.slice(0, 120)
   if (SHAPES.has(input.shape)) settings.shape = input.shape
-  if (Number.isFinite(input.size)) settings.size = Math.round(clamp(input.size, 180, 640))
+  if (Number.isFinite(input.size)) {
+    settings.size = Math.round(clamp(input.size, CAMERA_SIZE_MIN, CAMERA_SIZE_MAX))
+  }
   if (CAPTURE_RESOLUTIONS.has(input.overlayResolution)) {
     settings.overlayResolution = input.overlayResolution
   }
@@ -140,6 +149,9 @@ export function sanitizeSettings(input = {}, includePresets = true) {
       clamp(input.prompterMargin, PROMPTER_MARGIN_MIN, PROMPTER_MARGIN_MAX),
     )
   }
+  settings.prompterSmallSize = Number.isFinite(input.prompterSmallSize)
+    ? Math.round(clamp(input.prompterSmallSize, CAMERA_SIZE_MIN, CAMERA_SIZE_MAX))
+    : settings.size
   settings.completedOnboardingVersion = sanitizeCompletedOnboardingVersion(
     input.completedOnboardingVersion,
   )
@@ -156,11 +168,71 @@ export function sanitizeSettings(input = {}, includePresets = true) {
       const id = typeof preset?.id === 'string' ? preset.id.slice(0, 64) : ''
       const name = typeof preset?.name === 'string' ? preset.name.trim().slice(0, 40) : ''
       if (!id || !name || !preset.settings) return []
-      return [{ id, name, settings: settingsForPreset(preset.settings) }]
+      const layout = sanitizeSceneLayout(preset.layout)
+      const scene = { id, name, settings: settingsForPreset(preset.settings) }
+      return [layout ? { ...scene, layout } : scene]
     })
   }
 
   return settings
+}
+
+// A Scene with a `layout` is a layout Scene (saved through the Prompter link): applying it changes
+// only the Overlay size and place, planned on the display the Overlay is on or heading to (a place) or
+// the display nearest its saved point (no place), and keeps the live
+// camera, shape, appearance and framing. `position` is a place name; without one the Scene's saved
+// `settings.position` is used. `withinRight` keeps the camera inside that share of the display's
+// right side. Anything invalid drops the layout, so the Scene stays an ordinary Scene.
+export function sanitizeSceneLayout(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  // `"small"` follows the small size when applied, so the Scene and a `"small"` cue always agree.
+  if (
+    input.size !== 'small' &&
+    (!Number.isInteger(input.size) || input.size < CAMERA_SIZE_MIN || input.size > CAMERA_SIZE_MAX)
+  ) {
+    return undefined
+  }
+  const layout = { size: input.size }
+  if (input.position !== undefined) {
+    if (!COMPACT_SPOTS.includes(input.position)) return undefined
+    layout.position = input.position
+  }
+  if (input.margin !== undefined) {
+    if (
+      !Number.isInteger(input.margin) ||
+      input.margin < PROMPTER_MARGIN_MIN ||
+      input.margin > PROMPTER_MARGIN_MAX ||
+      !layout.position
+    ) {
+      return undefined
+    }
+    layout.margin = input.margin
+  }
+  if (input.withinRight !== undefined) {
+    if (!isWithinRightShare(input.withinRight) || !layout.position?.endsWith('right')) return undefined
+    layout.withinRight = input.withinRight
+  }
+  return layout
+}
+
+export const WITHIN_RIGHT_MIN = 0.1
+export const WITHIN_RIGHT_MAX = 1
+export function isWithinRightShare(value) {
+  return Number.isFinite(value) && value >= WITHIN_RIGHT_MIN && value <= WITHIN_RIGHT_MAX
+}
+
+// The camera, shape, appearance and framing of a settings object: everything a Scene stores
+// except its size and place. A layout Scene keeps these from the live settings.
+export const LOOK_SETTING_KEYS = Object.freeze(
+  PRESET_SETTING_KEYS.filter((key) => key !== 'size' && key !== 'position'),
+)
+
+// A corner resize by hand (the geometry reports one only after the pointer moved). It also sets the
+// small size whenever the size changes, so the size let go at always wins.
+export function settingsAfterHandResize(settings, patch) {
+  const next = sanitizeSettings({ ...settings, ...patch })
+  if (Number.isFinite(patch.size) && next.size !== settings.size) next.prompterSmallSize = next.size
+  return next
 }
 
 export function settingsForPreset(input = {}) {

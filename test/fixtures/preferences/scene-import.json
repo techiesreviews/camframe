@@ -931,6 +931,176 @@
       "expected": {
         "error": "That file is not a valid CamFrame scene export."
       }
+    },
+    {
+      "name": "a layout Scene imports with its layout",
+      "existing": [
+        {
+          "id": "desk",
+          "name": "Desk",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 240,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        },
+        {
+          "id": "wide",
+          "name": "Wide",
+          "settings": {
+            "cameraId": "",
+            "cameraLabel": "Default camera",
+            "shape": "circle",
+            "size": 320,
+            "overlayResolution": "720p",
+            "frameEffect": "none",
+            "effectColor": "#fb923c",
+            "glowStrength": 90,
+            "glowSpread": 13,
+            "blurAmount": 12,
+            "blurOpacity": 72,
+            "borderWidth": 0,
+            "borderColor": "#ffffff",
+            "mirror": true,
+            "cameraZoom": 100,
+            "cameraPosition": {
+              "x": 50,
+              "y": 50
+            },
+            "position": null
+          }
+        }
+      ],
+      "payload": {
+        "format": "camframe-scenes",
+        "version": 1,
+        "scenes": [
+          {
+            "id": "live",
+            "name": "Live right large",
+            "settings": {
+              "size": 432,
+              "position": {
+                "x": 1438,
+                "y": 220
+              }
+            },
+            "layout": {
+              "size": 432,
+              "position": "right",
+              "withinRight": 0.3
+            }
+          }
+        ]
+      },
+      "expected": {
+        "scenes": [
+          {
+            "id": "desk",
+            "name": "Desk",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 240,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "wide",
+            "name": "Wide",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 320,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": null
+            }
+          },
+          {
+            "id": "live",
+            "name": "Live right large",
+            "settings": {
+              "cameraId": "",
+              "cameraLabel": "Default camera",
+              "shape": "circle",
+              "size": 432,
+              "overlayResolution": "720p",
+              "frameEffect": "none",
+              "effectColor": "#fb923c",
+              "glowStrength": 90,
+              "glowSpread": 13,
+              "blurAmount": 12,
+              "blurOpacity": 72,
+              "borderWidth": 0,
+              "borderColor": "#ffffff",
+              "mirror": true,
+              "cameraZoom": 100,
+              "cameraPosition": {
+                "x": 50,
+                "y": 50
+              },
+              "position": {
+                "x": 1438,
+                "y": 220
+              }
+            },
+            "layout": {
+              "size": 432,
+              "position": "right",
+              "withinRight": 0.3
+            }
+          }
+        ],
+        "importedCount": 1
+      }
     }
   ]
 }

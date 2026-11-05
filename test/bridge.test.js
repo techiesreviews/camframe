@@ -134,7 +134,7 @@ test('main checks and normalizes renderer arguments', async () => {
     return event.returnValue
   }
 
-  send('state:update', { size: 320, presets: [], completedOnboardingVersion: 1, schemaVersion: 1 })
+  send('state:update', { size: 320, presets: [], completedOnboardingVersion: 1, schemaVersion: 1, prompterSmallSize: 999 })
   send('state:update', 'not a patch')
   send('state:update', [{ size: 1 }])
   send('preset:reorder', 'one', 'up')

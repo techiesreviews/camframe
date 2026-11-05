@@ -16,9 +16,9 @@ import {
 import {
   DEFAULT_SETTINGS,
   SCENE_LIMIT,
-  overlayDimensionsFor,
   preferencesFromDocument,
   sanitizeSettings,
+  settingsAfterHandResize,
   settingsPatchChangesOverlayGeometry,
 } from './settings.js'
 import * as sceneLibrary from './scenes.js'
@@ -27,11 +27,11 @@ import { CURRENT_ONBOARDING_VERSION } from './onboarding.js'
 import {
   alwaysOnTopLevelFor,
   compactBaseBounds,
-  compactPositionAt,
   createOverlayGeometry,
   isFullscreenExitInput,
 } from './overlay-geometry.js'
-import { createPrompterLink, cueAction, linkStatusBody } from './prompter-link.js'
+import { createPrompterLink } from './prompter-link.js'
+import { createPrompterControl } from './prompter-control.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const integrationUserDataDirectory = process.env.CAMFRAME_E2E_USER_DATA_DIR
@@ -111,16 +111,12 @@ function sceneState() {
   return { settings, activeSceneId }
 }
 
-// `compact` moves an applied Scene into Compact mode even from Full screen (Prompter link cues).
-function commitScenes(result, { compact = false } = {}) {
+// Stores a Scene library result, broadcasts it and saves it; window effects are the caller's.
+function commitState(result) {
   if (!result) return
   if (result.settings) {
     settings = result.settings
     activeSceneId = result.activeSceneId
-    if (result.appliedScene) {
-      if (compact) overlayGeometry?.showCompact()
-      else overlayGeometry?.showScene()
-    }
     emitState()
     setTrayMenu()
     saveSettings()
@@ -128,29 +124,19 @@ function commitScenes(result, { compact = false } = {}) {
   if (result.notice) showPresentationNotice(result.notice)
 }
 
-// Applies a checked Prompter link cue to the Overlay view only: Full screen, Compact mode at a
-// spot, back to the previous Compact geometry, or a Scene.
-function applyPrompterCue(cue) {
-  if (!overlayGeometry) return { error: 'CamFrame is not ready yet.', status: 503 }
-  const plan = cueAction(cue, settings)
-  if (plan.error) return plan
-  if (plan.action === 'fullscreen') overlayGeometry.setFullscreen(true)
-  else if (plan.action === 'compact') overlayGeometry.setFullscreen(false)
-  else if (plan.action === 'scene') {
-    commitScenes(sceneLibrary.applyScene(sceneState(), plan.sceneId), { compact: true })
-  } else {
-    const position = compactPositionAt(plan.spot, {
-      workArea: overlayGeometry.currentWorkArea(),
-      size: overlayDimensionsFor(settings),
-      margin: settings.prompterMargin,
-    })
-    ;({ settings, activeSceneId } = sceneLibrary.patchSettings(sceneState(), { position }))
-    overlayGeometry.showCompact()
-    emitState()
-    setTrayMenu()
-    saveSettings()
-  }
-  return { ok: true }
+function commitScenes(result) {
+  commitState(result)
+  if (result?.appliedScene) overlayGeometry?.showScene()
+}
+
+// A layout Scene fits the display the Overlay is on now, or the display its saved point is on.
+function sceneContext() {
+  if (!overlayGeometry) return {}
+  return { workArea: overlayGeometry.currentWorkArea(), workAreaAt: (point) => overlayGeometry?.workAreaAt(point) }
+}
+
+function applySceneById(id) {
+  commitScenes(sceneLibrary.applyScene(sceneState(), id, sceneContext()))
 }
 
 function savePreset(name, id) {
@@ -271,8 +257,9 @@ function createOverlayWindow() {
     screen,
     settings: () => settings,
     alwaysOnTopLevel: alwaysOnTopLevelFor(process.platform),
+    // Resizing by hand also sets the size a Prompter link "small" cue restores.
     onResize(patch) {
-      settings = sanitizeSettings({ ...settings, ...patch })
+      settings = settingsAfterHandResize(settings, patch)
       overlayGeometry.apply({ keepCenter: false })
       emitState()
       saveSettings()
@@ -328,7 +315,7 @@ function setTrayMenu() {
         label: preset.name,
         type: 'radio',
         checked: preset.id === activeSceneId,
-        click: () => commitScenes(sceneLibrary.applyScene(sceneState(), preset.id)),
+        click: () => applySceneById(preset.id),
       }))
     : [{ label: 'No saved scenes', enabled: false }]
   tray.setContextMenu(
@@ -364,7 +351,7 @@ function registerIpc() {
         overlayGeometry?.setReducedMotion(reducedMotion)
       },
       savePreset,
-      applyPreset: (id) => commitScenes(sceneLibrary.applyScene(sceneState(), id)),
+      applyPreset: (id) => applySceneById(id),
       deletePreset: (id) => commitScenes(sceneLibrary.deleteScene(sceneState(), id)),
       reorderPreset: (id, direction) => {
         commitScenes(sceneLibrary.reorderScene(sceneState(), id, direction))
@@ -407,9 +394,17 @@ app.whenReady().then(() => {
   createOverlayWindow()
   createTray()
 
+  const prompterControl = createPrompterControl({
+    geometry: () => overlayGeometry,
+    sceneState,
+    commit: commitState,
+    version: () => app.getVersion(),
+  })
   prompterLink = createPrompterLink({
-    status: () => linkStatusBody(settings, app.getVersion()),
-    applyCue: applyPrompterCue,
+    status: prompterControl.status,
+    applyCue: prompterControl.applyCue,
+    saveScene: prompterControl.saveScene,
+    setSmallSize: prompterControl.setSmallSize,
     onState(state) {
       prompterLinkStatus = state
       emitState()
@@ -423,11 +418,11 @@ app.whenReady().then(() => {
   })
   globalShortcut.register('CommandOrControl+Shift+F', toggleFullscreen)
   globalShortcut.register('CommandOrControl+Shift+P', () => {
-    commitScenes(sceneLibrary.cycleScene(sceneState()))
+    commitScenes(sceneLibrary.cycleScene(sceneState(), sceneContext()))
   })
   for (let index = 0; index < SCENE_LIMIT; index += 1) {
     globalShortcut.register(`CommandOrControl+Shift+${index + 1}`, () => {
-      commitScenes(sceneLibrary.applySceneAt(sceneState(), index))
+      commitScenes(sceneLibrary.applySceneAt(sceneState(), index, sceneContext()))
     })
   }
 })
