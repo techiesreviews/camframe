@@ -210,6 +210,8 @@ test('the Prompter link is an opt-in Scenes setting that closes with the app', (
   assert.match(scenesPanel, /id="overlay-prompter-small"/)
   assert.match(scenesPanel, /id="overlay-prompter-margin"[^>]*min="0" max="160"/)
   assert.match(mainSource, /prompterLink\.setEnabled\(settings\.prompterLink\)/)
+  // Resizing by hand sets the small size (KG-14): the geometry's onResize goes through the helper.
+  assert.match(mainSource, /onResize\(patch\) \{\s*settings = settingsAfterHandResize\(settings, patch\)/)
   assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\.prompterLink\)/)
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
 })

@@ -13,13 +13,15 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 - **Inline settings**: settings opened directly over the camera overlay.
 - **Camera quality**: the single capture-resolution preference used unchanged in Compact mode and Full screen. Its persisted compatibility key is `overlayResolution`.
 - **Onboarding**: the versioned four-step contextual coach-mark tour rendered inside the Overlay and reopenable from tray Help.
-- **Scene**: a named, ordered snapshot of reusable camera, appearance, framing, size, and compact-position settings. The persisted field remains `presets` for compatibility.
+- **Scene**: a named, ordered size and compact position; a **snapshot Scene** also applies its saved camera, appearance and framing (see **Layout Scene**). The persisted field remains `presets` for compatibility.
 - **Preferences**: the sanitized settings document stored as `preferences.json` in Electron's per-user data directory.
 - **Camera framing**: the zoom and crop origin of the video inside the overlay, independent from overlay size and position.
-- **Active Scene**: the Scene most recently saved or applied, shown in Inline settings and the tray. Runtime only (`activePresetId` on the wire); any ordinary settings change clears it.
+- **Active Scene**: the Scene most recently applied, or saved from Inline settings (a Prompter link save without `apply` does not make it active), shown in Inline settings and the tray. Runtime only (`activePresetId` on the wire); any ordinary settings change clears it.
 - **Onboarding reserve**: the temporary 220 px of transparent window added above the compact Overlay while Onboarding is open. It is never persisted. **Compact bounds** are the Overlay window bounds without it.
 - **Chrome**: the toolbar, selection corners, and resize handles shown while the pointer is over the Overlay. The Overlay is **interactive** (accepts the mouse) while the chrome shows or an activity such as Inline settings, Onboarding, framing, resizing, or dragging holds it.
-- **Prompter link**: the opt-in, view-only HTTP endpoint on `127.0.0.1:47833` through which the Techies prompter switches Full screen, Compact position, or a Scene at camera cue lines (ADR 0031). Off by default.
+- **Prompter link**: the opt-in HTTP endpoint on `127.0.0.1:47833` through which the Techies prompter switches Full screen, Compact size and position, or a Scene at camera cue lines, and saves layout Scenes (ADR 0031, ADR 0035). Off by default.
+- **Small size**: the camera size a Prompter link `"small"` cue restores (`prompterSmallSize`). Scenes and Prompter cues never change it; resizing the Overlay by hand and `POST /camframe/small-size` do (ADR 0035).
+- **Layout Scene**: a Scene saved through the Prompter link. Applying it changes only the Overlay size and place, planned on the display the Overlay is on or heading to (a place) or the display nearest its saved point (no place), and keeps the live camera, shape, appearance and framing. Its record has a `layout`; any other Scene is a **snapshot Scene** (ADR 0035).
 - **Demo hand-over**: the moment the user reaches for the control an Onboarding demo is showing. The demo stops and the user keeps the shape or framing it left.
 
 Retired term: **Compositor mask** (native window regions). The unapplied helpers were removed by ADR 0029.
@@ -32,7 +34,8 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/overlay.*`: Overlay markup, styles, DOM rendering, and event wiring.
 - `src/preload.cjs`: the sandboxed `window.camFrame` adapter for the bridge contract.
 - `src/bridge.js`: the bridge contract between main and the Overlay: channels, transports, argument checks, main registration, and the browser QA fake.
-- `src/prompter-link.js`: the Prompter link server, its origin/host/cue checks, and what a cue does.
+- `src/prompter-link.js`: the Prompter link server, its origin/host/request checks, what a cue means (`cueAction`), and the status body.
+- `src/prompter-control.js`: what a checked Prompter link request does to the Overlay and the Scenes, against injected geometry and state.
 - `src/prompter-link-view.js`: what the Overlay's Prompter link switch, status line and toolbar button show, and the one request both controls flip.
 - `src/settings.js`: the Preferences schema, sanitizing, loading (`preferencesFromDocument`), and camera/window dimensions.
 - `src/scenes.js`: the Scene library: save, apply, cycle, delete, reorder, import, export, and the active Scene.

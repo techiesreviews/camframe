@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { SCENE_LIMIT, sanitizeSettings, settingsForPreset } from '../src/settings.js'
+import { OVERLAY_CHROME, SCENE_LIMIT, sanitizeSettings, settingsForPreset } from '../src/settings.js'
 import {
   NO_SCENES_NOTICE,
   applyScene,
@@ -10,6 +10,7 @@ import {
   cycleScene,
   deleteScene,
   importScenes,
+  layoutSceneGeometry,
   patchSettings,
   reorderScene,
   saveScene,
@@ -83,6 +84,64 @@ test('saving a matching name or the selected id updates that Scene in place', ()
   const byId = saveScene(state, { name: 'Renamed', id: 'wide', createId: () => 'unused' })
   assert.deepEqual(ids(byId), ['desk', 'wide'])
   assert.equal(byId.settings.presets[1].name, 'Renamed')
+})
+
+test('saving over a layout Scene from Inline settings turns it into a snapshot Scene', () => {
+  const large = {
+    id: 'large',
+    name: 'Live right large',
+    settings: settingsForPreset({ size: 432, shape: 'circle', borderWidth: 4, position: { x: 1438, y: 220 } }),
+    layout: { size: 432, position: 'right', withinRight: 0.3 },
+  }
+  const state = library([large], { size: 300, shape: 'circle', borderWidth: 9, position: { x: 50, y: 60 } })
+  assert.ok(state.settings.presets[0].layout, 'the library keeps the layout')
+
+  const saved = saveScene(state, { name: 'Live right large', createId: () => 'unused' })
+  const scene = saved.settings.presets[0]
+  assert.equal(scene.id, 'large')
+  assert.equal(scene.layout, undefined)
+  assert.equal(scene.settings.borderWidth, 9)
+
+  // Applying it now brings back the look and geometry it saved, not the live ones.
+  const changed = { settings: sanitizeSettings({ ...saved.settings, borderWidth: 2, size: 250 }), activeSceneId: '' }
+  const applied = applyScene(changed, 'large', { workArea: { x: 0, y: 0, width: 1920, height: 1040 } })
+  assert.equal(applied.settings.borderWidth, 9)
+  assert.equal(applied.settings.size, 300)
+  assert.deepEqual(applied.settings.position, { x: 50, y: 60 })
+})
+
+test('the tray and shortcut paths apply a layout Scene like a cue: planned on the work area, live look kept', () => {
+  const large = {
+    id: 'large',
+    name: 'Live right large',
+    settings: settingsForPreset({ size: 432, shape: 'circle', borderWidth: 4, position: { x: 1438, y: 220 } }),
+    layout: { size: 432, position: 'right', withinRight: 0.3 },
+  }
+  const state = library([large], {
+    size: 288,
+    shape: 'circle',
+    borderWidth: 9,
+    frameEffect: 'glow',
+    cameraZoom: 140,
+    position: { x: 50, y: 60 },
+  })
+  const workArea = { x: 0, y: 0, width: 1280, height: 680 }
+  const expected = layoutSceneGeometry(state.settings.presets[0], state.settings, { workArea })
+  for (const [path, result] of [
+    ['cycle', cycleScene(state, { workArea })],
+    ['numbered shortcut', applySceneAt(state, 0, { workArea })],
+  ]) {
+    assert.equal(result.activeSceneId, 'large', path)
+    assert.equal(result.settings.size, expected.size, path)
+    assert.deepEqual(result.settings.position, expected.position, path)
+    // The live look stays, not the look the Scene record holds.
+    assert.equal(result.settings.borderWidth, 9, path)
+    assert.equal(result.settings.frameEffect, 'glow', path)
+    assert.equal(result.settings.cameraZoom, 140, path)
+  }
+  // On this narrow display the large Scene shrinks into the right 30%.
+  assert.equal(expected.clamped, true)
+  assert.ok(expected.position.x + OVERLAY_CHROME.left >= 1280 * 0.7)
 })
 
 test('saving ignores blank names and truncates long ones', () => {
@@ -169,4 +228,23 @@ test('exports identify the Scene format and version', () => {
     version: 1,
     scenes: state.settings.presets,
   })
+})
+
+test('a layout Scene without a place plans on the display nearest its saved point', () => {
+  const scene = {
+    id: 'side',
+    name: 'Side',
+    settings: settingsForPreset({ size: 300, position: { x: 2182, y: 16 } }),
+    layout: { size: 600 },
+  }
+  const settings = sanitizeSettings({ size: 288 })
+  const current = { x: 0, y: 0, width: 1920, height: 1040 }
+  const nearest = { x: 1920, y: 0, width: 800, height: 600 }
+  const planned = layoutSceneGeometry(scene, settings, { workArea: current, workAreaAt: () => nearest })
+  // 600 px would not fit 600 px of height with the chrome, so it shrinks inside `nearest`.
+  assert.equal(planned.size, 600 - OVERLAY_CHROME.top - OVERLAY_CHROME.bottom)
+  assert.equal(planned.clamped, true)
+  assert.ok(planned.position.x >= nearest.x && planned.position.x + planned.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= nearest.x + nearest.width)
+  const fallback = layoutSceneGeometry(scene, settings, { workArea: current })
+  assert.ok(fallback.position.x + fallback.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= current.width, 'without workAreaAt it uses workArea')
 })

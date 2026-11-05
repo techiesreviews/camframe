@@ -1,5 +1,12 @@
 import { ONBOARDING_TOP_RESERVE } from './onboarding.js'
-import { COMPACT_SPOTS, OVERLAY_CHROME, dimensionsFor, overlayDimensionsFor } from './settings.js'
+import {
+  CAMERA_SIZE_MAX,
+  CAMERA_SIZE_MIN,
+  COMPACT_SPOTS,
+  OVERLAY_CHROME,
+  dimensionsFor,
+  overlayDimensionsFor,
+} from './settings.js'
 
 export const OVERLAY_BOUNDS_TRANSITION_MS = 280
 const POINTER_POLL_MS = 16
@@ -47,7 +54,7 @@ function resizeFromCorner(settings, windowBounds, handle, delta) {
   const verticalChange = (verticalDirection * delta.y) / scaleY
   const sizeChange =
     Math.abs(horizontalChange) >= Math.abs(verticalChange) ? horizontalChange : verticalChange
-  const size = Math.round(clamp(settings.size + sizeChange, 180, 640))
+  const size = Math.round(clamp(settings.size + sizeChange, CAMERA_SIZE_MIN, CAMERA_SIZE_MAX))
   const nextCamera = dimensionsFor({ ...settings, size })
 
   return {
@@ -80,6 +87,9 @@ export function compactBaseBounds({ settings, current, workArea, keepCenter = tr
   }
 }
 
+const keepInside = (value, start, length, windowLength) =>
+  Math.round(Math.max(start, Math.min(value, start + length - windowLength)))
+
 // The Compact window position that puts the camera surface at `spot` in `workArea`, `margin` px
 // from the edges it touches. The whole window (with its transparent chrome) stays inside the work
 // area so the hover toolbar is always reachable; at the top spots that keeps the camera a little
@@ -98,8 +108,6 @@ export function compactPositionAt(spot, { workArea, size, margin }) {
       : alignment === 'end'
         ? start + length - margin - cameraLength
         : start + (length - cameraLength) / 2
-  const keepInside = (value, start, length, windowLength) =>
-    Math.round(Math.max(start, Math.min(value, start + length - windowLength)))
   return {
     x: keepInside(
       along(horizontal, workArea.x, workArea.width, camera.width) - OVERLAY_CHROME.left,
@@ -114,6 +122,74 @@ export function compactPositionAt(spot, { workArea, size, margin }) {
       size.height,
     ),
   }
+}
+
+// Where the camera surface is for Compact window bounds (`base`, without the onboarding reserve).
+export function cameraRectFor(base) {
+  return {
+    x: base.x + OVERLAY_CHROME.left,
+    y: base.y + OVERLAY_CHROME.top,
+    width: base.width - OVERLAY_CHROME.left - OVERLAY_CHROME.right,
+    height: base.height - OVERLAY_CHROME.top - OVERLAY_CHROME.bottom,
+  }
+}
+
+// Plans an exact Compact layout on `workArea`: the camera `size` (px, CAMERA_SIZE_MIN–MAX) at a
+// place (`spot` with `margin`), with its camera surface's top-left at `point`, or keeping the
+// centre of `current` (live Compact bounds). The size shrinks, never grows, until the whole window
+// fits the work area and, with `withinRight` (a share 0.1–1, right-hand places only), until the
+// camera and its margin fit inside that share of the work area's right side. Returns
+// `{ size, position, requestedSize, clamped }` (`position` is the window's top-left), or
+// `{ error, code: 'does-not-fit' }` when even the smallest camera cannot fit.
+export function planCompactLayout({ shape, size, spot, point, margin = 0, withinRight }, { workArea, current }) {
+  // The whole window stays on screen, so the camera never sits closer to the right edge than the
+  // chrome's width, whatever the margin.
+  const rightGap = Math.max(margin, OVERLAY_CHROME.right)
+  // Left, right and center centre the camera vertically, which also needs the top chrome's height
+  // free below it; a larger camera would be pushed down to keep the toolbar on screen.
+  const centred = spot !== undefined && !spot.startsWith('top') && !spot.startsWith('bottom')
+  const centredHeight = workArea.height - 2 * OVERLAY_CHROME.top
+  const fits = (candidate) => {
+    const camera = dimensionsFor({ shape, size: candidate })
+    const window = overlayDimensionsFor({ shape, size: candidate })
+    if (window.width > workArea.width || window.height > workArea.height) return false
+    if (centred && camera.height > centredHeight) return false
+    if (withinRight !== undefined && camera.width + rightGap > withinRight * workArea.width) return false
+    return true
+  }
+  let fitted = Math.min(size, CAMERA_SIZE_MAX)
+  // dimensionsFor rounds, so step down one pixel at a time from the largest size the shares allow.
+  const factor = dimensionsFor({ shape, size: 1000 })
+  const limits = [
+    (workArea.width - OVERLAY_CHROME.left - OVERLAY_CHROME.right) / (factor.width / 1000),
+    (workArea.height - OVERLAY_CHROME.top - OVERLAY_CHROME.bottom) / (factor.height / 1000),
+  ]
+  if (withinRight !== undefined) limits.push((withinRight * workArea.width - rightGap) / (factor.width / 1000))
+  if (centred) limits.push(centredHeight / (factor.height / 1000))
+  fitted = Math.min(fitted, Math.floor(Math.min(...limits)))
+  while (fitted >= CAMERA_SIZE_MIN && !fits(fitted)) fitted -= 1
+  if (fitted < CAMERA_SIZE_MIN) {
+    return {
+      error:
+        withinRight === undefined
+          ? `This display is too small for the smallest camera (${CAMERA_SIZE_MIN} px).`
+          : `The right ${Math.round(withinRight * 100)}% of this display is too narrow for the smallest camera (${CAMERA_SIZE_MIN} px) and the ${rightGap} px gap at the right edge.`,
+      code: 'does-not-fit',
+    }
+  }
+  const windowSize = overlayDimensionsFor({ shape, size: fitted })
+  let position
+  if (spot) position = compactPositionAt(spot, { workArea, size: windowSize, margin })
+  else {
+    const wanted = point
+      ? { x: point.x - OVERLAY_CHROME.left, y: point.y - OVERLAY_CHROME.top }
+      : compactBaseBounds({ settings: { shape, size: fitted }, current, workArea, keepCenter: true })
+    position = {
+      x: keepInside(wanted.x, workArea.x, workArea.width, windowSize.width),
+      y: keepInside(wanted.y, workArea.y, workArea.height, windowSize.height),
+    }
+  }
+  return { size: fitted, position, requestedSize: size, clamped: fitted !== size }
 }
 
 // Owns the native Overlay window's geometry: Compact placement, Full screen, the onboarding
@@ -238,6 +314,13 @@ export function createOverlayGeometry({
     resize = undefined
   }
 
+  // A Scene or cue moving the window ends a corner drag that has already moved, so the drag
+  // cannot undo the move or save its own size as the small size. A corner only held keeps
+  // waiting and starts from the new size when the pointer moves.
+  function endHandResize() {
+    if (resize?.moved) stopResize()
+  }
+
   function apply({ keepCenter = true, updateBounds = true } = {}) {
     if (!alive()) return
     if (updateBounds && !fullscreen && !animation) {
@@ -296,6 +379,9 @@ export function createOverlayGeometry({
   // `base` places it there instead of at the settings' position (or the live bounds without one).
   function showScene({ base } = {}) {
     if (!alive()) return
+    endHandResize()
+    // In Full screen a Scene with a place is where leaving Full screen lands (Escape, toggle).
+    if (fullscreen && settings().position) compactBase = undefined
     if (fullscreen || !settings().overlayVisible) {
       apply({ keepCenter: false })
       return
@@ -356,6 +442,7 @@ export function createOverlayGeometry({
     // it is on. Unlike `showScene`, a Scene or position applied in Full screen lands in Compact mode.
     showCompact() {
       if (!alive()) return
+      endHandResize()
       // A Scene without a position keeps the place the Overlay had before Full screen, also
       // while the exit animation is still running (the saved base is cleared when it ends).
       if (!fullscreen) {
@@ -366,10 +453,45 @@ export function createOverlayGeometry({
       exitFullscreen()
     },
 
-    // The work area of the display the Overlay is on now (the Full screen display in Full screen).
-    currentWorkArea() {
-      const display = screen.getDisplayMatching(window.getBounds())
+    // The work area of the display that best holds `bounds` (for example where the window is heading).
+    workAreaFor(bounds) {
+      const display = screen.getDisplayMatching(bounds)
       return { ...(display.workArea ?? display.bounds) }
+    },
+
+    // The work area of the display nearest a screen point (any display, also one the Overlay is not on).
+    workAreaAt(point) {
+      const display = screen.getDisplayNearestPoint?.(point) ?? screen.getDisplayMatching(window.getBounds())
+      return { ...(display.workArea ?? display.bounds) }
+    },
+
+    // The work area of the display the Overlay is on now (the Full screen display in Full screen).
+    // While the window is moving, that is the display it is heading to, so a cue that arrives
+    // mid-move plans on the display the last answer reported.
+    currentWorkArea() {
+      const display = screen.getDisplayMatching(animation ? animation.target : window.getBounds())
+      return { ...(display.workArea ?? display.bounds) }
+    },
+
+    // Where the window is heading: the running animation's target, else its live bounds, both
+    // without the reserve. `isSettled()` is false while it is still on its way.
+    targetBounds() {
+      if (!alive()) return undefined
+      return baseFromWindow(animation ? animation.target : window.getBounds())
+    },
+    isSettled: () => !animation,
+
+    // Where leaving Full screen through `showCompact` puts the Compact window at the current size
+    // (bounds without the reserve): the stored position, else the place the Overlay had before Full
+    // screen. Undefined outside Full screen.
+    fullscreenReturnBounds() {
+      if (!alive() || !fullscreen) return undefined
+      return compactBaseBounds({
+        settings: settings(),
+        current: compactBase,
+        workArea: screen.getPrimaryDisplay().workArea,
+        keepCenter: false,
+      })
     },
 
     // Live Compact bounds without the reserve, or undefined in Full screen.
@@ -416,18 +538,34 @@ export function createOverlayGeometry({
       stopDrag()
       stopResize()
       setInteractive(true)
-      const start = {
-        cursor: screen.getCursorScreenPoint(),
-        bounds: baseFromWindow(window.getBounds()),
-        settings: { ...settings() },
+      const start = { cursor: screen.getCursorScreenPoint() }
+      // Where the drag starts from: the size and place now (or where a move is heading).
+      const snapshot = () => {
+        start.bounds = baseFromWindow(animation ? animation.target : window.getBounds())
+        start.settings = { ...settings() }
       }
+      snapshot()
       resize = {
+        moved: false,
         timer: timers.setInterval(() => {
           if (!alive()) {
             stopResize()
             return
           }
           const cursor = screen.getCursorScreenPoint()
+          // A corner only held still resizes nothing, and the drag starts from the size and place
+          // when the pointer first moves, so a size a cue set while the corner was held stays.
+          if (!resize.moved) {
+            snapshot()
+            resize.moved = cursor.x !== start.cursor.x || cursor.y !== start.cursor.y
+            if (!resize.moved) return
+            // A move still running (a cue) ends at its target now, so it cannot paint over the
+            // dragged size later and the size saved by hand is the size on screen.
+            if (animation) {
+              finishAnimation()
+              snapshot()
+            }
+          }
           onResize(
             resizeFromCorner(start.settings, start.bounds, handle, {
               x: cursor.x - start.cursor.x,

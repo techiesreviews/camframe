@@ -8,7 +8,7 @@ The executable form of this section is `test/fixtures/preferences/`: `sanitize.j
 
 | Field | Default | Accepted/sanitized value | Persisted | In Scene |
 | --- | --- | --- | --- | --- |
-| `schemaVersion` | `13` | Always current default; input is not copied | Yes | No |
+| `schemaVersion` | `14` | Always current default; input is not copied | Yes | No |
 | `cameraId` | `""` | String, first 512 characters | Yes | Yes |
 | `cameraLabel` | `"Default camera"` | String, first 120 characters | Yes | Yes |
 | `shape` | `"circle"` | `circle`, `rounded`, `portrait`, `landscape` | Yes | Yes |
@@ -34,6 +34,7 @@ The executable form of this section is `test/fixtures/preferences/`: `sanitize.j
 | `prompterFaceFull` | `"fullscreen"` | `fullscreen` or `scene:<Scene id>` (id 1–64 characters) | Yes | No |
 | `prompterFaceSmall` | `"previous"` | `previous`, a place (`top-left`, `top-right`, `bottom-left`, `bottom-right`, `left`, `right`, `center`), or `scene:<Scene id>` | Yes | No |
 | `prompterMargin` | `32` | Finite number rounded/clamped 0–160 (px from the camera surface to the work-area edge) | Yes | No |
+| `prompterSmallSize` | `size` | Finite number rounded/clamped 180–640; missing or not a number means the sanitized `size`. The camera size a Prompter link `"small"` cue restores. Set by resizing the Overlay by hand (a held corner reports no resize until the pointer moves) and by `POST /camframe/small-size`; Scenes and Prompter cues never change it. Renderer patches may not set it. | Yes | No |
 | `presets` | `[]` | Up to six valid Scene records | Yes | No (no nesting) |
 
 Colors retain input case in persisted state when accepted. The live hex text editors send lowercase; the UI renders uppercase text. Numbers are sanitized even when the corresponding control is not currently visible.
@@ -49,6 +50,8 @@ The integration harness is the only exception to the normal user-data path: in a
 Before sanitization, a loaded document with `schemaVersion < 3` receives `borderWidth = 0` and `size = 288`. A successfully loaded Preferences document without `completedOnboardingVersion` receives the current onboarding version so existing users are not interrupted. A missing or invalid Preferences document retains the default version 0. Explicit saved version 0 remains incomplete across restart. Legacy `fullscreenResolution` values are ignored; `overlayResolution` becomes the one retained Camera quality. Other fields continue to rely on defaults and sanitization for forward compatibility.
 
 Schema 13 added the four `prompter*` fields. Older documents load with their defaults, so the link stays off until the user turns it on.
+
+Schema 14 added `prompterSmallSize` and the optional Scene `layout`. A document without `prompterSmallSize` loads with its own `size`, so an upgrade keeps the user's compact size as the small size. An older CamFrame build does not read either field, so a layout Scene opens there as an ordinary Scene with its saved size and position; and the first time that build saves its Preferences it drops both fields, because its sanitizer rebuilds each Scene as `{ id, name, settings }` and knows no `prompterSmallSize`. Opened in API 2 again, those layout Scenes stay ordinary (snapshot) Scenes and the small size starts again from `size` (KG-14).
 
 ## Scene record
 
@@ -77,6 +80,17 @@ Schema 13 added the four `prompter*` fields. Older documents load with their def
   }
 }
 ```
+
+A **layout Scene** (saved through the Prompter link, ADR 0035) also has `layout`:
+
+```json
+{ "id": "preset-mw20pcij", "name": "Live right large", "settings": { "…": "as above, size 432, position {x:1438,y:220}" },
+  "layout": { "size": 432, "position": "right", "withinRight": 0.3 } }
+```
+
+- `layout.size`: integer 180–640, or `"small"` (resolved from `prompterSmallSize` when applied), required. `layout.position`: optional place name. `layout.margin`: optional integer 0–160, only with a place. `layout.withinRight`: optional number 0.1–1, only with `right`, `top-right` or `bottom-right`. Any invalid part drops the whole `layout` (`sanitizeSceneLayout`), leaving an ordinary Scene.
+- Applying a layout Scene (`applyScene` with the current display's work area) changes only `size` and `position`, planned by `planCompactLayout` with the live `shape` and `layout.margin ?? prompterMargin`; `withinRight` counts at least the 18 px of right chrome as the gap. Without a place it plans the layout size at its saved camera point on the display nearest that point (`workAreaAt`, Electron's `getDisplayNearestPoint`), shrinking and keeping it on screen there. Without a work area, or when even 180 px cannot fit, it uses `settings.size` and `settings.position` and reports the requested size. Camera, shape, appearance and framing stay live (`LOOK_SETTING_KEYS`).
+- `settings` is still a full snapshot taken at save time, so export, import and older builds keep working.
 
 - ID: non-empty string truncated to 64 characters. New IDs are `preset-` plus `Date.now().toString(36)`.
 - Name: trimmed, non-empty string truncated to 40 characters.
@@ -170,18 +184,31 @@ Callback registration returns an unsubscribe function. Current renderer code reg
 
 ## Prompter link HTTP contract
 
-Served by `src/prompter-link.js` only while `prompterLink` is `true`, on `http://127.0.0.1:47833` (never another interface). ADR 0031 records the decision.
+Served by `src/prompter-link.js` only while `prompterLink` is `true`, on `http://127.0.0.1:47833` (never another interface). ADR 0031 records the link, ADR 0035 API 2. `docs/prompter-link-api.md` has real payloads and the livestream cues.
 
 | Request | Answer |
 | --- | --- |
-| `GET /camframe/status` | `200 {"app":"camframe","version":"<app version>","scenes":["<Scene name>", …]}` |
-| `POST /camframe/cue`, `Content-Type: application/json`, body ≤ 1024 bytes | `200 {"ok":true,"cue":{…}}` after applying it; `400 {"ok":false,"error":…}` for a malformed cue; `404` for an unknown Scene; `413` too large; `415` not JSON |
+| `GET /camframe/status` | `Origin: null` gets only `app`, `version`, `scenes`, `api`. Others: `200` with `app`, `version`, `scenes` (names; unchanged since ADR 0031), and since API 2: `api` (`2`), `sceneLimit` (6), `smallSize`, `margin`, `activeScene` (name or `null`), `view` (`null` before the window exists, else `{mode: "compact"\|"fullscreen", visible, settled, size, shape, camera, window, workArea}`; `camera`, `window` and `workArea` are where the window is heading, `settled` is false during its animation), `look` (`LOOK_SETTING_KEYS` without `cameraId`, plus `signature`, the first 16 hex of SHA-256 over all of them including `cameraId`), `sceneDetails` (`{id, name, kind: "layout"\|"snapshot", size, followsSmallSize? (layout only), position (a place name, else the camera's top-left point), margin?, withinRight?, savedSize, savedPosition, keepsLiveLook, look?}`; `look` only for snapshot Scenes) |
+| `POST /camframe/cue` | `200 {"ok":true,"cue":{…},"layout"?:{size,requestedSize,clamped},"view":{…}}` (only `ok` and `cue` for `Origin: null`); `400 bad-request`; `404 unknown-scene`; `422 does-not-fit`; `503 not-ready` |
+| `POST /camframe/scenes` | `200 {"ok":true,"scene":{sceneDetail},"replaced":bool,"saved":{size,requestedSize,clamped,camera,workArea},"layout"?,"view"?}`; `400 bad-request`; `403` for `Origin: null` (file:// copies, sandboxed frames); `409 scene-exists` or `scene-limit`; `422 does-not-fit`; `503 not-ready` |
+| `POST /camframe/small-size` | `200 {"ok":true,"smallSize":n}`; `400 bad-request`; `403` for `Origin: null` |
+| Any `POST` | `Content-Type: application/json`, body ≤ 1024 bytes; `413` too large; `415` not JSON; `400` invalid JSON |
 | `OPTIONS` (CORS preflight) | `204` with `Access-Control-Allow-Origin: <origin>`, `-Methods: GET, POST`, `-Headers: Content-Type`, `-Max-Age: 600`, and `Access-Control-Allow-Private-Network: true` when the request asks for it (Chrome Private Network Access) |
 | Wrong method / other path | `405` with `Allow` / `404` |
 | `Host` other than `127.0.0.1:47833` or `localhost:47833` | `403` (DNS-rebinding guard) |
 | `Origin` other than `https://prompter.techies.tools`, `https://preview.prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, or `null` | `403`, no CORS headers. A request without `Origin` (a local program) is allowed. |
 
-A cue is a JSON object with only these fields: `size` (`"full"` or `"small"`), `position` (one of the seven places, only with `"small"`), and `scene` (a Scene name, 1–40 characters after trimming; no `position`; `size` absent or `"small"`). It needs `size` or `scene`. Anything else is a `400`. What a valid cue does follows `prompterFaceFull`, `prompterFaceSmall`, and `prompterMargin` (`cueAction()` and `compactPositionAt()`; see the product specification).
+Refusals are `{"ok":false,"error":"…","code":"…"}`; the transport errors (`403`, `404` path, `405`, `413`, `415`, invalid JSON) have no `code`.
+
+A cue is a JSON object with only `size`, `position`, `scene`, `margin` and `withinRight` (`parseCue`):
+
+- `size`: `"full"`, `"small"`, or an integer 180–640. `position`: one of the seven places or `{x, y}` (exactly those two integer keys, |value| ≤ 100000; the camera surface's top-left), only with `"small"` or a number. `margin`: integer 0–160, only with a place. `withinRight`: number 0.1–1, only with `right`, `top-right` or `bottom-right`.
+- `scene`: a Scene name, 1–40 characters after trimming; `size` absent or `"small"`; nothing else. It needs `size` or `scene`.
+- `cueAction()` decides: `"small"` always means `prompterSmallSize`. A `"small"` or numeric cue with a position, and any numeric cue, is `place` (planned by `planCompactLayout`: a place name on the display the Overlay is on or heading to, a point on the display nearest it, and a bare size on the display of the place the camera keeps, which from Full screen is where Full screen returns to; margin `margin ?? prompterMargin` for a place, else 0; without a position it keeps the current or Full-screen-return centre). A bare `"small"` follows `prompterFaceSmall` (a Scene, a place at the small size, or `previous`: leave Full screen to the previous place at the small size, or in Compact mode resize to it around the current centre). `"full"` follows `prompterFaceFull`.
+
+A Scene request (`parseSceneSave`) has only `name` (1–40 after trimming), `size` (`"small"`, `"current"` or 180–640; default `"current"`), `position` (place, `{x,y}` or `"current"`; default `"current"`), `margin`, `withinRight` (as for a cue), `replace` and `apply` (booleans, default `false`). It stores `layout.size` as asked (`"small"` stays `"small"`; a number is kept unclamped), `layout.position` only for a place, and `settings` as the live settings at the planned size and window position. `saveLayoutScene` refuses a new name at `SCENE_LIMIT` and an existing name (case-insensitive) without `replace`; replacing keeps the id and order, and every other Scene is left unchanged.
+
+A small-size request (`parseSmallSize`) has only `size`: `"current"` or 180–640.
 
 ## Window definitions
 
