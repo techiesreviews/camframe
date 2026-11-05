@@ -534,6 +534,8 @@ test('Scene and small-size requests are checked strictly', () => {
   ]) {
     assert.ok(parseSceneSave(bad).error, JSON.stringify(bad))
   }
+  assert.match(parseCue({ size: 'full', margin: 0 }).error, /margin/)
+  assert.match(parseCue({ size: 'full', withinRight: 0.3 }).error, /withinRight/)
   for (const good of ['\u{1F469}\u200d\u{1F4BB} Demo', '\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645', '\u{1F3F4}\u{E0067}\u{E0062}\u{E007F} flag']) {
     assert.equal(parseSceneSave({ name: good }).error, undefined, good)
   }
