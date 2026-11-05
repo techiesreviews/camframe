@@ -21,7 +21,7 @@ API 2 needs a CamFrame build that contains it. Check before relying on it: `GET 
 | 422 | `does-not-fit` | Even the smallest camera (180 px) does not fit the place asked for in a cue. Nothing changed. (A saved layout Scene that cannot fit on the display it is cued on is not refused: it answers `200` with `"clamped": true`, and CamFrame uses its saved size and place, kept on screen.) |
 | 503 | `not-ready` | CamFrame's window is not open yet. |
 
-Older errors (wrong host or page `403`, wrong method `405`, too large `413`, not JSON `415`) have no `code`.
+Older errors (wrong host or page `403`, wrong method `405`, too large `413`, not JSON `415`, invalid JSON `400`, unknown path `404`) have no `code`.
 
 ## Words
 

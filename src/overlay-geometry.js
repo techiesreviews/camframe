@@ -352,7 +352,8 @@ export function createOverlayGeometry({
 
   function exitFullscreen() {
     const current = settings()
-    const base = compactBase
+    // A stored position is where leaving Full screen lands; without one, the place before Full screen.
+    const base = compactBase && !current.position
       ? { ...compactBase, ...overlayDimensionsFor(current) }
       : compactBaseBounds({
           settings: current,
@@ -381,8 +382,8 @@ export function createOverlayGeometry({
   function showScene({ base } = {}) {
     if (!alive()) return
     endHandResize()
-    // In Full screen a Scene with a place is where leaving Full screen lands (Escape, toggle).
-    if (fullscreen && settings().position) compactBase = undefined
+    // In Full screen a Scene with a place is where leaving Full screen lands (Escape, toggle); the
+    // place before Full screen is kept, for a later Scene without a position.
     if (fullscreen || !settings().overlayVisible) {
       apply({ keepCenter: false })
       return

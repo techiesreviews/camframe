@@ -591,6 +591,23 @@ test('Scene capacity and names: refused with a code, never an eviction', async (
   assert.equal(unique.size, SCENE_LIMIT, 'Scenes saved in the same millisecond still get their own ids')
 })
 
+test('a look-alike name needs replace, and a cue finds a Scene by either form of an accent', async (t) => {
+  const live = await harness(t)
+  const composed = 'Caf\u00e9'
+  const decomposed = 'Cafe\u0301'
+  assert.equal((await live.saveScene({ name: composed, size: 300, position: 'bottom-left' })).status, 200)
+  const again = await live.saveScene({ name: decomposed, size: 300 })
+  assert.equal(again.status, 409)
+  assert.equal(again.body.code, 'scene-exists')
+  // An invisible character cannot make a second Scene that looks the same.
+  const hidden = await live.saveScene({ name: 'Ca\u200bf\u00e9', size: 300 })
+  assert.equal(hidden.status, 400)
+  assert.equal((await live.cue({ scene: decomposed })).status, 200)
+  assert.equal((await live.cue({ scene: composed })).status, 200)
+  // Joiners that real text needs are still fine.
+  assert.equal((await live.saveScene({ name: '\u{1F469}\u200d\u{1F4BB} Demo', size: 300 })).status, 200)
+})
+
 test('save with apply moves at once; the status lists what each Scene does', async (t) => {
   const live = await harness(t)
   const saved = await live.saveScene({ ...RIGHT_LARGE, apply: true })
