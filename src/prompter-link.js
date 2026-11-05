@@ -31,8 +31,12 @@ export const PROMPTER_SITE = 'https://prompter.techies.tools'
 export const PROMPTER_PREVIEW_SITE = 'https://preview.prompter.techies.tools'
 const MAX_BODY_BYTES = 1024
 const SCENE_NAME_MAX = 40
-// Line breaks, control and invisible (zero-width) characters would make a blank-looking Scene.
-const HIDDEN_NAME_CHARACTER = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
+// Control characters, line and paragraph separators and bidi controls are never part of a Scene
+// name, and a name that is only invisible characters (zero-width, Hangul filler, braille blank) or
+// spaces would look blank. Joiners inside a name (emoji, Persian, Indic text) are fine.
+const NEVER_IN_NAME = /[\p{Cc}\p{Zl}\p{Zp}\u200e\u200f\u202a-\u202e\u2066-\u2069]/u
+const INVISIBLE_ONLY = /[\p{Default_Ignorable_Code_Point}\u2800\s]/gu
+const isBlankLookingName = (name) => NEVER_IN_NAME.test(name) || name.replace(INVISIBLE_ONLY, '') === ''
 // The version of this wire protocol in the status body. 2 added exact sizes and places, layout
 // Scenes, the small size, and the live view in the status.
 export const PROMPTER_LINK_API = 2
@@ -156,7 +160,7 @@ export function parseSceneSave(body) {
   const unknown = unknownFields(body, SCENE_SAVE_KEYS, 'Scene')
   if (unknown) return { error: unknown }
   const { name, size = 'current', position = 'current', margin, withinRight, replace = false, apply = false } = body
-  if (typeof name !== 'string' || !name.trim() || name.trim().length > SCENE_NAME_MAX || HIDDEN_NAME_CHARACTER.test(name.trim())) {
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > SCENE_NAME_MAX || isBlankLookingName(name.trim())) {
     return { error: `name must be a Scene name of 1 to ${SCENE_NAME_MAX} characters, without line breaks or invisible characters.` }
   }
   if (size !== 'small' && size !== 'current' && !isCameraSize(size)) {
