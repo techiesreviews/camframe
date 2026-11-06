@@ -117,3 +117,8 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 - Resizing the Overlay by hand while a Scene is active leaves that Scene marked active (the tray tick and the status `activeScene`), although the camera no longer matches it. This is older behaviour (the hand-resize handler never cleared it before API 2) and is unchanged here; a prompter checking a cue should compare `view` too.
 - Going back to an older CamFrame build (before schema 14) and letting it save drops the new fields: layout Scenes become ordinary snapshot Scenes and the small size resets to the camera size when API 2 opens them again. Save the layout Scenes again from the prompter after such a downgrade.
 - Layout planning uses Electron's work area in screen coordinates. Mixed display scaling and displays left of or above the primary one are not yet checked by hand (W-30, M-12).
+
+## KG-15 — The rebuild guide is behind the source
+
+**Status:** Open, 2026-11-06 (found in the 0.7.0 release review).
+**Evidence:** `docs/rebuild-guide.md` still says Preferences schema 12 and "schema-12 migration", has no reconstruction step for the Prompter link or `src/prompter-control.js`, and still lists "notices" for Scenes without ADR 0036. The Prompter link predates 0.7.0; `src/prompter-control.js` and schema 14 are new in 0.7.0, so 0.7.0 widened the gap.
