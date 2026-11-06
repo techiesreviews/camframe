@@ -153,7 +153,7 @@ Main and Overlay coordinate, but neither uses Electron native fullscreen:
 
 ## Scene flow
 
-Scene writes and imports run in main so file dialogs and Preferences remain privileged. Renderers only send IDs/names or invoke import/export. The Scene library computes each result (next Preferences, active Scene, notice); main only performs file I/O, applies Scene geometry, emits, and persists. Applying a visible compact Scene emits visual state before transitioning native bounds, allowing CSS surface geometry and BrowserWindow movement to change together; both complete immediately under reduced motion.
+Scene writes and imports run in main so file dialogs and Preferences remain privileged. Renderers only send IDs/names or invoke import/export. The Scene library computes each result (next Preferences, active Scene, notice, and `announce`, the Scene name sent as the `scene:announce` event to a hidden screen-reader region, never drawn: ADR 0036); main only performs file I/O, applies Scene geometry, emits, and persists. Applying a visible compact Scene emits visual state before transitioning native bounds, allowing CSS surface geometry and BrowserWindow movement to change together; both complete immediately under reduced motion.
 
 ## Prompter link flow
 
