@@ -100,7 +100,8 @@ test('presentation controls expose shortcuts, startup, tray Scenes, and notices'
   // Scene names are read out, never drawn (ADR 0036).
   assert.match(overlayHtml, /id="scene-announcer"[^>]*role="status" aria-live="polite"/)
   assert.match(overlayCss, /\.scene-announcer \{[^}]*width: 1px;[^}]*clip-path: inset\(50%\)/)
-  assert.match(overlaySource, /sceneAnnouncer\.textContent =/)
+  assert.match(overlaySource, /camFrame\.onSceneAnnouncement\(\(name\) => \{\s*sceneAnnouncer\.textContent = ''/)
+  assert.match(mainSource, /if \(result\.announce\) announceScene\(result\.announce\)/)
   assert.match(mainSource, /label: 'Scenes', submenu: presetMenu/)
   assert.match(mainSource, /CommandOrControl\+Shift\+H/)
   assert.match(mainSource, /CommandOrControl\+Shift\+F/)

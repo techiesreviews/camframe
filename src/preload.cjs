@@ -42,6 +42,11 @@ contextBridge.exposeInMainWorld('camFrame', {
     ipcRenderer.on('presentation:notice', listener)
     return () => ipcRenderer.removeListener('presentation:notice', listener)
   },
+  onSceneAnnouncement: (callback) => {
+    const listener = (_event, name) => callback(name)
+    ipcRenderer.on('scene:announce', listener)
+    return () => ipcRenderer.removeListener('scene:announce', listener)
+  },
   onShowOnboarding: (callback) => {
     const listener = () => callback()
     ipcRenderer.on('onboarding:show', listener)
