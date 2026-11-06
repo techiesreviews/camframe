@@ -1148,6 +1148,16 @@ video {
   white-space: nowrap;
 }
 
+/* Read out by screen readers when a Scene becomes active; never drawn, so nothing shows on stream. */
+.scene-announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .presentation-toast[hidden] {
   display: none;
 }

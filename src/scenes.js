@@ -4,7 +4,7 @@ import { keepInside, planCompactLayout } from './overlay-geometry.js'
 // The Scene library owns every Scene rule: naming, ids, the Scene limit, ordering, import/export,
 // and which Scene is active. Each operation takes the current `{ settings, activeSceneId }` and
 // returns the next one when something changed, plus an optional presentation `notice`. Saving and
-// applying a Scene show no notice: the Overlay is what gets captured on stream, so nothing is drawn on it.
+// applying a Scene show no notice: the Overlay is what gets captured on stream, so no Scene name is drawn on it (ADR 0036).
 // `appliedScene` marks a result whose Overlay geometry should move to the Scene. Operations that
 // change nothing return `undefined`. Callers keep dialogs, file I/O, window effects, and persistence.
 

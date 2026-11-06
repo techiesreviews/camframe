@@ -181,6 +181,8 @@ test('cycling starts at the first Scene, wraps, and reports an empty library', (
   assert.equal(cycleScene(library(scenes, {}, 'one')).activeSceneId, 'two')
   assert.equal(cycleScene(library(scenes, {}, 'two')).activeSceneId, 'one')
   assert.deepEqual(cycleScene(library()), { notice: NO_SCENES_NOTICE })
+  assert.equal(cycleScene(library(scenes)).notice, undefined, 'the cycle shortcut draws no name')
+  assert.equal(applySceneAt(library(scenes), 0).notice, undefined, 'a numbered shortcut draws no name')
 })
 
 test('deleting the active Scene clears it; deleting another keeps it', () => {
