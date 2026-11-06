@@ -1,6 +1,6 @@
 # Verification run: silent Scenes (fix/silent-prompter-scenes) — 2026-11-06
 
-- **Commit:** f53ab1f67bfe2c5237d53eb92f57d365f75dc40a (checks ran at this commit; the commit after it changes only this run file)
+- **Commit:** 63499763d3f89f688fd792ffb63f4cc07d1bdcce (checks ran at this commit; the commit after it changes only this run file)
 - **Version:** 0.6.1 (`package.json`), unreleased change
 - **Observer:** Claude (Sonnet 5.5), automated only
 - **Environment:** Linux, one display, Node v24.21.0, Electron 44.7.0, development build
@@ -19,7 +19,7 @@ Applying a Scene (Prompter cue, tray, shortcut, Inline settings) and saving one 
 | `scripts/agents/kit shots` | Pass | 13 screenshots | |
 | `git diff --check` | Pass | | |
 
-`test/overlay-markup.test.js` checks the hidden announcer (role, `aria-live`, 1 px clipped, written by `overlay.js`).
+`test/overlay-markup.test.js` checks the hidden announcer (role, `aria-live`, 1 px clipped, written from the `onSceneAnnouncement` event); the third Electron smoke checks the toast stays hidden and the announcer holds the Scene name after a Scene is applied.
 
 ## Build and artifact checks
 
