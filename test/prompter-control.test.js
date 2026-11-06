@@ -92,6 +92,7 @@ async function harness(
   }
   const saves = []
   const notices = []
+  const announced = []
   const clock = fakeClock()
   const window = fakeWindow(compactBaseBounds({ settings: state.settings, workArea: area, keepCenter: false }))
   // `extraDisplays` sit next to the primary one; the nearest display to a point holds it.
@@ -123,6 +124,7 @@ async function harness(
     sceneState: () => ({ ...state }),
     commit(result) {
       if (result?.notice) notices.push(result.notice)
+      if (result?.announce) announced.push(result.announce)
       if (!result?.settings) return
       state.settings = result.settings
       state.activeSceneId = result.activeSceneId
@@ -173,6 +175,7 @@ async function harness(
     state,
     saves,
     notices,
+    announced,
     geometry,
     window,
     status: async () => (await call('GET', '/camframe/status')).body,
@@ -595,6 +598,8 @@ test('saving and cueing a Scene draw no name on the camera', async (t) => {
   assert.equal((await live.cue({ scene: 'Live small corner' })).status, 200)
   assert.equal((await live.cue({ scene: 'Live right large' })).status, 200)
   assert.deepEqual(live.notices, [])
+  // Screen readers still get each name: the two saves, the apply that goes with the second, both cues.
+  assert.deepEqual(live.announced, ['Live small corner', 'Live right large', 'Live right large', 'Live small corner', 'Live right large'])
 })
 
 test('Scene capacity and names: refused with a code, never an eviction', async (t) => {
