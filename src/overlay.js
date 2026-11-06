@@ -60,6 +60,7 @@ const prompterMargin = document.querySelector('#overlay-prompter-margin')
 const prompterMarginOutput = document.querySelector('#overlay-prompter-margin-output')
 const presentationToast = document.querySelector('#presentation-toast')
 const sceneAnnouncer = document.querySelector('#scene-announcer')
+let sceneAnnouncerClear
 const fullscreenButton = document.querySelector('#fullscreen-button')
 const shapeButton = document.querySelector('#shape-button')
 const positionButton = document.querySelector('#position-button')
@@ -1049,6 +1050,11 @@ camFrame.onSceneAnnouncement((name) => {
   setTimeout(() => {
     sceneAnnouncer.textContent = String(name)
   }, 50)
+  // Cleared again once read, so a screen reader's page review does not find a stale name.
+  clearTimeout(sceneAnnouncerClear)
+  sceneAnnouncerClear = setTimeout(() => {
+    sceneAnnouncer.textContent = ''
+  }, 5000)
 })
 
 if (!isQaPreview) navigator.mediaDevices.addEventListener('devicechange', cameraSession.refreshDevices)

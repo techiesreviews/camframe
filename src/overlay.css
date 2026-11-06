@@ -1148,7 +1148,7 @@ video {
   white-space: nowrap;
 }
 
-/* Read out by screen readers when a Scene becomes active; never drawn, so nothing shows on stream. */
+/* Read out by screen readers each time a Scene is applied or saved; never drawn, so nothing shows on stream. */
 .scene-announcer {
   position: absolute;
   width: 1px;
