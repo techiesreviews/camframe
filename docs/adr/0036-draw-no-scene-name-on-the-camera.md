@@ -11,11 +11,11 @@ Applying a Scene, and saving one, used to show the Scene's name (or "<name> save
 ## Decision
 
 - Applying a Scene (Prompter cue, tray, shortcut, Inline settings) and saving one (Prompter link or Inline settings) draw nothing on the camera.
-- Screen readers still hear the Scene name: `src/overlay.js` writes it into a visually hidden live region (`#scene-announcer`, `role="status"`, 1 px, clipped) when a different Scene becomes active. It is never drawn.
+- Screen readers still hear the Scene name: every apply and every save sends it (`announce`, bridge event `onSceneAnnouncement`) and `src/overlay.js` writes it into a visually hidden live region (`#scene-announcer`, `role="status"`, 1 px, clipped), emptying it first so the same Scene twice is read twice. It is never drawn.
 - The notice stays for other events: Scene deleted, scenes imported or exported, no saved scenes.
 - The corner margin at a bottom place on a short display that is not fully met stays as it is (KG-14, Lex 2026-11-06).
 
 ## Consequences
 
-- Re-applying the Scene that is already active is not announced to screen readers.
+- A Prompter cue also announces the name, which only a screen reader on the streaming PC would hear.
 - Manual rows W-20, W-29 and M-11 changed; W-30 checks silence on the streaming PC.
