@@ -47,6 +47,7 @@ test('saving a new Scene snapshots reusable settings and the live compact positi
 
   assert.equal(result.activeSceneId, 'scene-new')
   assert.equal(result.notice, undefined, 'saving a Scene draws nothing on the camera')
+  assert.equal(result.announce, 'Desk', 'screen readers get the name')
   assert.deepEqual(result.settings.position, { x: 420, y: 260 })
   assert.deepEqual(result.settings.presets, [
     scene('scene-new', 'Desk', { size: 320, shape: 'rounded', position: { x: 420, y: 260 } }),
@@ -158,6 +159,7 @@ test('applying a Scene restores its settings without touching global preferences
 
   assert.equal(result.activeSceneId, 'desk')
   assert.equal(result.notice, undefined, 'applying a Scene draws nothing on the camera')
+  assert.equal(result.announce, 'Desk', 'screen readers get the name')
   assert.equal(result.appliedScene, state.settings.presets[0])
   assert.equal(result.settings.size, 420)
   assert.equal(result.settings.shape, 'landscape')

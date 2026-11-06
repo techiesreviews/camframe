@@ -84,6 +84,7 @@ export const BRIDGE_CONTRACT = Object.freeze([
   { method: 'onFullscreenChanged', channel: 'fullscreen:changed', kind: 'event' },
   { method: 'onShowControls', channel: 'controls:show', kind: 'event' },
   { method: 'onPresentationNotice', channel: 'presentation:notice', kind: 'event' },
+  { method: 'onSceneAnnouncement', channel: 'scene:announce', kind: 'event' },
   { method: 'onShowOnboarding', channel: 'onboarding:show', kind: 'event' },
 ])
 
