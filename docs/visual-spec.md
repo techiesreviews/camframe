@@ -97,6 +97,8 @@ Progressive blur renders the live second video through `blur(configured px) satu
 
 ## Scene notice
 
+Since ADR 0036 it appears only for deleted, imported or exported Scenes and "No saved scenes", not when a Scene is applied or saved; a hidden live region (`#scene-announcer`) carries the Scene name for screen readers.
+
 The notice has 7×10 px padding, 8 px radius, 10%-white border, 88%-opaque `#0c0c0d`, `0 8px 20px` black/28% shadow, white 600 weight 11/16 px text, ellipsis, and no input. It appears with a 140 ms fade/up animation and is removed after 1.6 s.
 
 ## Motion and timing
