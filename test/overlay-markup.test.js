@@ -97,6 +97,10 @@ test('framing uses the target tool without duplicate size or zoom controls', () 
 test('presentation controls expose shortcuts, startup, tray Scenes, and notices', () => {
   assert.match(overlayHtml, /id="overlay-launch-toggle"/)
   assert.match(overlayHtml, /id="presentation-toast"[^>]*aria-live="polite"/)
+  // Scene names are read out, never drawn (ADR 0036).
+  assert.match(overlayHtml, /id="scene-announcer"[^>]*role="status" aria-live="polite"/)
+  assert.match(overlayCss, /\.scene-announcer \{[^}]*width: 1px;[^}]*clip-path: inset\(50%\)/)
+  assert.match(overlaySource, /sceneAnnouncer\.textContent =/)
   assert.match(mainSource, /label: 'Scenes', submenu: presetMenu/)
   assert.match(mainSource, /CommandOrControl\+Shift\+H/)
   assert.match(mainSource, /CommandOrControl\+Shift\+F/)
