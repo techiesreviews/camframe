@@ -46,7 +46,7 @@ Documentation-only wording corrections do not require an ADR. They still require
 
 ## Baseline represented here
 
-- Product version: `0.6.1`
+- Product version: `0.7.0`
 - Git baseline inspected: `fe8e6c6` (`main`, tag `v0.4.3`; the reconstruction baseline, not the 0.6.1 release commit)
 - Settings schema: `14` (Prompter link small size and layout Scenes, 2026-11-04; `13` added the Prompter link fields, 2026-10-30)
 - Documentation audit date: `2026-08-29`
