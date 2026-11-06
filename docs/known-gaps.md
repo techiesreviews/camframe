@@ -108,7 +108,7 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 ## KG-14 — Prompter link API 2: deployment and edge cases
 
 **Status:** Open, 2026-11-04 (ADR 0035).
-**Evidence:** Automated: unit tests (cue, Scene and small-size checks; `planCompactLayout` on several displays; the whole large → small → relaunch flow through the real HTTP server with fake Electron pieces in `test/prompter-control.test.js`) and one real-Electron run on Linux (`docs/verification/runs/2026-11-04-prompter-layout-scenes.md`). Not in a released build, and not observed in the CamFrame Lex streams with.
+**Evidence:** Automated: unit tests (cue, Scene and small-size checks; `planCompactLayout` on several displays; the whole large → small → relaunch flow through the real HTTP server with fake Electron pieces in `test/prompter-control.test.js`) and one real-Electron run on Linux (`docs/verification/runs/2026-11-04-prompter-layout-scenes.md`). Ships in 0.7.0; the W-30 API 2 steps (`docs/verification/README.md`) have not been run by hand on the PC Lex streams from.
 
 - Resizing the Overlay by hand sets the small size, also while a large layout is showing (holding a corner still does not). Then a later `"small"` and "Live small corner" restore that hand-picked size. The prompter can check `smallSize` in the status and reset it with `POST /camframe/small-size`.
 - Saving a seventh Scene from Inline settings still drops the oldest Scene, and importing past six still skips new names (KG-09 area). Only Prompter link saves refuse instead.
