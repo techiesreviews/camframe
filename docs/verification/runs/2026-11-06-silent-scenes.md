@@ -1,6 +1,6 @@
 # Verification run: silent Scenes (fix/silent-prompter-scenes) — 2026-11-06
 
-- **Commit:** 63499763d3f89f688fd792ffb63f4cc07d1bdcce (checks ran at this commit; the commit after it changes only this run file)
+- **Commit:** 79e61f9b95c63d183dc0709b5d7da2591f889fb7 (checks ran at this commit; the commit after it changes only this run file)
 - **Version:** 0.6.1 (`package.json`), unreleased change
 - **Observer:** Claude (Sonnet 5.5), automated only
 - **Environment:** Linux, one display, Node v24.21.0, Electron 44.7.0, development build
