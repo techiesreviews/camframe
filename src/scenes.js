@@ -3,7 +3,8 @@ import { keepInside, planCompactLayout } from './overlay-geometry.js'
 
 // The Scene library owns every Scene rule: naming, ids, the Scene limit, ordering, import/export,
 // and which Scene is active. Each operation takes the current `{ settings, activeSceneId }` and
-// returns the next one when something changed, plus an optional presentation `notice`.
+// returns the next one when something changed, plus an optional presentation `notice`. Saving and
+// applying a Scene show no notice: the Overlay is what gets captured on stream, so nothing is drawn on it.
 // `appliedScene` marks a result whose Overlay geometry should move to the Scene. Operations that
 // change nothing return `undefined`. Callers keep dialogs, file I/O, window effects, and persistence.
 
@@ -59,7 +60,6 @@ export function saveScene(
   return {
     settings: withScenes(live, scenes),
     activeSceneId: scene.id,
-    notice: `${name} saved`,
   }
 }
 
@@ -121,7 +121,6 @@ export function applyScene({ settings }, idInput, context = {}) {
   return {
     settings: sanitizeSettings(applied),
     activeSceneId: scene.id,
-    notice: scene.name,
     appliedScene: scene,
     ...(geometry ? { layout: geometry } : {}),
   }
@@ -171,7 +170,6 @@ export function saveLayoutScene(
     activeSceneId: existing && existing.id === activeSceneId ? '' : activeSceneId,
     scene: next.presets.find((candidate) => candidate.id === scene.id),
     replaced: Boolean(existing),
-    notice: `${name} saved`,
   }
 }
 

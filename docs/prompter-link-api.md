@@ -227,7 +227,7 @@ POST /camframe/small-size
 | Plugin or advisory screen | `{"scene":"Live small corner"}` |
 | Same, with the older cue shape | `{"size":"small","position":"bottom-right"}` |
 
-Both small cues give the same size and place, also after the large Scene: the small size, bottom-right. One difference: applying a Scene shows its name on the camera for about 1.6 s (CamFrame's existing Scene notice, as when a Scene is picked by hand); a size or place cue shows nothing. If the camera is captured on stream, use the size and place cue for a silent change. "Live small corner" follows the small size, so the two stay the same even after the small size changes. Each one-off request without a saved Scene also works: `{"size":432,"position":"right","withinRight":0.3}`.
+Both small cues give the same size and place, also after the large Scene: the small size, bottom-right. Neither draws anything on the camera: applying or saving a Scene shows no name (Lex, 2026-11-06). "Live small corner" follows the small size, so the two stay the same even after the small size changes. Each one-off request without a saved Scene also works: `{"size":432,"position":"right","withinRight":0.3}`.
 
 ### Checking a cue worked
 
