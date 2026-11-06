@@ -57,6 +57,7 @@ Historical validation is evidence about those revisions, not proof that the curr
 | Flat long settings stack | Resolutions/effects/Scenes overcrowded compact UI | Three task sections | ADR 0006 |
 | ?Preset? as user-facing term | Presentation workflows needed ordering/direct shortcuts/management | Scene UI; storage key unchanged | ADR 0008 |
 | Size and Zoom settings sliders | Duplicated direct manipulation and crowded settings | Corner resize plus target framing tool | ADR 0009 |
+| Scene name shown on the camera for 1.6 s when a Scene is applied or saved | The Overlay is captured on stream, and Prompter cues would put names on air (Lex, 2026-11-06) | None drawn; a hidden live region tells screen readers the name; deleted/import/export notices stay | ADR 0036 |
 | Always-visible Full screen toolbar | Distracted from presentation | Timed auto-hide/hotspot | ADR 0011 |
 | Windows `pop-up-menu` topmost level | Current v0.4.3 commit prioritizes reliable controls/taskbar layering | `screen-saver` plus z-order re-raise | Commit `fe8e6c6` |
 | Separate dormant Controller, its privileged relays, and Inter assets | It was unreachable and duplicated the live settings surface | Inline settings only; persisted `borderColor` remains accepted for compatibility | ADR 0025 |
