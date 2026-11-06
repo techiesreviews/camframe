@@ -138,7 +138,6 @@ const interaction = createOverlayInteraction({
 })
 
 let state
-let announcedSceneId
 let selectedPresetId = ''
 let cameraReposition
 let presentationToastTimer
@@ -571,18 +570,7 @@ function renderPrompterLink() {
   prompterMarginOutput.textContent = `${state.prompterMargin} px`
 }
 
-// A Scene becoming active (applied or saved) is read out to screen readers but never drawn.
-function announceScene(nextState) {
-  const id = nextState.activePresetId
-  const first = announcedSceneId === undefined
-  const changed = id !== announcedSceneId
-  announcedSceneId = id
-  if (first || !changed || !id) return
-  sceneAnnouncer.textContent = nextState.presets.find((preset) => preset.id === id)?.name ?? ''
-}
-
 function applyState(nextState) {
-  announceScene(nextState)
   state = nextState
   tour.stateChanged()
   const camera = dimensionsFor(state)
@@ -1054,6 +1042,14 @@ window.addEventListener('keydown', (event) => {
 })
 
 camFrame.onPresentationNotice(showPresentationNotice)
+// A Scene applied or saved is read out to screen readers and never drawn. The region is emptied first
+// so the same name announced twice in a row is read twice.
+camFrame.onSceneAnnouncement((name) => {
+  sceneAnnouncer.textContent = ''
+  setTimeout(() => {
+    sceneAnnouncer.textContent = String(name)
+  }, 50)
+})
 
 if (!isQaPreview) navigator.mediaDevices.addEventListener('devicechange', cameraSession.refreshDevices)
 window.addEventListener('beforeunload', () => {

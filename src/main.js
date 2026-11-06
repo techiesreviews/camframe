@@ -87,6 +87,11 @@ function showPresentationNotice(message) {
   sendBridgeEvent(overlayWindow?.webContents, 'onPresentationNotice', String(message).slice(0, 80))
 }
 
+// The Scene's name for screen readers only (a hidden live region); nothing is drawn on the camera.
+function announceScene(name) {
+  sendBridgeEvent(overlayWindow?.webContents, 'onSceneAnnouncement', String(name).slice(0, 80))
+}
+
 function applyLaunchAtLoginSetting() {
   if (!app.isPackaged) return
   app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
@@ -122,6 +127,7 @@ function commitState(result) {
     saveSettings()
   }
   if (result.notice) showPresentationNotice(result.notice)
+  if (result.announce) announceScene(result.announce)
 }
 
 function commitScenes(result) {

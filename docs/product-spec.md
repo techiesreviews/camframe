@@ -128,7 +128,7 @@ The UI calls saved layouts **Scenes** while persistence uses `presets`.
 - Saving captures camera identity/label, shape, size, Camera quality, frame/effect styling, mirror, camera zoom/crop, and compact Overlay position.
 - Saving does not capture visibility, Always on top, Start at login, current Full screen state, active Scene, or other Scenes.
 - Saving with a selected ID updates that Scene. A case-insensitive name match also replaces an existing Scene. Adding beyond six retains the latest five and adds the new Scene.
-- Applying a Scene immediately applies its settings, draws nothing on the camera (the Overlay is what gets captured on stream; saving a Scene is silent too), and animates compact bounds when visible unless reduced motion is active.
+- Applying a Scene immediately applies its settings, draws nothing on the camera (the Overlay is what gets captured on stream; saving a Scene is silent too; screen readers still hear the name through a hidden live region, ADR 0036), and animates compact bounds when visible unless reduced motion is active.
 - Reordering controls the numeric direct-shortcut order.
 - Export writes a versioned JSON document. Import accepts that document, a legacy `presets` property, or a bare array, then merges by ID or case-insensitive name without deleting unrelated local Scenes or exceeding six.
 - Full screen is transient and is not entered/exited by applying a Scene.

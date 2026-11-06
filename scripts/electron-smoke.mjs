@@ -383,6 +383,10 @@ test('real Electron: layout Scenes go large and back to the original small size,
     assert.deepEqual(byBridge.view.camera, large.body.saved.camera)
     assert.deepEqual(await overlayBounds(application), windowAt(large.body.saved.camera))
     assert.equal(byBridge.look.signature, changedLook.signature)
+    // Nothing is drawn for the Scene (ADR 0036); the name goes to the hidden screen-reader region.
+    await again.waitForTimeout(200)
+    assert.equal(await again.evaluate(() => document.querySelector('#presentation-toast').hidden), true)
+    assert.equal(await again.evaluate(() => document.querySelector('#scene-announcer').textContent), 'Live right large')
   } finally {
     await application?.close().catch(() => {})
     const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`

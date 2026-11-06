@@ -178,6 +178,7 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 | `onShowControls(cb)` | `controls:show` | main ? renderer | No payload |
 | `onShowOnboarding(cb)` | `onboarding:show` | main ? renderer | No payload; tray Help requests the guide |
 | `onPresentationNotice(cb)` | `presentation:notice` | main ? renderer | Message string, max 80 chars |
+| `onSceneAnnouncement(cb)` | `scene:announce` | main ? renderer | Scene name, max 80 chars, for the hidden screen-reader region only (ADR 0036); sent each time a Scene is applied or saved |
 | `quit()` | `app:quit` | send ? on | Marks quitting and exits |
 
 Callback registration returns an unsubscribe function. Current renderer code registers these for the page lifetime and relies on page destruction rather than invoking the returned functions.
