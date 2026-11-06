@@ -91,6 +91,7 @@ async function harness(
     activeSceneId: '',
   }
   const saves = []
+  const notices = []
   const clock = fakeClock()
   const window = fakeWindow(compactBaseBounds({ settings: state.settings, workArea: area, keepCenter: false }))
   // `extraDisplays` sit next to the primary one; the nearest display to a point holds it.
@@ -121,6 +122,7 @@ async function harness(
     geometry: () => geometry,
     sceneState: () => ({ ...state }),
     commit(result) {
+      if (result?.notice) notices.push(result.notice)
       if (!result?.settings) return
       state.settings = result.settings
       state.activeSceneId = result.activeSceneId
@@ -170,6 +172,7 @@ async function harness(
   return {
     state,
     saves,
+    notices,
     geometry,
     window,
     status: async () => (await call('GET', '/camframe/status')).body,
@@ -583,6 +586,15 @@ test('exact size and place cues, and the small size, apply without a restart', a
   assert.equal(tooNarrow.status, 422)
   assert.equal(tooNarrow.body.code, 'does-not-fit')
   assert.equal((await live.status()).view.size, 260, 'a refused cue changes nothing')
+})
+
+test('saving and cueing a Scene draw no name on the camera', async (t) => {
+  const live = await harness(t)
+  assert.equal((await live.saveScene(SMALL_CORNER)).status, 200)
+  assert.equal((await live.saveScene({ ...RIGHT_LARGE, apply: true })).status, 200)
+  assert.equal((await live.cue({ scene: 'Live small corner' })).status, 200)
+  assert.equal((await live.cue({ scene: 'Live right large' })).status, 200)
+  assert.deepEqual(live.notices, [])
 })
 
 test('Scene capacity and names: refused with a code, never an eviction', async (t) => {
