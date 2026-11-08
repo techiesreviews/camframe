@@ -309,7 +309,13 @@ test('preflights answer the prompter, including Chrome Private Network Access', 
 })
 
 test('the live prompter site gets full answers; the old preview address and look-alikes get none', async (t) => {
-  const { port, cues } = await startLink(t)
+  const saves = []
+  const { port, cues } = await startLink(t, {
+    extra: {
+      saveScene: (request) => (saves.push(request), { ok: true }),
+      setSmallSize: (request) => (saves.push(request), { ok: true }),
+    },
+  })
   const status = await call(port, { headers: { Origin: PROMPTER } })
   assert.equal(status.status, 200)
   assert.equal(status.headers['access-control-allow-origin'], PROMPTER)
@@ -344,6 +350,14 @@ test('the live prompter site gets full answers; the old preview address and look
     })
     assert.equal(refusedCue.status, 403, origin)
     assert.equal(refusedCue.headers['access-control-allow-origin'], undefined, origin)
+    for (const [path, body] of [
+      ['/camframe/scenes', { name: 'A', size: 'full' }],
+      ['/camframe/small-size', { size: 288 }],
+    ]) {
+      const refusedSave = await call(port, { method: 'POST', path, headers: { ...json, Origin: origin }, body })
+      assert.equal(refusedSave.status, 403, `${origin} ${path}`)
+      assert.equal(refusedSave.headers['access-control-allow-origin'], undefined, `${origin} ${path}`)
+    }
     const refusedPreflight = await call(port, {
       method: 'OPTIONS',
       path: '/camframe/cue',
@@ -358,6 +372,7 @@ test('the live prompter site gets full answers; the old preview address and look
     assert.equal(refusedPreflight.headers['access-control-allow-private-network'], undefined, origin)
   }
   assert.deepEqual(cues, [{ size: 'full' }])
+  assert.deepEqual(saves, [], 'nothing reached the Scene library or the small size')
 })
 
 test('cues are checked strictly', () => {
