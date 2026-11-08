@@ -216,9 +216,9 @@ test('a busy port is reported, not thrown', async (t) => {
   assert.equal(link.state().state, 'off')
 })
 
-test('origins: the prompter site, its preview, localhost pages and file:// copies only', () => {
+test('origins: the prompter site, localhost pages and file:// copies only; the old preview address is refused', () => {
   assert.equal(originAllowed(PROMPTER), true)
-  assert.equal(originAllowed(PREVIEW), true, "the prompter's preview")
+  assert.equal(originAllowed(PREVIEW), false, "the prompter's old preview address is no longer trusted")
   assert.equal(originAllowed('null'), true)
   assert.equal(originAllowed('http://localhost:8787'), true)
   assert.equal(originAllowed('http://127.0.0.1:5173'), true)
@@ -308,50 +308,55 @@ test('preflights answer the prompter, including Chrome Private Network Access', 
   assert.equal(fileCopy.headers['access-control-allow-private-network'], undefined)
 })
 
-test("the prompter's preview gets the same answers as the live site; a look-alike does not", async (t) => {
+test('the live prompter site gets full answers; the old preview address and look-alikes get none', async (t) => {
   const { port, cues } = await startLink(t)
-  const status = await call(port, { headers: { Origin: PREVIEW } })
+  const status = await call(port, { headers: { Origin: PROMPTER } })
   assert.equal(status.status, 200)
-  assert.equal(status.headers['access-control-allow-origin'], PREVIEW)
+  assert.equal(status.headers['access-control-allow-origin'], PROMPTER)
 
   const preflight = await call(port, {
     method: 'OPTIONS',
     path: '/camframe/cue',
     headers: {
-      Origin: PREVIEW,
+      Origin: PROMPTER,
       'Access-Control-Request-Method': 'POST',
       'Access-Control-Request-Headers': 'content-type',
       'Access-Control-Request-Private-Network': 'true',
     },
   })
   assert.equal(preflight.status, 204)
-  assert.equal(preflight.headers['access-control-allow-origin'], PREVIEW)
+  assert.equal(preflight.headers['access-control-allow-origin'], PROMPTER)
   assert.equal(preflight.headers['access-control-allow-private-network'], 'true')
 
-  const cue = await call(port, { method: 'POST', path: '/camframe/cue', headers: { ...json, Origin: PREVIEW }, body: { size: 'full' } })
+  const cue = await call(port, { method: 'POST', path: '/camframe/cue', headers: { ...json, Origin: PROMPTER }, body: { size: 'full' } })
   assert.equal(cue.status, 200)
-  assert.equal(cue.headers['access-control-allow-origin'], PREVIEW)
+  assert.equal(cue.headers['access-control-allow-origin'], PROMPTER)
 
-  const lookAlike = await call(port, {
-    method: 'POST',
-    path: '/camframe/cue',
-    headers: { ...json, Origin: 'https://evil.preview.prompter.techies.tools' },
-    body: { size: 'small' },
-  })
-  assert.equal(lookAlike.status, 403)
-  assert.equal(lookAlike.headers['access-control-allow-origin'], undefined)
-  const lookAlikePreflight = await call(port, {
-    method: 'OPTIONS',
-    path: '/camframe/cue',
-    headers: {
-      Origin: 'https://evil.preview.prompter.techies.tools',
-      'Access-Control-Request-Method': 'POST',
-      'Access-Control-Request-Private-Network': 'true',
-    },
-  })
-  assert.equal(lookAlikePreflight.status, 403)
-  assert.equal(lookAlikePreflight.headers['access-control-allow-origin'], undefined)
-  assert.equal(lookAlikePreflight.headers['access-control-allow-private-network'], undefined)
+  for (const origin of [PREVIEW, 'https://evil.preview.prompter.techies.tools']) {
+    const refusedStatus = await call(port, { headers: { Origin: origin } })
+    assert.equal(refusedStatus.status, 403, origin)
+    assert.equal(refusedStatus.headers['access-control-allow-origin'], undefined, origin)
+    const refusedCue = await call(port, {
+      method: 'POST',
+      path: '/camframe/cue',
+      headers: { ...json, Origin: origin },
+      body: { size: 'small' },
+    })
+    assert.equal(refusedCue.status, 403, origin)
+    assert.equal(refusedCue.headers['access-control-allow-origin'], undefined, origin)
+    const refusedPreflight = await call(port, {
+      method: 'OPTIONS',
+      path: '/camframe/cue',
+      headers: {
+        Origin: origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Private-Network': 'true',
+      },
+    })
+    assert.equal(refusedPreflight.status, 403, origin)
+    assert.equal(refusedPreflight.headers['access-control-allow-origin'], undefined, origin)
+    assert.equal(refusedPreflight.headers['access-control-allow-private-network'], undefined, origin)
+  }
   assert.deepEqual(cues, [{ size: 'full' }])
 })
 

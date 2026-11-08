@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-10-30 (Lex). Superseded in part by ADR 0033 (the prompter's preview origin is trusted too) and ADR 0035 (API 2: exact sizes and places, layout Scenes, the small size, a richer status).
+Accepted — 2026-10-30 (Lex). Superseded in part by ADR 0033 (the prompter's preview origin was trusted too; removed 2026-11-08) and ADR 0035 (API 2: exact sizes and places, layout Scenes, the small size, a richer status).
 
 ## Context
 

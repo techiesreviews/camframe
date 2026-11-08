@@ -16,9 +16,9 @@ import {
 import { sameName } from './scenes.js'
 
 // The Prompter link: an opt-in HTTP endpoint on this computer that lets the teleprompter
-// (https://prompter.techies.tools, its preview https://preview.prompter.techies.tools, a local copy, or
-// a file:// copy) switch the Overlay between Full screen, Compact mode at a chosen spot or exact
-// size and place, and a saved Scene when its reading line reaches a cue line. It can also save
+// (https://prompter.techies.tools, a local copy, or a file:// copy) switch the Overlay between Full
+// screen, Compact mode at a chosen spot or exact size and place, and a saved Scene when its reading
+// line reaches a cue line. It can also save
 // layout Scenes and the size "small" restores, and reports the live view so the prompter can check
 // what it got.
 // It binds 127.0.0.1 only, answers only the prompter's origins, and never changes the camera
@@ -28,8 +28,6 @@ import { sameName } from './scenes.js'
 export const PROMPTER_LINK_HOST = '127.0.0.1'
 export const PROMPTER_LINK_PORT = 47833
 export const PROMPTER_SITE = 'https://prompter.techies.tools'
-// The prompter's own test copy (its Worker techies-prompter-preview), where Lex tries a build first.
-export const PROMPTER_PREVIEW_SITE = 'https://preview.prompter.techies.tools'
 const MAX_BODY_BYTES = 1024
 const SCENE_NAME_MAX = 40
 // Control characters, line and paragraph separators, bidi controls and invisible characters
@@ -55,7 +53,7 @@ const SIZE_RANGE = `a whole number of pixels from ${CAMERA_SIZE_MIN} to ${CAMERA
 const isPlainObject = (value) =>
   Boolean(value) && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
 
-const PROMPTER_ORIGINS = new Set([PROMPTER_SITE, PROMPTER_PREVIEW_SITE, 'null'])
+const PROMPTER_ORIGINS = new Set([PROMPTER_SITE, 'null'])
 
 // Browsers send `Origin` on every cross-origin request. `null` is a file:// copy of the prompter.
 // A request without `Origin` comes from a program on this computer, not from a web page.
@@ -404,7 +402,7 @@ export function createPrompterLink({
       send(
         response,
         403,
-        { ok: false, error: 'This page (a file:// copy or a sandboxed frame) may switch the view but not save. Use the prompter site, its preview, or localhost.' },
+        { ok: false, error: 'This page (a file:// copy or a sandboxed frame) may switch the view but not save. Use the prompter site or localhost.' },
         cors,
       )
       return
