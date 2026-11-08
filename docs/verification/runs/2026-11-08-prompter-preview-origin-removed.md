@@ -1,6 +1,6 @@
 # Verification run: build/fleet-lead-camframe-remove-the-prompter-preview-trusted-address-tools-4 — 2026-11-08
 
-- **Commit:** see the PR (the final hash is the PR's merge commit on `dev`)
+- **Commit:** see the PR (the final hash is the PR's merge commit on the `dev` branch)
 - **Version:** unreleased after 0.7.0 (no version bump, no tag, no release)
 - **Observer:** agent (Claude Sonnet 5.5, Orbit card TOOLS-49)
 - **Environment:** Linux, Node v24, dev checkout (no packaged build)

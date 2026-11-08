@@ -18,9 +18,8 @@ import { sameName } from './scenes.js'
 // The Prompter link: an opt-in HTTP endpoint on this computer that lets the teleprompter
 // (https://prompter.techies.tools, a local copy, or a file:// copy) switch the Overlay between Full
 // screen, Compact mode at a chosen spot or exact size and place, and a saved Scene when its reading
-// line reaches a cue line. It can also save
-// layout Scenes and the size "small" restores, and reports the live view so the prompter can check
-// what it got.
+// line reaches a cue line. It can also save layout Scenes and the size "small" restores, and
+// reports the live view so the prompter can check what it got.
 // It binds 127.0.0.1 only, answers only the prompter's origins, and never changes the camera
 // itself. `prompter-control.js` (wired by main) acts on checked requests through `applyCue`,
 // `saveScene` and `setSmallSize`; this module owns the wire protocol.
