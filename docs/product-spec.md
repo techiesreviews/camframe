@@ -126,7 +126,7 @@ Camera framing is active only after selecting the target/crosshair tool.
 The UI calls saved layouts **Scenes** while persistence uses `presets`.
 
 - At most six Scenes exist, in user-controlled order.
-- A Scene saved on a display that is gone, or at a higher resolution, opens on screen: its place is kept wholly on the display nearest where it was saved. The Scene keeps its saved place, so it opens there again once that display is back.
+- A Scene saved on a display that is gone, or at a higher resolution, opens on screen: when less than half of it would be visible, its place is kept wholly on the display nearest where it was saved. The Scene keeps its saved place, so it opens there again once that display is back.
 - A new installation, and an older Preferences file (schema below 15) without Scenes, start with two layout Scenes: **Small bottom** (288 px, bottom right) and **Big right** (540 px, right), planned on the display the Overlay is on. A file with Scenes keeps exactly those. Full screen is not a Scene.
 - Saving captures camera identity/label, shape, size, Camera quality, frame/effect styling, mirror, camera zoom/crop, and compact Overlay position.
 - Saving does not capture visibility, Always on top, the Scenes view, current Full screen state, active Scene, or other Scenes.

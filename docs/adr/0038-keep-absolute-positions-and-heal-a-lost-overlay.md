@@ -23,12 +23,12 @@ Lex asked whether CamFrame could position the camera relative to a screen corner
   - at startup, before the window is created (main stores the new place);
   - whenever the window is shown or its Compact bounds are applied (`apply`, `showScene`, leaving Full screen and the place Full screen returns to);
   - when a display is added or removed or its metrics change (resolution, scale, work area, docking): `screen` `display-added`, `display-removed` and `display-metrics-changed` call `ensureOnScreen()`. A Full screen window on a display that is gone covers the nearest display instead.
-  A drag, a corner drag or a move animation in progress is left alone. The new place is stored in Preferences only; no Scene is changed by it (a place the window was moved to by itself is not a hand change, ADR 0037).
-- **Scenes open on screen.** An exact (snapshot) Scene's saved place is kept wholly on the display nearest its camera when applied (`keepOnWorkArea`, the same rule a layout Scene without a place already follows). The Scene itself keeps its saved place, so it opens where it was saved once that display is back.
+  A drag or a corner drag in progress is left alone; a move animation in progress is checked when it ends. The new place is stored in Preferences only; no Scene is changed by it (a place the window was moved to by itself is not a hand change, ADR 0037).
+- **Scenes open on screen.** An exact (snapshot) Scene whose saved place is not on screen by the same rule is kept wholly on the display nearest its camera when applied (`keepOnWorkArea`, the rule a layout Scene without a place already follows); a saved place that is on screen is applied exactly. The Scene itself keeps its saved place, so it opens where it was saved once that display is back.
 
 ## Consequences
 
 - Old Preferences files and Scene exports load unchanged. A file whose place is off every display (Lex's renamed `preferences.old.json`) now opens with the camera at the bottom right of the main display and all its Scenes.
 - A place that is partly off screen but still at least half visible is kept: someone who parks the camera half over an edge on purpose keeps it there.
-- A Scene saved straddling two displays opens wholly on the nearest one.
+- A Scene saved straddling two displays opens there while both are connected; with one gone, it opens wholly on the nearest one.
 - Not part of this decision, kept as suggestions in TOOLS-156: showing the window anyway when it has not painted after a few seconds, a safe-mode switch, a log file, and a single-instance lock.

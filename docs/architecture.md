@@ -146,7 +146,7 @@ CSS clips the visible camera shapes; there is no native input or render mask (AD
 
 ## Keeping the Overlay on screen
 
-ADR 0038. `overlay-geometry.js` owns the rule (`visibleShare`, `isOnScreen`, `onScreenBase`, `keepOnWorkArea`). Main checks the restored position before creating the window, calls `ensureOnScreen()` before the first show, and subscribes `display-added`, `display-removed` and `display-metrics-changed` to it after the window exists. Inside the geometry every Compact placement passes through `onScreen()`; a healed place is reported with `onCompactPositionChanged`, which stores it in Preferences without touching a Scene. `scenes.js` keeps an exact Scene's place on the display nearest it when applied. A screen fake without `getAllDisplays` (older tests) skips the check.
+ADR 0038. `overlay-geometry.js` owns the rule (`visibleShare`, `isOnScreen`, `onScreenBase`, `keepOnWorkArea`). Main checks the restored position before creating the window, calls `ensureOnScreen()` before the first show, and subscribes `display-added`, `display-removed` and `display-metrics-changed` to it after the window exists. Inside the geometry every Compact placement passes through `onScreen()`; a healed place is reported with `onCompactPositionChanged`, which stores it in Preferences without touching a Scene. `scenes.js` keeps an exact Scene's place on the display nearest it when applied and the saved place is not on screen (the Scene context carries `workAreas()` from main and `prompter-control.js`). A check during a move animation runs when the move ends. A screen fake without `getAllDisplays` (older tests) skips the check.
 
 ## Full screen coordination
 

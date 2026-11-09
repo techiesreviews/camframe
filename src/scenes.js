@@ -6,7 +6,14 @@ import {
   sanitizeSettings,
   settingsForPreset,
 } from './settings.js'
-import { cameraRectFor, compactBaseBounds, keepInside, keepOnWorkArea, planCompactLayout } from './overlay-geometry.js'
+import {
+  cameraRectFor,
+  compactBaseBounds,
+  isOnScreen,
+  keepInside,
+  keepOnWorkArea,
+  planCompactLayout,
+} from './overlay-geometry.js'
 
 // The Scene library owns every Scene rule: naming, ids, the Scene limit, ordering, import/export,
 // and which Scene is active. Each operation takes the current `{ settings, activeSceneId }` and
@@ -209,19 +216,22 @@ export function layoutSceneGeometry(scene, settings, { workArea, workAreaAt } = 
   return { size: plan.size, position: plan.position, clamped: plan.clamped, requestedSize }
 }
 
-// An exact Scene's saved place, kept wholly on the display nearest its camera (`workAreaAt`), so a
-// Scene saved on a display that is gone, or at a higher resolution, opens on screen (TOOLS-156).
-// The Scene keeps its saved place; only where it is shown now changes.
-function exactScenePosition(sceneSettings, { workAreaAt } = {}) {
+// An exact Scene's saved place, or, when that place is not on screen on the connected displays
+// (`workAreas`, the `isOnScreen` rule), the place kept wholly on the display nearest its camera
+// (`workAreaAt`), so a Scene saved on a display that is gone, or at a higher resolution, opens on
+// screen (TOOLS-156). The Scene keeps its saved place; only where it is shown now changes.
+function exactScenePosition(sceneSettings, { workAreas, workAreaAt } = {}) {
   const saved = sceneSettings.position
-  if (!saved || !workAreaAt) return saved
+  if (!saved || !workAreas || !workAreaAt) return saved
+  const size = overlayDimensionsFor(sceneSettings)
+  if (isOnScreen({ ...saved, ...size }, workAreas)) return saved
   const area = workAreaAt({ x: saved.x + OVERLAY_CHROME.left, y: saved.y + OVERLAY_CHROME.top })
-  return area ? keepOnWorkArea(saved, overlayDimensionsFor(sceneSettings), area) : saved
+  return area ? keepOnWorkArea(saved, size, area) : saved
 }
 
 // A layout Scene changes only size and place and keeps the live look; any other Scene applies
-// everything it saved, its place kept on screen. `context` (`workArea`, `workAreaAt`) lets a Scene
-// fit the right display.
+// everything it saved, its place kept on screen. `context` (`workArea`, `workAreaAt`, `workAreas`)
+// lets a Scene fit the right display.
 export function applyScene({ settings }, idInput, context = {}) {
   const id = String(idInput ?? '')
   const scene = settings.presets.find((candidate) => candidate.id === id)
