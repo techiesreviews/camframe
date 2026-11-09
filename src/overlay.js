@@ -957,11 +957,12 @@ window.addEventListener('keydown', (event) => {
     tour.escape()
     return
   }
-  // Ctrl+Z in Inline settings undoes the last Scene delete, else the active Scene's changes.
+  // Ctrl+Z on the Scenes tab undoes the last Scene delete, else the active Scene's changes.
   if (
     (event.ctrlKey || event.metaKey) &&
     event.key.toLowerCase() === 'z' &&
     interaction.controlsOpen &&
+    inlineSettings.dataset.activePanel === 'presets' &&
     !typingIn(event.target) &&
     scenesPanel.undo()
   ) {

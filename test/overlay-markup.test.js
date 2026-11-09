@@ -77,6 +77,8 @@ test('the Scenes tab holds only Scenes; Start at login, the shortcut list and th
   assert.doesNotMatch(mainSource, /setLoginItemSettings\(\{ openAtLogin: settings/)
   assert.match(overlaySource, /const scenesPanel = createScenesPanel\(\{/)
   assert.match(overlaySource, /scenesPanel\.update\(state\)/)
+  // Ctrl+Z undoes a Scene change or delete only on the Scenes tab, where the Undo it uses is shown.
+  assert.match(overlaySource, /interaction\.controlsOpen &&\n {4}inlineSettings\.dataset\.activePanel === 'presets' &&\n {4}!typingIn\(event\.target\) &&\n {4}scenesPanel\.undo\(\)/)
   // The settings stay open while Scenes are applied, saved and deleted (ADR 0037).
   assert.doesNotMatch(read('scenes-panel.js'), /setControlsOpen|closeSettings\(\)\s*\n\s*camFrame/)
 })
