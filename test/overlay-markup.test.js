@@ -275,3 +275,9 @@ test('on/off settings are switches, with a forced-colors fallback and no motion 
   assert.match(overlayCss, /\.overlay\[data-high-contrast='true'\] \.hover-toolbar i\s*\{\s*forced-color-adjust:\s*none/)
   assert.match(overlayCss, /\.overlay\.overlay\[data-high-contrast='true'\] :is\(button, input, select, summary\):focus-visible\s*\{[^}]*outline:\s*3px solid CanvasText/)
 })
+
+test('a list row clips its overflow, so its Scene button draws the focus ring inside, also in high contrast', () => {
+  assert.match(overlayCss, /\.scene-list \.scene-item \{[^}]*overflow: hidden;/)
+  assert.match(overlayCss, /\n\.scene-list \.scene-main:focus-visible \{\n {2}outline-offset: -2px;\n\}/)
+  assert.match(overlayCss, /\n\.overlay\.overlay\[data-high-contrast='true'\] \.scene-list \.scene-main:focus-visible \{\n {2}outline-offset: -3px;\n\}/)
+})

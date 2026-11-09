@@ -166,8 +166,12 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
   // button after a delete); kept until that control exists, for a short while.
   let pendingFocus = ''
   let pendingFocusUntil = 0
+  let savedBefore
   let renderTimer
   let dragId = ''
+  // While an input method composes text in a field, a rebuild would cancel it: it waits for the end.
+  let composing = false
+  let renderAfterComposition = false
 
   function scheduleNextRender(model, time) {
     clearTimeout(renderTimer)
@@ -184,16 +188,30 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     const time = now()
     const model = scenesPanelModel(state, ui, time)
     const files = Object.fromEntries(Object.entries(ui.files).filter(([, result]) => result.until > time))
-    const key = JSON.stringify({ model, files, renaming: ui.editingId && ui.renameInvalid })
+    // The typed Scene name stays out of the key: typing updates the save button in place
+    // (`updateSaveButton`) and never swaps the field, which would cancel input-method composition and
+    // make screen readers read the field again.
+    const add = { ...model.add, saveName: undefined, replace: undefined }
+    const key = JSON.stringify({ model: { ...model, add }, files, renaming: ui.editingId && ui.renameInvalid })
     scheduleNextRender(model, time)
     if (pendingFocus && time > pendingFocusUntil) pendingFocus = ''
     if (key === lastKey && !pendingFocus) return
+    if (composing) {
+      renderAfterComposition = true
+      return
+    }
     lastKey = key
     const focused = root.contains(document.activeElement) ? document.activeElement : undefined
     const selection =
       focused && 'selectionStart' in focused ? [focused.selectionStart, focused.selectionEnd] : undefined
     root.replaceChildren(head(model), model.view === 'grid' ? grid(model, time) : list(model, time), fileRow(model, files))
-    const wanted = pendingFocus === 'active-scene' ? `apply:${state.activePresetId}` : pendingFocus
+    // After Save look, focus waits for main's answer (a one-way message in Electron): the next
+    // saved Scene after the one known when the save was sent.
+    const savedNow = state.sceneSaved
+    const wanted =
+      pendingFocus === 'saved-scene'
+        ? savedNow && savedNow.at !== savedBefore ? `apply:${savedNow.id}` : ''
+        : pendingFocus
     const find = (focusKey) => focusKey && root.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)
     const target = find(wanted)
     if (target) {
@@ -365,8 +383,25 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     return element('div', { class: 'scene-body', 'data-layout': 'list' }, children)
   }
 
+  function saveButtonLabel(add) {
+    return add.replace ? `Replace ${add.replace}` : `Save as scene ${add.slot}`
+  }
+
+  // Typing a name updates only the save button: enabled, and Replace when the name is taken.
+  function updateSaveButton() {
+    const button = root.querySelector('[data-key="save-ok"]')
+    if (!button || !state) return
+    const { add } = scenesPanelModel(state, ui, now())
+    const label = saveButtonLabel(add)
+    button.disabled = !add.saveName.trim()
+    button.setAttribute('aria-label', label)
+    button.setAttribute('title', label)
+    button.classList.toggle('icon-only', !add.replace)
+    button.replaceChildren(icon('check'), ...(add.replace ? ['Replace'] : []))
+  }
+
   function saveForm(model) {
-    const label = model.add.replace ? `Replace ${model.add.replace}` : `Save as scene ${model.add.slot}`
+    const label = saveButtonLabel(model.add)
     return element('div', { class: 'scene-save-form' }, [
       element('span', { class: 'scene-slot dashed', text: String(model.add.slot) }),
       element('input', {
@@ -567,8 +602,9 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     if (!name) return
     ui.saving = false
     ui.saveName = ''
-    // The saved Scene goes on camera; focus follows it.
-    focusNext('active-scene')
+    // The saved Scene goes on camera; focus follows it once main has saved it.
+    savedBefore = state.sceneSaved?.at
+    focusNext('saved-scene')
     camFrame.savePreset(name, '')
     render()
   }
@@ -645,7 +681,7 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     const role = event.target.dataset.role
     if (role === 'new-name') {
       ui.saveName = event.target.value
-      render()
+      updateSaveButton()
     } else if (role === 'rename') {
       ui.renameValue = event.target.value
       if (ui.renameInvalid) {
@@ -655,7 +691,19 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     }
   })
 
+  root.addEventListener('compositionstart', () => {
+    composing = true
+  })
+  root.addEventListener('compositionend', () => {
+    composing = false
+    if (renderAfterComposition) {
+      renderAfterComposition = false
+      render()
+    }
+  })
+
   root.addEventListener('keydown', (event) => {
+    if (event.isComposing) return
     const target = event.target
     const role = target.dataset?.role
     if (role === 'rename' || role === 'new-name') {

@@ -502,13 +502,51 @@ test('real Electron: the Scenes tab applies, autosaves, undoes, deletes, renames
     const renamed = await until((current) => current.presets[1].name === 'Talk', 'the rename')
     assert.deepEqual(renamed.presets[1].layout, undone.presets[1].layout)
 
-    // Save look: a third Scene from the live look, on camera at once.
-    await page.locator('[data-act="save-open"]').click()
-    await page.locator('[data-role="new-name"]').fill('Interview')
+    // Save look by keyboard: a third Scene from the live look, on camera at once, and focus on it.
+    await page.locator('[data-act="save-open"]').focus()
+    await page.keyboard.press('Enter')
+    await page.locator('[data-role="new-name"]').waitFor({ state: 'visible' })
+    const nameField = await page.locator('[data-role="new-name"]').elementHandle()
+    const fieldKept = () => nameField.evaluate((field) => field.isConnected && document.activeElement === field)
+    const saveButton = () =>
+      page.locator('[data-act="save-ok"]').evaluate((button) => ({
+        disabled: button.disabled,
+        label: button.getAttribute('aria-label'),
+        text: button.textContent.trim(),
+      }))
+    // Typing never swaps the name field (a swap cancels input-method composition and makes screen
+    // readers read the field again); the save button follows the name in place.
+    await page.keyboard.type('talk', { delay: 20 })
+    assert.equal(await fieldKept(), true, 'the name field survives typing')
+    assert.deepEqual(await saveButton(), { disabled: false, label: 'Replace Talk', text: 'Replace' })
+    await page.keyboard.press('Control+a')
+    await page.keyboard.press('Backspace')
+    assert.equal(await fieldKept(), true, 'the name field survives clearing')
+    assert.equal((await saveButton()).disabled, true)
+    const composed = await nameField.evaluate((field) => {
+      field.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }))
+      field.value = 'Interv'
+      field.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, data: 'Interv' }))
+      const during = field.isConnected && document.activeElement === field
+      field.value = 'Interview'
+      field.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'Interview' }))
+      field.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'Interview' }))
+      return { during, after: field.isConnected && document.activeElement === field }
+    })
+    assert.deepEqual(composed, { during: true, after: true }, 'the name field survives input-method composition')
+    assert.deepEqual(await saveButton(), { disabled: false, label: 'Save as scene 3', text: '' })
     await page.keyboard.press('Enter')
     const saved = await until((current) => current.presets.length === 3, 'the new Scene')
     assert.equal(saved.presets[2].name, 'Interview')
     assert.equal(saved.activePresetId, saved.presets[2].id)
+    await page
+      .waitForFunction((key) => document.activeElement?.dataset.key === key, `apply:${saved.presets[2].id}`, { timeout: 2000 })
+      .catch(() => {})
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.dataset.key),
+      `apply:${saved.presets[2].id}`,
+      'focus follows the saved Scene onto the camera',
+    )
 
     // Delete shows Undo in the Scene's place; Ctrl+Z brings it back.
     await tile('Small bottom').focus()
