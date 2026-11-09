@@ -138,3 +138,10 @@ Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.
 - That updating a PC where Start at login was on stops CamFrame starting at sign-in (the one-time unregister runs only in a packaged build).
 - Screen reader names for the tiles, the saved state and the delete announcement (NVDA or Narrator).
 - A hand change can no longer be tried "outside" the active Scene: it is saved into it. Undo (10 s) or switching to another Scene first are the only ways back.
+
+## KG-17 — The self-healing Overlay position lacks Windows hand checks
+
+**Status:** Open, 2026-11-09 (ADR 0038, Orbit TOOLS-156).
+**Evidence:** Automated: unit tests (`visibleShare`, `isOnScreen`, `onScreenBase`, `keepOnWorkArea`; the geometry on one and two displays, a display removed, a lower resolution and the Full screen exit; an exact Scene saved off screen; an old Preferences file with an off-screen place) and a real-Electron run on Linux through X11 (`docs/verification/runs/2026-11-09-overlay-on-screen.md`). The cause was confirmed on Lex's Windows laptop before the fix (a saved place off every display), not yet the fix itself.
+
+Not yet seen by hand on Windows (row W-37): unplugging or undocking a display while CamFrame runs and before it starts, resolution and scale changes, mixed scaling, and a main display that is not the leftmost. Whether Windows sends `display-metrics-changed` before or after it moves windows itself on undock is unknown; either way the check runs on every such event.

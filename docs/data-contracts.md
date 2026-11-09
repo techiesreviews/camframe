@@ -91,7 +91,7 @@ A **layout Scene** (saved through the Prompter link, ADR 0035) also has `layout`
 ```
 
 - `layout.size`: integer 180–640, or `"small"` (resolved from `prompterSmallSize` when applied), required. `layout.position`: optional place name. `layout.margin`: optional integer 0–160, only with a place. `layout.withinRight`: optional number 0.1–1, only with `right`, `top-right` or `bottom-right`. Any invalid part drops the whole `layout` (`sanitizeSceneLayout`), leaving an ordinary Scene.
-- Applying a layout Scene (`applyScene` with the current display's work area) changes only `size` and `position`, planned by `planCompactLayout` with the live `shape` and `layout.margin ?? prompterMargin`; `withinRight` counts at least the 18 px of right chrome as the gap. Without a place it plans the layout size at its saved camera point on the display nearest that point (`workAreaAt`, Electron's `getDisplayNearestPoint`), shrinking and keeping it on screen there. Without a work area, or when even 180 px cannot fit, it uses `settings.size` and `settings.position` (kept inside the work area when one is known), reports the requested size and sets `clamped` to `true` when a work area was known (the Scene's rule could not be met). Camera, shape, appearance and framing stay live (`LOOK_SETTING_KEYS`).
+- Applying a layout Scene (`applyScene` with the current display's work area) changes only `size` and `position`, planned by `planCompactLayout` with the live `shape` and `layout.margin ?? prompterMargin`; `withinRight` counts at least the 18 px of right chrome as the gap. Without a place it plans the layout size at its saved camera point on the display nearest that point (`workAreaAt`, Electron's `getDisplayNearestPoint`), shrinking and keeping it on screen there. Applying an exact Scene with `workAreaAt` keeps its `settings.position` wholly on the work area of the display nearest its camera's top-left (`keepOnWorkArea`, ADR 0038); the Scene keeps its saved position. Without a work area, or when even 180 px cannot fit, it uses `settings.size` and `settings.position` (kept inside the work area when one is known), reports the requested size and sets `clamped` to `true` when a work area was known (the Scene's rule could not be met). Camera, shape, appearance and framing stay live (`LOOK_SETTING_KEYS`).
 - `settings` is still a full snapshot taken at save time, so export, import and older builds keep working.
 
 - ID: non-empty string truncated to 64 characters. New IDs are `preset-` plus `Date.now().toString(36)`.
@@ -149,6 +149,8 @@ landscape:      width = size, height = round(size ? 0.5625)
 ```
 
 Outer Overlay dimensions add `left 18 + right 18` and `top 84 + bottom 18`. `position` is the outer window's top-left screen coordinate.
+
+On screen (ADR 0038): Compact bounds are on screen when `visibleShare` puts at least half of the window and at least half of its camera surface on the work areas of `screen.getAllDisplays()` (`isOnScreen`). `onScreenBase` keeps bounds that are on screen and moves others to `compactPositionAt('bottom-right', { workArea: primary.workArea, margin: prompterMargin })` at the same size. Main applies it before creating the window (and stores the new `position`); the geometry applies it to every Compact placement (`apply`, `showScene`, the Full screen exit and `fullscreenReturnBounds`) and in `ensureOnScreen()`, which runs before the window is shown and on the `display-added`, `display-removed` and `display-metrics-changed` screen events (a Full screen window not half on any display covers `getDisplayMatching`'s display). Healing reports the new place through `onCompactPositionChanged` (Preferences only, never a Scene). `position` keeps its stored shape; there is no schema change.
 
 Corner resize converts horizontal and vertical pointer deltas back to the base `size`, chooses whichever has larger absolute change, clamps, and adjusts `position` only for left/top handles so the opposite corner stays anchored.
 
@@ -223,7 +225,7 @@ A small-size request (`parseSmallSize`) has only `size`: `"current"` or 180–64
 
 ### Overlay BrowserWindow
 
-- Initial bounds: computed outer Overlay bounds and restored/fallback position.
+- Initial bounds: computed outer Overlay bounds and restored/fallback position, moved to the bottom right of the main display when the restored position is not on screen (`onScreenBase`, ADR 0038).
 - `show:false`, frameless, transparent, non-resizable, movable, non-minimizable/maximizable, non-fullscreenable, taskbar-skipped, no shadow.
 - Transparent background and disabled background throttling.
 - Context isolation and sandbox enabled; Node integration disabled.

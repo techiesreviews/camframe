@@ -128,3 +128,23 @@ test('a hand resize sets the small size only when the size really changed', () =
   assert.equal(resized.size, 400)
   assert.equal(resized.prompterSmallSize, 400)
 })
+
+test('an old Preferences file with a place off every screen still loads its place and Scenes unchanged (TOOLS-156)', () => {
+  // Lex's renamed preferences.old.json: saved on a desk display that is not connected now. The window is
+  // brought back on screen at startup (overlay-geometry `onScreenBase`), so nothing here is dropped.
+  const old = {
+    schemaVersion: 15,
+    completedOnboardingVersion: 1,
+    position: { x: 3712, y: -812 },
+    presets: [
+      { id: 'preset-desk', name: 'Desk', settings: { size: 320, position: { x: 3600, y: 200 } } },
+      { id: 'starter-small-bottom', name: 'Small bottom', settings: { size: 288 }, layout: { size: 288, position: 'bottom-right' } },
+    ],
+  }
+  const loaded = preferencesFromDocument(JSON.stringify(old))
+  assert.equal(loaded.schemaVersion, DEFAULT_SETTINGS.schemaVersion)
+  assert.deepEqual(loaded.position, { x: 3712, y: -812 })
+  assert.deepEqual(loaded.presets.map((scene) => scene.name), ['Desk', 'Small bottom'])
+  assert.deepEqual(loaded.presets[0].settings.position, { x: 3600, y: 200 })
+  assert.deepEqual(loaded.presets[1].layout, { size: 288, position: 'bottom-right' })
+})

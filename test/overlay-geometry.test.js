@@ -17,6 +17,10 @@ import {
   compactPositionAt,
   createOverlayGeometry,
   isFullscreenExitInput,
+  isOnScreen,
+  keepOnWorkArea,
+  onScreenBase,
+  visibleShare,
 } from '../src/overlay-geometry.js'
 
 const DISPLAY = { x: 0, y: 0, width: 1920, height: 1080 }
@@ -952,4 +956,134 @@ test('a drag ended by hiding or Full screen reports its place; one ended by a Sc
   moved.patch({ position: { x: 1500, y: 700 } })
   moved.geometry.showCompact()
   assert.deepEqual(moved.events.dragEnds, [], 'the drag must not save its spot over the cue')
+})
+
+// --- TOOLS-156: the Overlay can never end up off screen ---
+
+const LAPTOP = { x: 0, y: 0, width: 1920, height: 1040 }
+// A second display to the right of the laptop, as on a docked desk.
+const DESK = { x: 1920, y: 0, width: 2560, height: 1400 }
+const windowAt = (x, y, size = 288) => ({ x, y, ...overlayDimensionsFor({ shape: 'circle', size }) })
+
+test('visibleShare: the share of a rectangle on any display, across two displays and none', () => {
+  const rect = { x: 1820, y: 100, width: 200, height: 100 }
+  assert.equal(visibleShare(rect, [LAPTOP]), 0.5)
+  assert.equal(visibleShare(rect, [LAPTOP, DESK]), 1)
+  assert.equal(visibleShare({ x: 5000, y: 100, width: 200, height: 100 }, [LAPTOP, DESK]), 0)
+  assert.equal(visibleShare(rect, []), 0)
+})
+
+test('isOnScreen: at least half the window and half its camera (the drag handle) on a display', () => {
+  assert.equal(isOnScreen(windowAt(400, 500), [LAPTOP]), true)
+  // Saved on the desk display, which is gone now (the TOOLS-156 laptop).
+  assert.equal(isOnScreen(windowAt(3000, 400), [LAPTOP]), false)
+  assert.equal(isOnScreen(windowAt(3000, 400), [LAPTOP, DESK]), true)
+  // Straddling two displays still counts: every part is on one of them.
+  assert.equal(isOnScreen(windowAt(1800, 400), [LAPTOP, DESK]), true)
+  // Mostly past the right edge of a lone display.
+  assert.equal(isOnScreen(windowAt(1920 - 100, 400), [LAPTOP]), false)
+  // Far above every display (negative coordinates from an old display arrangement).
+  assert.equal(isOnScreen(windowAt(400, -2000), [LAPTOP, DESK]), false)
+  // The window's transparent chrome on screen is not enough: the camera itself must be.
+  const window = windowAt(400, 1040 - 210)
+  assert.ok(visibleShare(window, [LAPTOP]) > 0.5)
+  assert.equal(isOnScreen(window, [LAPTOP]), false)
+  assert.equal(isOnScreen(windowAt(400, 500), []), false)
+})
+
+test('onScreenBase keeps a reachable place and moves a lost one to the bottom right of the main display', () => {
+  const options = { workAreas: [LAPTOP], primaryWorkArea: LAPTOP, margin: 32 }
+  const kept = windowAt(400, 500)
+  assert.deepEqual(onScreenBase(kept, options), kept)
+  const lost = windowAt(3000, 400, 360)
+  const healed = onScreenBase(lost, options)
+  assert.equal(healed.width, lost.width, 'the size is kept')
+  assert.equal(healed.height, lost.height)
+  assert.deepEqual(
+    { x: healed.x, y: healed.y },
+    compactPositionAt('bottom-right', { workArea: LAPTOP, size: lost, margin: 32 }),
+    'the same corner and margin as the Small bottom starter Scene',
+  )
+  assert.equal(isOnScreen(healed, [LAPTOP]), true)
+  // A main display that is not at 0,0 (Windows can put it anywhere in the desktop).
+  const main = { x: -1280, y: 200, width: 1280, height: 984 }
+  const moved = onScreenBase(lost, { workAreas: [main], primaryWorkArea: main, margin: 32 })
+  assert.equal(isOnScreen(moved, [main]), true)
+})
+
+test('keepOnWorkArea clamps a place so the whole window is on that display', () => {
+  const size = overlayDimensionsFor({ shape: 'circle', size: 288 })
+  assert.deepEqual(keepOnWorkArea({ x: 400, y: 500 }, size, LAPTOP), { x: 400, y: 500 })
+  assert.deepEqual(keepOnWorkArea({ x: 3000, y: -50 }, size, LAPTOP), { x: 1920 - size.width, y: 0 })
+  assert.deepEqual(keepOnWorkArea({ x: -900, y: 5000 }, size, DESK), { x: 1920, y: 1400 - size.height })
+})
+
+function screenWith(view, workAreas, primary = workAreas[0]) {
+  view.screen.displays = workAreas.map((workArea) => ({ bounds: workArea, workArea }))
+  view.screen.getAllDisplays = () => view.screen.displays
+  view.screen.getPrimaryDisplay = () => ({ bounds: primary, workArea: primary })
+  view.screen.getDisplayMatching = (bounds) => {
+    const centre = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+    const distance = ({ workArea: a }) =>
+      Math.hypot(Math.max(a.x - centre.x, 0, centre.x - a.x - a.width), Math.max(a.y - centre.y, 0, centre.y - a.y - a.height))
+    return [...view.screen.displays].sort((left, right) => distance(left) - distance(right))[0]
+  }
+}
+
+test('showing the Overlay at a saved place on a display that is gone brings it back on screen', () => {
+  const view = overlay({ settings: { position: { x: 3000, y: 400 } } })
+  screenWith(view, [LAPTOP])
+  view.geometry.apply()
+  assert.equal(view.window.visible, true)
+  assert.equal(isOnScreen(view.window.bounds, [LAPTOP]), true)
+  assert.deepEqual(view.window.bounds, onScreenBase(compact(sanitizeSettings({ position: { x: 3000, y: 400 } })), { workAreas: [LAPTOP], primaryWorkArea: LAPTOP, margin: 32 }))
+  assert.deepEqual(view.settings().position, { x: view.window.bounds.x, y: view.window.bounds.y }, 'the new place is stored')
+})
+
+test('a display removed while the Overlay is on it brings the Overlay back; a reachable one stays put', () => {
+  const view = overlay({ settings: { position: { x: 3000, y: 400 } } })
+  screenWith(view, [LAPTOP, DESK])
+  view.geometry.apply()
+  assert.deepEqual({ x: view.window.bounds.x, y: view.window.bounds.y }, { x: 3000, y: 400 }, 'on the desk display, untouched')
+  view.screen.displays = view.screen.displays.slice(0, 1)
+  view.geometry.ensureOnScreen()
+  assert.equal(isOnScreen(view.window.bounds, [LAPTOP]), true)
+  assert.equal(view.window.bounds.width, overlayDimensionsFor(view.settings()).width, 'the size is kept')
+  const settled = { ...view.window.bounds }
+  view.geometry.ensureOnScreen()
+  assert.deepEqual(view.window.bounds, settled)
+})
+
+test('a lower resolution that leaves the Overlay past the edge brings it back', () => {
+  const view = overlay({ settings: { position: { x: 1500, y: 700 } } })
+  screenWith(view, [LAPTOP])
+  view.geometry.apply()
+  assert.deepEqual({ x: view.window.bounds.x, y: view.window.bounds.y }, { x: 1500, y: 700 })
+  const smaller = { x: 0, y: 0, width: 1280, height: 680 }
+  screenWith(view, [smaller])
+  view.geometry.ensureOnScreen()
+  assert.equal(isOnScreen(view.window.bounds, [smaller]), true)
+})
+
+test('leaving Full screen never lands on a display that is gone', () => {
+  const view = overlay({ settings: { position: { x: 3000, y: 400 } } })
+  screenWith(view, [LAPTOP, DESK])
+  view.geometry.apply()
+  view.geometry.setFullscreen(true)
+  view.settle()
+  view.screen.displays = view.screen.displays.slice(0, 1)
+  view.geometry.ensureOnScreen()
+  assert.equal(isOnScreen(view.window.bounds, [LAPTOP]), true, 'Full screen moves to a display still there')
+  assert.equal(isOnScreen(view.geometry.fullscreenReturnBounds(), [LAPTOP]), true)
+  view.geometry.setFullscreen(false)
+  view.settle()
+  assert.equal(isOnScreen(view.window.bounds, [LAPTOP]), true)
+})
+
+test('without a display list (an old screen fake) the saved place is trusted as before', () => {
+  const view = overlay({ settings: { position: { x: 3000, y: 400 } } })
+  view.geometry.apply()
+  assert.deepEqual({ x: view.window.bounds.x, y: view.window.bounds.y }, { x: 3000, y: 400 })
+  view.geometry.ensureOnScreen()
+  assert.deepEqual({ x: view.window.bounds.x, y: view.window.bounds.y }, { x: 3000, y: 400 })
 })

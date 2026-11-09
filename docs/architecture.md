@@ -144,6 +144,10 @@ Dragging and resizing are main-process operations because the renderer cannot di
 
 CSS clips the visible camera shapes; there is no native input or render mask (ADR 0029).
 
+## Keeping the Overlay on screen
+
+ADR 0038. `overlay-geometry.js` owns the rule (`visibleShare`, `isOnScreen`, `onScreenBase`, `keepOnWorkArea`). Main checks the restored position before creating the window, calls `ensureOnScreen()` before the first show, and subscribes `display-added`, `display-removed` and `display-metrics-changed` to it after the window exists. Inside the geometry every Compact placement passes through `onScreen()`; a healed place is reported with `onCompactPositionChanged`, which stores it in Preferences without touching a Scene. `scenes.js` keeps an exact Scene's place on the display nearest it when applied. A screen fake without `getAllDisplays` (older tests) skips the check.
+
 ## Full screen coordination
 
 Main and Overlay coordinate, but neither uses Electron native fullscreen:
