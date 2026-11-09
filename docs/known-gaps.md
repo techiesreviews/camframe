@@ -127,7 +127,7 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 
 ## KG-16 — Scenes tab autosave and Undo lack Windows hand checks
 
-**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132); updated 2026-11-09 (ships in 0.8.0; Lex's eight plain hand-check steps on his Windows laptop, "1-8 ok", reported as a whole, so Inconclusive: `verification/runs/2026-11-09-v0.8.0-go.md`; the written rows below stay open).
+**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132); updated 2026-11-09 (ships in 0.8.0; Lex's eight plain hand-check steps on his Windows laptop, "1-8 ok", reported as a whole, so Inconclusive: `verification/runs/2026-11-09-v0.8.0-go.md`; again with the accessibility fixes of PR #56 in run 42629380293, with Save look by keyboard and a long name, "ok" as a whole; the written rows below stay open).
 **Evidence:** Automated: unit tests (`followLiveLook`, `createSceneEdits`, `restoreScene`, `undoSceneChange`, `scenePreviews`, the Scenes tab model, the schema-15 load fixtures) and a real-Electron run on Linux with Chromium's synthetic camera (`docs/verification/runs/2026-11-09-scenes-tab.md`): open the tab, apply, autosave a shape change, Undo, rename, Save look, delete and Ctrl+Z, Alt+arrow, list/grid, Escape, the Prompter link status and a cue by name, and the saved file. Browser screenshots of both views from `kit shots`.
 
 Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.md`):
@@ -136,7 +136,8 @@ Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.
 - Whether the tiles match the real screen on Lex's displays: the tile is a 16:9 screen, so on a display of another shape the camera's place is right as a share of the display but the screen around it is drawn 16:9.
 - Dragging Scenes into a new order in the transparent, always-on-top Overlay window.
 - That updating a PC where Start at login was on stops CamFrame starting at sign-in (the one-time unregister runs only in a packaged build).
-- Screen reader names for the tiles, the saved state and the delete announcement (NVDA or Narrator).
+- Screen reader names for the tiles, the saved state and the delete announcement (NVDA or Narrator), and that the Scene name field is not read again on each key (PR #56).
+- Typing a Scene name with an input method (Chinese, Japanese, Korean): the smoke only fakes composition events (PR #56).
 - A hand change can no longer be tried "outside" the active Scene: it is saved into it. Undo (10 s) or switching to another Scene first are the only ways back.
 
 ## KG-17 — The self-healing Overlay position lacks Windows hand checks

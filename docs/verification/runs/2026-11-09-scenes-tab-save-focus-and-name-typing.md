@@ -46,6 +46,8 @@
 | Input-method typing (Chinese, Japanese, Korean) on Windows | Not run | composition events are faked in the smoke; no real input method tried |
 | W-29 screen reader on the name field | Not run | KG-16 |
 
+Later the same day, Lex tried the first three rows with manual build run 42629380293 and answered "ok" for them as a whole; that result is recorded in `2026-11-09-v0.8.0-go.md`, and the rows above keep this run's state.
+
 ## Regressions and surprises
 
 - None in the automated runs.
