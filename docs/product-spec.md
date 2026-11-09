@@ -86,6 +86,7 @@ The transparent native window reserves 18 px on the left/right, 84 px above, and
 - Dragging the camera surface moves the native Overlay by polling the global cursor every 16 ms.
 - Four 14 px corner handles resize while preserving aspect ratio and anchor the opposite corner.
 - Shape, size, position, and frame-effect changes may reapply native bounds. Resolution, framing, mirror, and topmost changes must not resize the window.
+- The Overlay can never be lost off screen (ADR 0038). At startup, whenever it is shown, and when a display is added or removed, changes resolution or scale, or the laptop docks, an Overlay with less than half of the window or of its camera on a connected display moves to the bottom right of the main display, Corner margin (32 px by default) from its edges, at the same size. A Full screen Overlay on a display that is gone covers the nearest display. Places stay absolute screen points, so a camera parked half over an edge on purpose stays there.
 
 ## Camera framing
 
@@ -125,6 +126,7 @@ Camera framing is active only after selecting the target/crosshair tool.
 The UI calls saved layouts **Scenes** while persistence uses `presets`.
 
 - At most six Scenes exist, in user-controlled order.
+- A Scene saved on a display that is gone, or at a higher resolution, opens on screen: its place is kept wholly on the display nearest where it was saved. The Scene keeps its saved place, so it opens there again once that display is back.
 - A new installation, and an older Preferences file (schema below 15) without Scenes, start with two layout Scenes: **Small bottom** (288 px, bottom right) and **Big right** (540 px, right), planned on the display the Overlay is on. A file with Scenes keeps exactly those. Full screen is not a Scene.
 - Saving captures camera identity/label, shape, size, Camera quality, frame/effect styling, mirror, camera zoom/crop, and compact Overlay position.
 - Saving does not capture visibility, Always on top, the Scenes view, current Full screen state, active Scene, or other Scenes.

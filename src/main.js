@@ -30,6 +30,7 @@ import {
   compactBaseBounds,
   createOverlayGeometry,
   isFullscreenExitInput,
+  onScreenBase,
 } from './overlay-geometry.js'
 import { createPrompterLink } from './prompter-link.js'
 import { createPrompterControl } from './prompter-control.js'
@@ -253,11 +254,19 @@ function completeOnboarding() {
 }
 
 function createOverlayWindow() {
-  const bounds = compactBaseBounds({
-    settings,
-    workArea: screen.getPrimaryDisplay().workArea,
-    keepCenter: false,
+  const workArea = screen.getPrimaryDisplay().workArea
+  const saved = compactBaseBounds({ settings, workArea, keepCenter: false })
+  // A saved place off every connected display (another monitor, docking, a new resolution) would
+  // run CamFrame out of sight (TOOLS-156): it opens at the bottom right of the main display instead.
+  const bounds = onScreenBase(saved, {
+    workAreas: screen.getAllDisplays().map((display) => display.workArea),
+    primaryWorkArea: workArea,
+    margin: settings.prompterMargin,
   })
+  if (bounds !== saved) {
+    settings.position = { x: bounds.x, y: bounds.y }
+    saveSettings()
+  }
   overlayWindow = new BrowserWindow({
     ...bounds,
     show: false,
@@ -310,7 +319,10 @@ function createOverlayWindow() {
   overlayWindow.once('ready-to-show', () => {
     emitState()
     emitFullscreen()
-    if (settings.overlayVisible) overlayWindow.showInactive()
+    if (settings.overlayVisible) {
+      overlayGeometry?.ensureOnScreen()
+      overlayWindow.showInactive()
+    }
   })
 
   overlayWindow.on('blur', () => {
@@ -437,6 +449,10 @@ app.whenReady().then(() => {
 
   createOverlayWindow()
   createTray()
+  // A screen added or removed, a new resolution or scale, or docking: a lost Overlay comes back.
+  for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
+    screen.on(event, () => overlayGeometry?.ensureOnScreen())
+  }
 
   const prompterControl = createPrompterControl({
     geometry: () => overlayGeometry,

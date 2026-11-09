@@ -12,7 +12,7 @@ const projectRoot = resolve(import.meta.dirname, '..')
 const electronExecutable = require('electron')
 const artifactDirectory = join(projectRoot, 'qa', 'electron-smoke')
 
-async function launchCamFrame(userDataDirectory) {
+async function launchCamFrame(userDataDirectory, { args = [] } = {}) {
   const environment = { ...process.env }
   delete environment.ELECTRON_RUN_AS_NODE
   environment.CAMFRAME_E2E = '1'
@@ -20,7 +20,7 @@ async function launchCamFrame(userDataDirectory) {
 
   return electron.launch({
     executablePath: electronExecutable,
-    args: ['.'],
+    args: [...args, '.'],
     cwd: projectRoot,
     env: environment,
     timeout: 30_000,
@@ -568,6 +568,74 @@ test('real Electron: the Scenes tab applies, autosaves, undoes, deletes, renames
     assert.equal(file.sceneView, 'list')
     assert.equal(Object.hasOwn(file, 'launchAtLogin'), false)
     assert.deepEqual(file.presets.map((scene) => scene.name), ['Small bottom', 'Interview', 'Talk'])
+  } finally {
+    await application?.close().catch(() => {})
+    const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`
+    if (resolve(userDataDirectory).startsWith(expectedPrefix)) {
+      await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+    }
+  }
+})
+
+// TOOLS-156: a window position saved on a display that is gone ran CamFrame out of sight.
+test('real Electron: a saved place off every screen opens on screen, and a lost window comes back', async () => {
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
+  const offScreen = { x: 30000, y: -20000 }
+  await writeFile(
+    join(userDataDirectory, 'preferences.json'),
+    JSON.stringify({
+      schemaVersion: 15,
+      completedOnboardingVersion: 1,
+      position: offScreen,
+      presets: [{ id: 'preset-desk', name: 'Desk', settings: { size: 288, position: { x: 30000, y: 400 } } }],
+    }),
+  )
+  // Whether the Overlay's camera is mostly on a connected display's work area.
+  const onScreen = (application) =>
+    application.evaluate(({ BrowserWindow, screen }) => {
+      const overlay = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')
+      const bounds = overlay.getBounds()
+      const camera = { x: bounds.x + 18, y: bounds.y + 84, width: bounds.width - 36, height: bounds.height - 102 }
+      let visible = 0
+      for (const { workArea: area } of screen.getAllDisplays()) {
+        const width = Math.min(camera.x + camera.width, area.x + area.width) - Math.max(camera.x, area.x)
+        const height = Math.min(camera.y + camera.height, area.y + area.height) - Math.max(camera.y, area.y)
+        if (width > 0 && height > 0) visible += width * height
+      }
+      return { visible: overlay.isVisible(), share: visible / (camera.width * camera.height), bounds }
+    })
+  let application
+  try {
+    // Wayland reports no window positions, so Linux runs this one through X11 (Xwayland).
+    application = await launchCamFrame(userDataDirectory, { args: process.platform === 'linux' ? ['--ozone-platform=x11'] : [] })
+    const page = await application.firstWindow()
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    const until = async (what) => {
+      const deadline = Date.now() + 4000
+      for (;;) {
+        const current = await onScreen(application)
+        if (current.visible && current.share >= 0.5) return current
+        assert.ok(Date.now() < deadline, `${what}: ${JSON.stringify(current)}`)
+        await page.waitForTimeout(50)
+      }
+    }
+    const started = await until('the Overlay did not open on screen')
+    const state = await page.evaluate(() => window.camFrame.getState())
+    assert.deepEqual(state.position, { x: started.bounds.x, y: started.bounds.y }, 'the place it opened at is stored')
+    assert.deepEqual(state.presets[0].settings.position, { x: 30000, y: 400 }, 'the Scenes are kept as saved')
+
+    // A display change (the desk display unplugged) with the window lost brings it back.
+    await application.evaluate(({ BrowserWindow, screen }) => {
+      const overlay = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')
+      overlay.setPosition(30000, -20000)
+      screen.emit('display-removed', {}, screen.getPrimaryDisplay())
+    })
+    await until('the Overlay did not come back after a display change')
+
+    // The Desk Scene, saved on a display that is gone, opens clamped onto the screen.
+    await page.evaluate(() => window.camFrame.applyPreset('preset-desk'))
+    await page.waitForTimeout(500)
+    await until('the Desk Scene opened off screen')
   } finally {
     await application?.close().catch(() => {})
     const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`

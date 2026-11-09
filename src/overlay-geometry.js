@@ -90,6 +90,43 @@ export function compactBaseBounds({ settings, current, workArea, keepCenter = tr
 export const keepInside = (value, start, length, windowLength) =>
   Math.round(Math.max(start, Math.min(value, start + length - windowLength)))
 
+// The share (0-1) of `rect` that lies on the work areas `areas`. Displays never overlap, so the
+// parts on each simply add up.
+export function visibleShare(rect, areas) {
+  const total = rect.width * rect.height
+  if (!(total > 0)) return 0
+  let visible = 0
+  for (const area of areas) {
+    const width = Math.min(rect.x + rect.width, area.x + area.width) - Math.max(rect.x, area.x)
+    const height = Math.min(rect.y + rect.height, area.y + area.height) - Math.max(rect.y, area.y)
+    if (width > 0 && height > 0) visible += width * height
+  }
+  return Math.min(1, visible / total)
+}
+
+// Whether Compact window bounds (`base`, without the onboarding reserve) can be seen and grabbed:
+// at least half the window, and half its camera surface (where it is dragged), on the work areas
+// of the connected displays (TOOLS-156).
+export function isOnScreen(base, workAreas) {
+  return visibleShare(base, workAreas) >= 0.5 && visibleShare(cameraRectFor(base), workAreas) >= 0.5
+}
+
+// The place that keeps a window of `size` wholly inside `workArea` (moved as little as possible).
+export function keepOnWorkArea(position, size, workArea) {
+  return {
+    x: keepInside(position.x, workArea.x, workArea.width, size.width),
+    y: keepInside(position.y, workArea.y, workArea.height, size.height),
+  }
+}
+
+// Compact window bounds that are never lost: `base` when it is on screen, else the same size at the
+// bottom right of the main display, `margin` px from its edges (the corner and margin of the Small
+// bottom starter Scene). Saved places stay absolute screen points (see ADR 0038).
+export function onScreenBase(base, { workAreas, primaryWorkArea, margin }) {
+  if (isOnScreen(base, workAreas)) return base
+  return { ...base, ...compactPositionAt('bottom-right', { workArea: primaryWorkArea, size: base, margin }) }
+}
+
 // The Compact window position that puts the camera surface at `spot` in `workArea`, `margin` px
 // from the edges it touches. The whole window (with its transparent chrome) stays inside the work
 // area so the hover toolbar is always reachable; at the top spots that keeps the camera a little
@@ -245,15 +282,51 @@ export function createOverlayGeometry({
         }
       : { ...bounds }
 
+  // The work areas of every connected display, or undefined when the screen cannot list them.
+  const workAreas = () => screen.getAllDisplays?.().map((display) => display.workArea ?? display.bounds)
+
+  // Compact bounds (without the reserve) moved to the main display when they would be lost.
+  function onScreen(base) {
+    const areas = workAreas()
+    if (!areas) return base
+    return onScreenBase(base, {
+      workAreas: areas,
+      primaryWorkArea: screen.getPrimaryDisplay().workArea,
+      margin: settings().prompterMargin,
+    })
+  }
+
+  // The settings' Compact bounds, never off screen: a saved place that would be lost is replaced
+  // (and reported, so Preferences store where the Overlay really is).
   function compactWindowBounds({ keepCenter }) {
-    return windowFromBase(
-      compactBaseBounds({
-        settings: settings(),
-        current: baseFromWindow(window.getBounds()),
-        workArea: screen.getPrimaryDisplay().workArea,
-        keepCenter,
-      }),
-    )
+    const base = compactBaseBounds({
+      settings: settings(),
+      current: baseFromWindow(window.getBounds()),
+      workArea: screen.getPrimaryDisplay().workArea,
+      keepCenter,
+    })
+    const healed = onScreen(base)
+    if (healed !== base) onCompactPositionChanged({ x: healed.x, y: healed.y })
+    return windowFromBase(healed)
+  }
+
+  // Brings a lost Overlay back (TOOLS-156): a Compact window not substantially on a connected
+  // display goes to the bottom right of the main display at its size; a Full screen window on a
+  // display that is gone covers the nearest one. A drag, a corner drag or a move in progress is left
+  // alone (the move's target is planned on a display).
+  function ensureOnScreen() {
+    const areas = workAreas()
+    if (!alive() || !areas || animation || drag || resize) return
+    const bounds = window.getBounds()
+    if (fullscreen) {
+      if (visibleShare(bounds, areas) < 0.5) window.setBounds({ ...screen.getDisplayMatching(bounds).bounds })
+      return
+    }
+    const base = baseFromWindow(bounds)
+    const healed = onScreen(base)
+    if (healed === base) return
+    window.setBounds(windowFromBase(healed))
+    onCompactPositionChanged({ x: healed.x, y: healed.y })
   }
 
   function applyZOrder({ raise = false, stayOnTop = fullscreen || settings().alwaysOnTop } = {}) {
@@ -349,8 +422,10 @@ export function createOverlayGeometry({
       window.setBounds(compactWindowBounds({ keepCenter }))
     }
     applyZOrder()
-    if (settings().overlayVisible) window.showInactive()
-    else {
+    if (settings().overlayVisible) {
+      ensureOnScreen()
+      window.showInactive()
+    } else {
       stopDrag()
       setInteractive(false)
       window.hide()
@@ -379,14 +454,16 @@ export function createOverlayGeometry({
 
   function exitFullscreen() {
     const current = settings()
-    const base = compactBase && !storedPositionWins()
-      ? { ...compactBase, ...overlayDimensionsFor(current) }
-      : compactBaseBounds({
-          settings: current,
-          current: baseFromWindow(window.getBounds()),
-          workArea: screen.getPrimaryDisplay().workArea,
-          keepCenter: false,
-        })
+    const base = onScreen(
+      compactBase && !storedPositionWins()
+        ? { ...compactBase, ...overlayDimensionsFor(current) }
+        : compactBaseBounds({
+            settings: current,
+            current: baseFromWindow(window.getBounds()),
+            workArea: screen.getPrimaryDisplay().workArea,
+            keepCenter: false,
+          }),
+    )
     fullscreen = false
     applyZOrder({ stayOnTop: true })
     window.show()
@@ -416,7 +493,7 @@ export function createOverlayGeometry({
       return
     }
     const target = base
-      ? windowFromBase({ ...base, ...overlayDimensionsFor(settings()) })
+      ? windowFromBase(onScreen({ ...base, ...overlayDimensionsFor(settings()) }))
       : compactWindowBounds({ keepCenter: false })
     applyZOrder()
     window.showInactive()
@@ -519,13 +596,18 @@ export function createOverlayGeometry({
     // screen. Undefined outside Full screen.
     fullscreenReturnBounds() {
       if (!alive() || !fullscreen) return undefined
-      return compactBaseBounds({
-        settings: compactBase && !storedPositionWins() ? { ...settings(), position: null } : settings(),
-        current: compactBase,
-        workArea: screen.getPrimaryDisplay().workArea,
-        keepCenter: false,
-      })
+      return onScreen(
+        compactBaseBounds({
+          settings: compactBase && !storedPositionWins() ? { ...settings(), position: null } : settings(),
+          current: compactBase,
+          workArea: screen.getPrimaryDisplay().workArea,
+          keepCenter: false,
+        }),
+      )
     },
+
+    // Called when the window is shown and whenever a display is added, removed or changed.
+    ensureOnScreen,
 
     // Live Compact bounds without the reserve, or undefined in Full screen.
     compactBounds() {

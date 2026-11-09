@@ -543,3 +543,27 @@ test('saving over the Scene on camera on purpose ends its Undo window', () => {
   edits.track(changed, replaced)
   assert.equal(edits.view('one').sceneUndo, null)
 })
+
+// --- TOOLS-156: a Scene saved on a display that is gone opens on screen ---
+
+test('an exact Scene saved off this screen is shown clamped onto the display nearest its saved spot', () => {
+  const laptop = { x: 0, y: 0, width: 1920, height: 1040 }
+  // Saved on a desk display to the right, which is not connected now.
+  const desk = scene('desk', 'Desk', { size: 288, position: { x: 3000, y: 400 } })
+  const state = library([desk])
+  const seen = []
+  const result = applyScene(state, 'desk', {
+    workArea: laptop,
+    workAreaAt: (point) => {
+      seen.push(point)
+      return laptop
+    },
+  })
+  const window = overlayDimensionsFor(result.settings)
+  assert.deepEqual(seen, [{ x: 3000 + OVERLAY_CHROME.left, y: 400 + OVERLAY_CHROME.top }], 'asks for the display nearest its camera')
+  assert.deepEqual(result.settings.position, { x: laptop.width - window.width, y: 400 })
+  assert.deepEqual(result.settings.presets[0].settings.position, { x: 3000, y: 400 }, 'the Scene itself keeps its saved spot')
+  // A spot that is on screen is applied exactly as saved.
+  const onScreen = applyScene(library([scene('desk', 'Desk', { position: { x: 5, y: 6 } })]), 'desk', { workArea: laptop, workAreaAt: () => laptop })
+  assert.deepEqual(onScreen.settings.position, { x: 5, y: 6 })
+})
