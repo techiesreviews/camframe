@@ -14,15 +14,15 @@ The reported trigger (Full screen calling `applyConstraints()` on the live track
 1. Every queued Camera quality change re-applied the latest quality. A burst of changes (Inline settings, or Scene applies with different qualities) switched the camera mode once per change, and a burst that ended on the quality already running still switched it.
 2. A Camera quality chosen while the camera was starting was dropped (there was no track yet), so the camera opened and stayed at the old quality.
 
-Each switch of capture mode on a live track is the step that showed stale, black or another camera's frames on Windows. The session now remembers the quality the track runs at, skips a switch to that same quality, and applies a quality chosen during start to the new track before it reaches the camera or halo video. That late switch goes straight to the new track, so a stalled switch on the old camera's driver cannot hold the new camera back, and a newer camera start stops the waiting stream at once.
+Each switch of capture mode on a live track is the step that showed stale, black or another camera's frames on Windows. The session now remembers the quality the track runs at, skips a switch to that same quality, and applies a quality chosen during start to the new track before it reaches the camera or halo video. That late switch goes straight to the new track, and each camera start begins a fresh quality chain, so a stalled switch on the old camera's driver cannot hold the new camera back, then or later. A newer camera start, or quitting, stops the waiting stream at once.
 
 ## Automated checks
 
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | |
-| `scripts/agents/kit unit --affected` | Pass | 21/21, 1 file | `.scratch/unit/` |
-| `scripts/agents/kit unit` (= `node --test`) | Pass | 271 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
+| `scripts/agents/kit unit --affected` | Pass | 23/23, 1 file | `.scratch/unit/` |
+| `scripts/agents/kit unit` (= `node --test`) | Pass | 273 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
 | `npm run test:electron` | Pass | 3/3 | Full screen keeps the synthetic track's device and size |
 | Syntax checks | Pass | `node --check src/camera-session.js` | |
 | `git diff --check` | Pass | | |
@@ -36,8 +36,10 @@ New unit tests (`test/camera-session.test.js`); the first four failed on `ebf005
 - a camera replaced while its late Camera quality is applied is stopped at once and never shown
 - a stalled Camera quality change on the old camera never holds back the next camera
 - the blur halo never shows a starting camera while its late Camera quality is applied
+- stopping while a starting camera gets its late Camera quality never shows it
+- a Camera quality the camera rejects while starting is tried once and the camera still shows
 
-The last three cover review notes on the first version of this change; each failed on that version before its fix.
+The last five cover review notes on this change. Each of the first four failed on the version before its fix (the stall test also checks that a later Camera quality change reaches the new camera); the last one covers a branch that was already right.
 
 ## Manual checks
 

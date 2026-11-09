@@ -144,6 +144,9 @@ export function createCameraSession({
     onStatus(STARTING_CAMERA_MESSAGE)
     stopTracks(startingStream)
     startingStream = undefined
+    // A switch still pending on the old camera (a stalled driver) must not hold back the new one;
+    // when it ends it no longer matches the active track, so it changes nothing.
+    qualityUpdates = Promise.resolve()
     if (activeStream) {
       stopTracks(activeStream)
       activeStream = undefined
@@ -215,6 +218,7 @@ export function createCameraSession({
     },
     refreshDevices,
     stop() {
+      startRequest++
       effectVideo.srcObject = null
       stopTracks(startingStream)
       stopTracks(activeStream)
