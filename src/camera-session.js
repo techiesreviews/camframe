@@ -57,6 +57,8 @@ export function createCameraSession({
   let activeCameraId
   // The Camera quality the active track runs at: the one it opened with, or the last one applied.
   let activeResolution
+  // Camera qualities the camera being started or shown refused: never tried on it again.
+  let refusedResolutions = new Set()
   // A started stream that is still getting its late Camera quality, not yet shown.
   let startingStream
   let startRequest = 0
@@ -107,12 +109,13 @@ export function createCameraSession({
       const track = activeTrack()
       const { resolution } = current
       if (!track || track.readyState === 'ended' || !track.applyConstraints) return
-      if (resolution === activeResolution) return
+      if (resolution === activeResolution || refusedResolutions.has(resolution)) return
       try {
         await track.applyConstraints(cameraTrackConstraintsFor({ resolution }))
         if (track === activeTrack()) activeResolution = resolution
-      } catch {
+      } catch (error) {
         // An unsupported profile leaves the camera running at its current mode.
+        if (error?.name === 'OverconstrainedError' && track === activeTrack()) refusedResolutions.add(resolution)
       }
     })
     return qualityUpdates
@@ -140,7 +143,8 @@ export function createCameraSession({
       cameraId === activeCameraId || (Boolean(cameraId) && cameraId === deviceId)
     if (activeStream && reusable) {
       activeCameraId = cameraId
-      await refreshDevices()
+      // The same update may also have changed the Camera quality (a Scene naming this device).
+      await Promise.all([queueQualityUpdate(), refreshDevices()])
       return
     }
 
@@ -153,6 +157,8 @@ export function createCameraSession({
     // the pending one no longer matches the active track, so it changes nothing either.
     qualityChain++
     qualityUpdates = Promise.resolve()
+    const refused = new Set()
+    refusedResolutions = refused
     if (activeStream) {
       stopTracks(activeStream)
       activeStream = undefined
@@ -172,15 +178,16 @@ export function createCameraSession({
       // A Camera quality chosen while the camera was starting was skipped then. It is applied to
       // the new track here, before the stream reaches either video, so the change of mode is never
       // seen; and directly, not through the quality chain, which may still wait on the old camera.
-      let rejected
       startingStream = stream
-      while (track?.applyConstraints && ![resolution, rejected].includes(current.resolution)) {
+      const pending = () => current.resolution !== resolution && !refused.has(current.resolution)
+      while (track?.applyConstraints && pending()) {
         const wanted = current.resolution
         try {
           await track.applyConstraints(cameraTrackConstraintsFor({ resolution: wanted }))
           resolution = wanted
-        } catch {
-          rejected = wanted
+        } catch (error) {
+          if (error?.name === 'OverconstrainedError') refused.add(wanted)
+          else break
         }
         if (request !== startRequest) {
           stopTracks(stream)
