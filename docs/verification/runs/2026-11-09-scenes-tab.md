@@ -31,7 +31,17 @@ New tests (each failed before its change):
 - `test/bridge.test.js`: rename, undo change and undo delete channels. `test/overlay-geometry.test.js`: stopping a drag says whether one ran. `test/overlay-markup.test.js`: the removed controls stay removed, the icon glyphs exist in the font.
 - `test/fixtures/preferences/`: load and sanitize expectations regenerated for schema 15 and reviewed (launchAtLogin gone, `sceneView` added, starters where a file has no Scenes), plus new cases for a schema-14 file with Scenes and Start at login, a schema-14 file without Scenes, and a schema-15 file without Scenes.
 
-Real Electron (`scripts/electron-smoke.mjs`, "the Scenes tab applies, autosaves, undoes, deletes, renames, saves, and switches list and grid"), from a schema-14 file with Start at login on and no Scenes: the two starters arrive and `launchAtLogin` is gone; clicking Big right puts it on camera (window 576 px wide) and the settings stay open; its tile draws the camera at the right; the toolbar's Shape saves into Big right (green check, Undo shown); Undo restores the layout Scene and the circle; F2 rename keeps the layout; Save look adds "Interview" on camera; Delete shows Undo and Ctrl+Z brings the Scene back first in the list; Alt+Up moves Interview; grid arrows reach the nearest Scene above or below, also around a wide rename tile; the list view is kept; Escape closes the settings; the toolbar turns the Prompter link on, `GET /camframe/status` lists the three Scenes and a cue by name applies "Talk"; the saved file has schema 15, `sceneView: "list"`, no `launchAtLogin`. Screenshots `qa/electron-smoke/10-scenes-grid.png`, `11-scenes-autosaved.png`, `12-scenes-list.png` (not committed; attached to the PR).
+Real Electron (`scripts/electron-smoke.mjs`, "the Scenes tab applies, autosaves, undoes, deletes, renames, saves, and switches list and grid"), from a schema-14 file with Start at login on and no Scenes: the two starters arrive and `launchAtLogin` is gone; clicking Big right puts it on camera (window 576 px wide) and the settings stay open; its tile draws the camera at the right; the toolbar's Shape saves into Big right (green check, Undo shown); Undo restores the layout Scene and the circle; F2 rename keeps the layout; Save look adds "Interview" on camera; Delete shows Undo and Ctrl+Z brings the Scene back first in the list; Alt+Up moves Interview; grid arrows reach the nearest Scene above or below, also around a wide rename tile; the list view is kept; Escape closes the settings; the toolbar turns the Prompter link on, `GET /camframe/status` lists the three Scenes and a cue by name applies "Talk"; the saved file has schema 15, `sceneView: "list"`, no `launchAtLogin`. Screenshots from that run, in `2026-11-09-scenes-tab/`:
+
+| Grid (Big right on camera) | Autosaved (check and Undo on Big right) | List |
+| --- | --- | --- |
+| ![Grid](2026-11-09-scenes-tab/electron-grid.png) | ![Autosaved](2026-11-09-scenes-tab/electron-autosaved.png) | ![List](2026-11-09-scenes-tab/electron-list.png) |
+
+From `kit shots` (browser preview at the default 324x390 Overlay, 2x):
+
+| Grid, starters | List, starters | List, a deleted Scene with Undo |
+| --- | --- | --- |
+| ![Grid](2026-11-09-scenes-tab/preview-grid.png) | ![List](2026-11-09-scenes-tab/preview-list.png) | ![Deleted](2026-11-09-scenes-tab/preview-deleted-list.png) |
 
 ## Build and artifact checks
 
