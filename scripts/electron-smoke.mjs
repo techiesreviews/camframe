@@ -527,6 +527,8 @@ test('real Electron: the Scenes tab applies, autosaves, undoes, deletes, renames
       field.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }))
       field.value = 'Interv'
       field.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, data: 'Interv' }))
+      // Enter and Escape while composing belong to the input method: no save, the form stays open.
+      for (const key of ['Enter', 'Escape']) field.dispatchEvent(new KeyboardEvent('keydown', { key, isComposing: true, bubbles: true }))
       const during = field.isConnected && document.activeElement === field
       field.value = 'Interview'
       field.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'Interview' }))
@@ -547,6 +549,18 @@ test('real Electron: the Scenes tab applies, autosaves, undoes, deletes, renames
       `apply:${saved.presets[2].id}`,
       'focus follows the saved Scene onto the camera',
     )
+    // Save look with a taken name replaces that Scene (Small bottom, then a snapshot Scene); focus goes to it too.
+    const smallId = saved.presets[0].id
+    await page.locator('[data-act="save-open"]').focus()
+    await page.keyboard.press('Enter')
+    await page.locator('[data-role="new-name"]').waitFor({ state: 'visible' })
+    await page.keyboard.type('Small bottom')
+    assert.equal((await saveButton()).text, 'Replace')
+    await page.keyboard.press('Enter')
+    const replaced = await until((current) => current.activePresetId === smallId, 'Small bottom replaced and on camera')
+    assert.equal(replaced.presets.length, 3)
+    await page.waitForFunction((key) => document.activeElement?.dataset.key === key, `apply:${smallId}`, { timeout: 2000 }).catch(() => {})
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.key), `apply:${smallId}`, 'focus follows a replaced Scene')
 
     // Delete shows Undo in the Scene's place; Ctrl+Z brings it back.
     await tile('Small bottom').focus()

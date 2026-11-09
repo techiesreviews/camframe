@@ -167,9 +167,11 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
   let pendingFocus = ''
   let pendingFocusUntil = 0
   let savedBefore
+  let savedNameSent = ''
   let renderTimer
   let dragId = ''
-  // While an input method composes text in a field, a rebuild would cancel it: it waits for the end.
+  // While an input method composes text in a field, a rebuild would cancel it: it waits for the end,
+  // also when main's state changes (Chromium ends composition when the field loses focus).
   let composing = false
   let renderAfterComposition = false
 
@@ -206,12 +208,11 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
       focused && 'selectionStart' in focused ? [focused.selectionStart, focused.selectionEnd] : undefined
     root.replaceChildren(head(model), model.view === 'grid' ? grid(model, time) : list(model, time), fileRow(model, files))
     // After Save look, focus waits for main's answer (a one-way message in Electron): the next
-    // saved Scene after the one known when the save was sent.
+    // saved Scene after the one known when the save was sent, with the name that was sent (an
+    // autosave or a Prompter link save in between also sets `sceneSaved`).
     const savedNow = state.sceneSaved
-    const wanted =
-      pendingFocus === 'saved-scene'
-        ? savedNow && savedNow.at !== savedBefore ? `apply:${savedNow.id}` : ''
-        : pendingFocus
+    const isSentSave = savedNow && savedNow.at !== savedBefore && sameName(sceneName(savedNow.id), savedNameSent)
+    const wanted = pendingFocus === 'saved-scene' ? (isSentSave ? `apply:${savedNow.id}` : '') : pendingFocus
     const find = (focusKey) => focusKey && root.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)
     const target = find(wanted)
     if (target) {
@@ -604,6 +605,7 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     ui.saveName = ''
     // The saved Scene goes on camera; focus follows it once main has saved it.
     savedBefore = state.sceneSaved?.at
+    savedNameSent = name
     focusNext('saved-scene')
     camFrame.savePreset(name, '')
     render()
@@ -703,7 +705,11 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
   })
 
   root.addEventListener('keydown', (event) => {
-    if (event.isComposing) return
+    // Keys while an input method composes belong to it, also Escape (which would close the form).
+    if (event.isComposing) {
+      event.stopPropagation()
+      return
+    }
     const target = event.target
     const role = target.dataset?.role
     if (role === 'rename' || role === 'new-name') {
