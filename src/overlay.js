@@ -137,9 +137,14 @@ const qaBridge = isQaPreview
           completedOnboardingVersion:
             qaPreviewParams.get('state') === 'onboarding' ? 0 : CURRENT_ONBOARDING_VERSION,
         }),
-        updateState: (patch) => {
+        updateState: (patch, options) => {
           const status = qaPrompterLinkStatus(patch)
-          qaScenes.commit(sceneLibrary.followLiveLook(qaScenes.library(), sanitizeSettings({ ...state, ...patch })))
+          const next = sanitizeSettings({ ...state, ...patch })
+          qaScenes.commit(
+            options?.demo
+              ? { settings: next, activeSceneId: qaScenes.active }
+              : sceneLibrary.followLiveLook(qaScenes.library(), next, { keys: Object.keys(patch) }),
+          )
           if (status.prompterLinkStatus) applyState({ ...state, ...status })
         },
         savePreset: (name, id) => qaScenes.commit(sceneLibrary.saveScene(qaScenes.library(), { name, id })),
@@ -154,7 +159,8 @@ const qaBridge = isQaPreview
           qaScenes.commit(
             sceneLibrary.undoSceneChange(qaScenes.library(), qaScenes.edits.takeChange(qaScenes.active), qaScenes.context),
           ),
-        undoPresetDelete: () => qaScenes.commit(sceneLibrary.restoreScene(qaScenes.library(), qaScenes.edits.takeDelete())),
+        undoPresetDelete: () =>
+          qaScenes.commit(sceneLibrary.restoreScene(qaScenes.library(), qaScenes.edits.takeDelete(), qaScenes.context)),
         exportPresets: async () => ({ canceled: false, count: state.presets.length }),
         importPresets: async () =>
           qaPreviewParams.get('import') === 'bad'
@@ -439,12 +445,12 @@ const tour = createOnboardingTour({
     closeSettings: () => setControlsOpen(false),
     isFraming: () => interaction.positioning,
     setFraming: (on) => setPositioning(on),
-    cycleShape: () => cycleCameraShape(),
+    cycleShape: (options) => cycleCameraShape(options),
     previewFraming(framing) {
       state = { ...state, ...framing }
       renderCameraFraming()
     },
-    patchState: (patch) => camFrame.updateState(patch),
+    patchState: (patch, options) => camFrame.updateState(patch, options),
     surfaceSize: () => cameraSurface.getBoundingClientRect(),
     completeOnboarding() {
       state = { ...state, completedOnboardingVersion: CURRENT_ONBOARDING_VERSION }
@@ -471,11 +477,10 @@ forcedColorsQuery.addEventListener('change', syncAccessibilityPreferences)
 increasedContrastQuery.addEventListener('change', syncAccessibilityPreferences)
 syncAccessibilityPreferences()
 
-function cycleCameraShape() {
+// `options.demo`: an onboarding demo step, never saved into the active Scene (ADR 0037).
+function cycleCameraShape(options) {
   const currentIndex = SHAPE_CYCLE.indexOf(state.shape)
-  camFrame.updateState({
-    shape: SHAPE_CYCLE[(currentIndex + 1) % SHAPE_CYCLE.length],
-  })
+  camFrame.updateState({ shape: SHAPE_CYCLE[(currentIndex + 1) % SHAPE_CYCLE.length] }, options)
 }
 
 function selectSettingsPanel(panel) {
@@ -964,10 +969,11 @@ window.addEventListener('keydown', (event) => {
     return
   }
   if (event.key !== 'Escape') return
-  // Escape in Inline settings cancels a rename or save in progress, else closes the settings.
-  if (interaction.controlsOpen && inlineSettings.contains(event.target)) {
+  // Escape with Inline settings open cancels a rename or save in progress, else closes the settings.
+  if (interaction.controlsOpen && !interaction.fullscreen) {
     event.preventDefault()
-    scenesPanel.escape()
+    if (inlineSettings.contains(event.target)) scenesPanel.escape()
+    else setControlsOpen(false)
     return
   }
   if (interaction.positioning && !interaction.fullscreen) {

@@ -122,9 +122,13 @@ function toggleFullscreen() {
 
 // A change from the Overlay (Inline settings, the toolbar). A hand change of the look is saved into
 // the active Scene, which stays active (ADR 0037).
-function updateSettings(patch) {
+// An onboarding demo step (`demo`) is stored but never saved into the active Scene.
+function updateSettings(patch, { demo = false } = {}) {
   const updateBounds = settingsPatchChangesOverlayGeometry(patch)
-  commitState(sceneLibrary.followLiveLook(sceneState(), sanitizeSettings({ ...settings, ...patch })))
+  const next = sanitizeSettings({ ...settings, ...patch })
+  commitState(
+    demo ? { settings: next, activeSceneId } : sceneLibrary.followLiveLook(sceneState(), next, { keys: Object.keys(patch) }),
+  )
   if (Object.hasOwn(patch, 'prompterLink')) prompterLink?.setEnabled(settings.prompterLink)
   overlayGeometry?.apply({ updateBounds })
 }
@@ -382,7 +386,9 @@ function registerIpc() {
       undoPresetChange: () => {
         commitScenes(sceneLibrary.undoSceneChange(sceneState(), sceneEdits.takeChange(activeSceneId), sceneContext()))
       },
-      undoPresetDelete: () => commitState(sceneLibrary.restoreScene(sceneState(), sceneEdits.takeDelete())),
+      undoPresetDelete: () => {
+        commitScenes(sceneLibrary.restoreScene(sceneState(), sceneEdits.takeDelete(), sceneContext()))
+      },
       deletePreset: (id) => commitScenes(sceneLibrary.deleteScene(sceneState(), id)),
       reorderPreset: (id, direction) => {
         commitScenes(sceneLibrary.reorderScene(sceneState(), id, direction))

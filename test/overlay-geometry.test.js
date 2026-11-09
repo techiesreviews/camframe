@@ -914,6 +914,18 @@ test('leaving Full screen for another display, the current work area is that dis
   assert.deepEqual(view.geometry.currentWorkArea(), secondary.workArea)
 })
 
+test('a native move event during a move-drag stores nothing, so the end of the drag saves the place into the active Scene', () => {
+  const { geometry, screen, clock, events, window } = overlay()
+  geometry.startDrag()
+  screen.cursor = { x: 300, y: 300 }
+  clock.advance(32)
+  geometry.windowMoved()
+  assert.deepEqual(events.positions, [], 'macOS reports moved on every step of a drag')
+  assert.equal(geometry.stopDrag(), true)
+  geometry.windowMoved()
+  assert.deepEqual(events.positions, [{ x: window.bounds.x, y: window.bounds.y }])
+})
+
 test('stopping a move-drag says whether one was running, so main saves the place into the active Scene once', () => {
   const { geometry, screen, clock } = overlay()
   assert.equal(geometry.stopDrag(), false, 'no drag: nothing to save')

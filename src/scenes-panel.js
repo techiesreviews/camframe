@@ -675,9 +675,30 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     if (!id) return
     const mains = [...root.querySelectorAll('[data-act="apply"]')]
     const index = mains.indexOf(target)
-    const columns = root.querySelector('.scene-grid') ? 2 : 1
+    const isGrid = Boolean(root.querySelector('.scene-grid'))
     const go = (next) => mains[Math.max(0, Math.min(mains.length - 1, next))]?.focus()
-    const arrows = { ArrowUp: -columns, ArrowDown: columns, ArrowLeft: columns > 1 ? -1 : 0, ArrowRight: columns > 1 ? 1 : 0 }
+    // In the grid, up and down go to the nearest Scene in the row above or below, so a wide tile (a
+    // rename, the save form) or a deleted Scene's place does not throw them off.
+    const vertical = (direction) => {
+      const from = target.getBoundingClientRect()
+      const centre = from.left + from.width / 2
+      let best
+      let bestScore = Infinity
+      for (const candidate of mains) {
+        const rect = candidate.getBoundingClientRect()
+        const gap = direction < 0 ? from.top - rect.bottom : rect.top - from.bottom
+        if (candidate === target || gap < -1) continue
+        const score = gap * 1000 + Math.abs(rect.left + rect.width / 2 - centre)
+        if (score < bestScore) {
+          bestScore = score
+          best = candidate
+        }
+      }
+      return best ? mains.indexOf(best) : index
+    }
+    const arrows = isGrid
+      ? { ArrowUp: vertical(-1) - index, ArrowDown: vertical(1) - index, ArrowLeft: -1, ArrowRight: 1 }
+      : { ArrowUp: -1, ArrowDown: 1, ArrowLeft: 0, ArrowRight: 0 }
     if (event.altKey && event.key in arrows) {
       event.preventDefault()
       // One place earlier (up, left) or later (down, right), in both views.
@@ -695,7 +716,7 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
     } else if (event.key === 'F2') {
       event.preventDefault()
       openRename(id)
-    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+    } else if (event.key === 'Delete') {
       event.preventDefault()
       remove(id)
     }

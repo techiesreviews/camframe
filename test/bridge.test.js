@@ -135,6 +135,7 @@ test('main checks and normalizes renderer arguments', async () => {
   }
 
   send('state:update', { size: 320, presets: [], completedOnboardingVersion: 1, schemaVersion: 1, prompterSmallSize: 999 })
+  send('state:update', { shape: 'rounded' }, { demo: 1, extra: true })
   send('state:update', 'not a patch')
   send('state:update', [{ size: 1 }])
   send('preset:reorder', 'one', 'up')
@@ -155,7 +156,8 @@ test('main checks and normalizes renderer arguments', async () => {
   )
 
   assert.deepEqual(log, [
-    ['updateState', { size: 320 }],
+    ['updateState', { size: 320 }, { demo: false }],
+    ['updateState', { shape: 'rounded' }, { demo: true }],
     ['reorderPreset', 'one', -1],
     ['savePreset', '', ''],
     ['renamePreset', 'one', '  Intro '],

@@ -520,8 +520,10 @@ export function createOverlayGeometry({
       return baseFromWindow(window.getBounds())
     },
 
+    // A move-drag reports its place when it stops (main saves it into the active Scene); macOS
+    // reports `moved` on every step of the drag, which would store it first and leave nothing to save.
     windowMoved() {
-      if (!alive() || fullscreen || animation) return
+      if (!alive() || fullscreen || animation || drag) return
       const base = baseFromWindow(window.getBounds())
       onCompactPositionChanged({ x: base.x, y: base.y })
     },

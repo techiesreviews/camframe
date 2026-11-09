@@ -62,6 +62,8 @@ function tourHarness({ settings = {}, reducedMotion = false } = {}) {
     settingsPanel: undefined,
     framing: false,
     patches: [],
+    // Whether each patch is a demo step (not a hand change, so never saved into the active Scene).
+    demoFlags: [],
     previews: [],
     completed: 0,
     hideScheduled: 0,
@@ -109,18 +111,20 @@ function tourHarness({ settings = {}, reducedMotion = false } = {}) {
         overlay.framing = on
         log.push(`framing:${on}`)
       },
-      cycleShape() {
+      cycleShape({ demo = false } = {}) {
         const shape = SHAPES[(SHAPES.indexOf(state.shape) + 1) % SHAPES.length]
         state = { ...state, shape }
         overlay.patches.push({ shape })
+        overlay.demoFlags.push(demo)
       },
       previewFraming(framing) {
         state = { ...state, ...framing }
         overlay.previews.push(framing)
       },
-      patchState(patch) {
+      patchState(patch, { demo = false } = {}) {
         state = { ...state, ...patch }
         overlay.patches.push(patch)
+        overlay.demoFlags.push(demo)
       },
       surfaceSize: () => ({ width: 288, height: 288 }),
       completeOnboarding() {
@@ -302,6 +306,26 @@ test('taking over the shape demo keeps the current shape', () => {
   const patches = overlay.patches.length
   clock.advance(5000)
   assert.equal(overlay.patches.length, patches)
+})
+
+test('demo steps and their restore are marked as demo; a takeover commit is a hand change (ADR 0037)', () => {
+  const { tour, overlay, settle, clock } = tourHarness()
+  tour.open()
+  tour.next()
+  settle()
+  clock.advance(2000)
+  tour.back()
+  assert.ok(overlay.demoFlags.length >= 2)
+  assert.ok(overlay.demoFlags.every(Boolean), 'shape demo clicks and the restore never save into a Scene')
+
+  tour.next()
+  tour.next()
+  settle()
+  clock.advance(3200)
+  const before = overlay.demoFlags.length
+  assert.ok(overlay.demoFlags.slice(0, before).every(Boolean), 'framing demo steps are demo steps')
+  tour.takeOver('framing')
+  assert.equal(overlay.demoFlags.at(-1), false, 'the framing the user takes over is kept as a hand change')
 })
 
 test('Back during the shape demo restores the shape it started from', () => {

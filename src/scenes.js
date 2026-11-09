@@ -60,14 +60,19 @@ const LOOK_KEYS = FOLLOWED_SETTING_KEYS.filter((key) => key !== 'size' && key !=
 const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 
 // A hand change of the live look (Inline settings, the toolbar's Shape, dragging or resizing the
-// Overlay). `next` is the full settings after the change. The active Scene saves itself: the keys
-// that changed are written into it, and it stays active. A layout Scene becomes an exact Scene of
-// the live look, because its look and place now come from the hand edit. Without an active Scene,
-// or when nothing it follows changed, only the settings change. `autosaved` holds the Scene before
-// and after, for Undo.
-export function followLiveLook({ settings, activeSceneId }, next) {
+// Overlay). `next` is the full settings after the change. The active Scene saves itself and stays
+// active: every followed value of `next` that differs from the Scene is written into it (also one an
+// onboarding demo left unsaved). A layout Scene keeps the live look rather than storing one, so it
+// changes only when the hand change changed a followed value; it then becomes an exact Scene of the
+// live look. Without an active Scene, or with nothing to save, only the settings change. `keys`
+// (the keys the change set; default all) keeps a change of something no Scene stores, such as the
+// Scenes view, from saving anything. `autosaved` holds the Scene before and after, for Undo.
+export function followLiveLook({ settings, activeSceneId }, next, { keys } = {}) {
   const active = settings.presets.find((scene) => scene.id === activeSceneId)
-  const changed = FOLLOWED_SETTING_KEYS.filter((key) => !sameValue(settings[key], next[key]))
+  const reference = active?.layout ? settings : active?.settings
+  const touchesLook = !keys || keys.some((key) => FOLLOWED_SETTING_KEYS.includes(key))
+  const changed =
+    active && touchesLook ? FOLLOWED_SETTING_KEYS.filter((key) => !sameValue(reference[key], next[key])) : []
   if (!active || !changed.length) return { settings: next, activeSceneId: active ? activeSceneId : '' }
   const scene = active.layout
     ? { id: active.id, name: active.name, settings: settingsForPreset(next) }
@@ -103,9 +108,10 @@ export function renameScene({ settings, activeSceneId }, idInput, nameInput) {
 }
 
 // Puts a deleted Scene (`deleteScene(…).deleted`) back in its place. Nothing comes back when the
-// library is full or its id or name was taken meanwhile. It is on camera again when it was, unless
-// another Scene went on camera since.
-export function restoreScene({ settings, activeSceneId }, deleted) {
+// library is full or its id or name was taken meanwhile. It goes on camera again (applied, so its
+// look comes back) when it was on camera, unless another Scene went on camera since. `context` is
+// applyScene's.
+export function restoreScene({ settings, activeSceneId }, deleted, context = {}) {
   const scene = deleted?.scene
   if (!scene || settings.presets.length >= SCENE_LIMIT) return undefined
   if (settings.presets.some((candidate) => candidate.id === scene.id || sameName(candidate.name, scene.name))) {
@@ -113,11 +119,9 @@ export function restoreScene({ settings, activeSceneId }, deleted) {
   }
   const scenes = [...settings.presets]
   scenes.splice(Math.min(deleted.index, scenes.length), 0, scene)
-  return {
-    settings: withScenes(settings, scenes),
-    activeSceneId: deleted.wasActive && !activeSceneId ? scene.id : activeSceneId,
-    announce: scene.name,
-  }
+  const restored = { settings: withScenes(settings, scenes), activeSceneId }
+  if (deleted.wasActive && !activeSceneId) return applyScene(restored, scene.id, context)
+  return { ...restored, announce: scene.name }
 }
 
 // Puts a Scene back as it was and on camera. `taken` is `createSceneEdits().takeChange(…)`: the

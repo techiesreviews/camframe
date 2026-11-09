@@ -305,6 +305,18 @@ test('the active Scene follows a hand change of the live look and saves itself',
   assert.equal(result.settings.size, 420)
 })
 
+test('a hand change saves every followed value that differs from the active Scene, also one a demo left', () => {
+  // The onboarding demo changed the live shape without saving it; the takeover commit sends the same shape.
+  const state = live([scene('one', 'One', { shape: 'circle' })], { shape: 'rounded' }, 'one')
+  const result = followLiveLook(state, sanitizeSettings({ ...state.settings, shape: 'rounded' }))
+  assert.equal(sceneById(result, 'one').settings.shape, 'rounded')
+  assert.equal(result.savedSceneId, 'one')
+  // A change of something no Scene stores (the Scenes view, Always on top) saves nothing.
+  const view = followLiveLook(state, sanitizeSettings({ ...state.settings, sceneView: 'list' }), { keys: ['sceneView'] })
+  assert.equal(view.savedSceneId, undefined)
+  assert.equal(sceneById(view, 'one').settings.shape, 'circle')
+})
+
 test('autosave leaves the camera, its quality and global switches out of the Scene', () => {
   const state = live([scene('one', 'One', { cameraId: 'cam-a', overlayResolution: '1080p' })], { cameraId: 'cam-a', overlayResolution: '1080p' }, 'one')
   // A missing camera falls back to the default one: that must never erase the Scene's camera.
@@ -355,9 +367,14 @@ test('renaming keeps the look; an empty or taken name changes nothing', () => {
 test('a deleted Scene comes back in its place, on camera again when it was', () => {
   const state = live([scene('one', 'One'), scene('two', 'Two'), scene('three', 'Three')], {}, 'two')
   const deleted = deleteScene(state, 'two')
-  const restored = restoreScene(deleted, deleted.deleted)
+  // The look changed while the Scene was gone: putting it back on camera brings its look back too.
+  const changedMeanwhile = { ...deleted, settings: sanitizeSettings({ ...deleted.settings, shape: 'landscape', size: 500 }) }
+  const restored = restoreScene(changedMeanwhile, deleted.deleted)
   assert.deepEqual(ids(restored), ['one', 'two', 'three'])
   assert.equal(restored.activeSceneId, 'two')
+  assert.equal(restored.settings.shape, state.settings.presets[1].settings.shape)
+  assert.equal(restored.settings.size, state.settings.presets[1].settings.size)
+  assert.ok(restored.appliedScene, 'the Overlay moves back to it')
   // A Scene put on camera meanwhile stays on camera.
   const otherOn = restoreScene({ ...deleted, activeSceneId: 'three' }, deleted.deleted)
   assert.equal(otherOn.activeSceneId, 'three')
