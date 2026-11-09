@@ -509,6 +509,23 @@ test('real Electron: the Scenes tab applies, autosaves, undoes, deletes, renames
     const moved = await until((current) => current.presets[1].name === 'Interview', 'the reorder')
     assert.deepEqual(moved.presets.map((scene) => scene.name), ['Small bottom', 'Interview', 'Talk'])
 
+    // Grid arrows go to the nearest Scene in the row above or below, also around a wide rename tile.
+    const focusedName = () => page.evaluate(() => document.activeElement?.closest('[data-id]')?.querySelector('.scene-name')?.textContent)
+    await tile('Talk').focus()
+    await page.keyboard.press('ArrowUp')
+    assert.equal(await focusedName(), 'Small bottom')
+    await page.keyboard.press('ArrowUp')
+    assert.equal(await focusedName(), 'Small bottom', 'up from the top row stays')
+    await page.keyboard.press('ArrowRight')
+    assert.equal(await focusedName(), 'Interview')
+    await page.keyboard.press('F2')
+    await tile('Small bottom').focus()
+    await page.keyboard.press('ArrowDown')
+    assert.equal(await focusedName(), 'Talk', 'down skips the wide rename tile to the nearest Scene below')
+    await page.locator('[data-role="rename"]').focus()
+    await page.keyboard.press('Escape')
+    await page.locator('[data-role="rename"]').waitFor({ state: 'detached' })
+
     // List view, kept in Preferences.
     await page.locator('[data-view="list"]').click()
     await until((current) => current.sceneView === 'list', 'the list view')
