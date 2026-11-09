@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// kit: screenshot the Overlay's Inline settings in the browser QA preview (Scenes tab, Prompter link)
+// kit: screenshot the Overlay's Scenes tab and the toolbar Prompter link button in the browser QA preview
 // Usage: kit shots [--help]
-// Serves src/ on a free 127.0.0.1 port, opens overlay.html without Electron (its QA bridge fake),
-// opens Inline settings on the Scenes tab and captures the Prompter link off, on and with a busy port,
-// at the default Overlay window size (324x390) and a tall view, then the toolbar's Prompter link
-// button off, on and busy, and checks the button and the settings switch stay in sync.
+// Serves src/ on a free 127.0.0.1 port, opens overlay.html without Electron (its QA bridge fake runs
+// the real Scene library), opens Inline settings on the Scenes tab and captures the list and grid
+// views with the starter, no and six Scenes, autosave with Undo, delete with Undo, rename, the save
+// form, high contrast focus, then the toolbar's Prompter link button off, on and busy.
 // Evidence: .scratch/shots/<time>/.
 import { createServer } from 'node:http'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -14,16 +14,18 @@ import { execFileSync } from 'node:child_process'
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(`Usage: kit shots
-Serves src/ locally and opens overlay.html in Chromium without Electron (the browser QA preview), then captures
-Inline settings on the Scenes tab: the Prompter link off, on (Face full / Face small / Corner margin) and with
-its port busy, at the default Overlay size (324x390, scrolled to the link) and a tall 324x820 view, plus the
-Camera tab's switches and the link in high contrast. Then the toolbar's Prompter link button off, on (turned on
-from the keyboard) and busy, checking it stays in sync with the settings switch both ways and that all six
-toolbar buttons fit the default Overlay. Also checks that a Corner margin update leaves the open Face full
-choices in place.
-Fails on page errors or when a control is missing. Playwright comes from KIT_PLAYWRIGHT_MODULE, else
-"playwright" in scripts/agents/kit.json (the repo's own playwright-core after npm ci; Chromium for it comes
-from npx playwright-core install chromium). Evidence: .scratch/shots/<time>/shots.json and *.png.`)
+Serves src/ locally and opens overlay.html in Chromium without Electron (the browser QA preview, whose bridge
+fake runs the real Scene library on a pretend 1920x1080 display), then captures Inline settings on the Scenes
+tab: the grid and list views with the two starter Scenes, no Scenes and six Scenes, at the default Overlay
+size (324x390) and a tall 324x820 view; a Scene put on camera with the settings staying open; a shape change
+saved into it with its check and Undo; Ctrl+Z; a delete with Undo (focus on Undo) and Undo from the keyboard;
+rename (F2); the save form with a taken name (Replace); Escape closing the settings; keyboard focus in high
+contrast. Then the toolbar's Prompter link button off, on (from the keyboard) and busy, checking all six
+toolbar buttons fit the default Overlay. Fails on page errors, a removed control coming back (Start at
+login, the shortcut list, the Prompter link section) or a missing or wrong state.
+Playwright comes from KIT_PLAYWRIGHT_MODULE, else "playwright" in scripts/agents/kit.json (the repo's own
+playwright-core after npm ci; Chromium for it comes from npx playwright-core install chromium).
+Evidence: .scratch/shots/<time>/shots.json and *.png.`)
   process.exit(0)
 }
 
@@ -63,100 +65,132 @@ const { chromium } = await import(pathToFileURL(playwrightPath).href)
 const browser = await chromium.launch()
 const shots = []
 const errors = []
+
+async function openScenes({ query = '', width = 324, height = 390, forcedColors, scale = 1 } = {}) {
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale })
+  if (forcedColors) await page.emulateMedia({ forcedColors })
+  page.on('pageerror', (error) => errors.push(`${query || 'default'}: ${error.message}`))
+  await page.goto(`${base}?${query}`)
+  await page.locator('#overlay').waitFor({ state: 'visible' })
+  await page.locator('#camera-surface').hover()
+  await page.locator('#controls-button').click()
+  await page.locator('#inline-settings').waitFor({ state: 'visible' })
+  await page.locator('[data-settings-tab="presets"]').click()
+  await page.locator('#scenes-panel .scenes-head').waitFor({ state: 'visible' })
+  return page
+}
+
+const readPanel = (page) =>
+  page.evaluate(() => ({
+    view: document.querySelector('#scenes-panel .scene-body')?.dataset.layout,
+    scenes: [...document.querySelectorAll('#scenes-panel .scene-main')].map((item) => item.getAttribute('aria-label')),
+    add: document.querySelector('#scenes-panel :is(.scene-add, .scene-add-tile) .scene-name')?.textContent ?? '',
+    deleted: [...document.querySelectorAll('#scenes-panel .scene-deleted-name')].map((item) => item.textContent),
+    undo: document.querySelectorAll('#scenes-panel [data-act="undo-change"]').length,
+    savedCheck: document.querySelectorAll('#scenes-panel .scene-slot.saved').length,
+    settingsOpen: !document.querySelector('#inline-settings').hidden,
+    gone: ['#overlay-launch-toggle', '.shortcut-list', '#overlay-prompter-toggle', '#overlay-prompter-margin'].filter((selector) => document.querySelector(selector)),
+  }))
+
+async function shoot(page, file, extra = {}) {
+  await page.screenshot({ path: join(out, file), animations: 'disabled' })
+  const state = await readPanel(page)
+  if (state.gone.length) fail(`removed controls are back: ${state.gone.join(', ')}`)
+  shots.push({ file, ...extra, ...state })
+  return state
+}
+
 try {
+  // Each Scene set in both views, at the default Overlay size and a tall view.
   for (const view of [
     { name: 'default', width: 324, height: 390 },
     { name: 'tall', width: 324, height: 820 },
-    { name: 'high-contrast-tall', width: 324, height: 820, forcedColors: 'active' },
   ]) {
-    for (const mode of view.forcedColors ? ['on', 'busy'] : ['off', 'on', 'busy']) {
-      const page = await browser.newPage({ viewport: { width: view.width, height: view.height } })
-      if (view.forcedColors) await page.emulateMedia({ forcedColors: view.forcedColors })
-      page.on('pageerror', (error) => errors.push(`${view.name}/${mode}: ${error.message}`))
-      await page.goto(mode === 'busy' ? `${base}?prompter=busy` : base)
-      await page.locator('#overlay').waitFor({ state: 'visible' })
-      await page.locator('#camera-surface').hover()
-      await page.locator('#controls-button').click()
-      await page.locator('#inline-settings').waitFor({ state: 'visible' })
-      await page.locator('[data-settings-tab="presets"]').click()
-      const toggle = page.locator('#overlay-prompter-toggle')
-      if (await toggle.count() !== 1) fail('the Prompter link switch is missing')
-      if (mode !== 'off') await toggle.check()
-      await page.locator('#overlay-prompter-status').scrollIntoViewIfNeeded()
-      if (mode !== 'off') await page.locator('#overlay-prompter-margin').scrollIntoViewIfNeeded()
-      const state = await page.evaluate(() => ({
-        status: document.querySelector('#overlay-prompter-status').textContent,
-        statusState: document.querySelector('#overlay-prompter-status').dataset.state,
-        optionsHidden: document.querySelector('#overlay-prompter-options').hidden,
-        faceFull: [...document.querySelector('#overlay-prompter-full').options].map((option) => option.text),
-        faceSmall: [...document.querySelector('#overlay-prompter-small').options].map((option) => option.text),
-        toolbarPressed: document.querySelector('#prompter-button').getAttribute('aria-pressed'),
-        toolbarState: document.querySelector('#prompter-button').dataset.linkState,
-      }))
-      if (mode === 'off' && !state.optionsHidden) fail('options show while the link is off')
-      if (mode !== 'off' && state.optionsHidden) fail('options stay hidden while the link is on')
-      // The settings switch drives the toolbar button through the same stored setting.
-      const expected = { off: ['false', 'off'], on: ['true', 'on'], busy: ['true', 'error'] }[mode]
-      if (state.toolbarPressed !== expected[0] || state.toolbarState !== expected[1]) {
-        fail(`the toolbar button shows ${state.toolbarPressed}/${state.toolbarState} after the switch set ${mode}`)
-      }
-      if (mode === 'on') {
-        // A state update that changes only the Corner margin keeps the Face full choices as they
-        // are (rebuilding them would close an open dropdown).
-        const kept = await page.evaluate(() => {
-          const select = document.querySelector('#overlay-prompter-full')
-          select.focus()
-          const first = select.options[0]
-          const value = select.value
-          const margin = document.querySelector('#overlay-prompter-margin')
-          margin.value = String(Number(margin.value) + 8)
-          margin.dispatchEvent(new Event('input', { bubbles: true }))
-          return {
-            sameOption: first.isConnected && select.options[0] === first,
-            sameValue: select.value === value,
-            focused: document.activeElement === select,
-            margin: document.querySelector('#overlay-prompter-margin-output')?.textContent ?? '',
-          }
-        })
-        if (!kept.sameOption || !kept.sameValue || !kept.focused) {
-          fail(`a Corner margin update rebuilt the Face full choices (${JSON.stringify(kept)})`)
-        }
-        state.marginUpdateKeptChoices = kept
-      }
-      if (view.forcedColors && mode === 'on') {
-        // Keyboard focus stays visible in high contrast on the switch, a select, a settings tab and
-        // the toolbar button, and the pressed toolbar button's icon has no forced-colors backplate.
-        const focus = {}
-        for (const selector of ['#overlay-prompter-toggle', '#overlay-prompter-full', '[data-settings-tab="presets"]', '#prompter-button']) {
-          await page.keyboard.press('Shift')
-          await page.locator(selector).focus()
-          focus[selector] = await page.locator(selector).evaluate((item) => ({
-            visible: item.matches(':focus-visible'),
-            outline: getComputedStyle(item).outlineStyle,
-          }))
-          if (!focus[selector].visible || focus[selector].outline === 'none') {
-            fail(`no visible keyboard focus on ${selector} in high contrast (${JSON.stringify(focus[selector])})`)
-          }
-        }
-        const icon = await page.evaluate(() => getComputedStyle(document.querySelector('#prompter-button.selected i')).forcedColorAdjust)
-        if (icon !== 'none') fail(`the pressed toolbar icon gets a forced-colors backplate (${icon})`)
-        await toggle.focus()
-        state.highContrastFocus = focus
-      }
-      const file = `prompter-link-${mode}-${view.name}.png`
-      await page.screenshot({ path: join(out, file), animations: 'disabled' })
-      shots.push({ file, view, mode, ...state })
-      if (view.name === 'tall' && mode === 'off') {
-        await page.locator('[data-settings-tab="camera"]').click()
-        await page.screenshot({ path: join(out, 'settings-camera-switches-tall.png'), animations: 'disabled' })
-        shots.push({ file: 'settings-camera-switches-tall.png', view, mode })
+    for (const scenes of ['starter', 'empty', 'full']) {
+      const page = await openScenes({ query: `scenes=${scenes}`, width: view.width, height: view.height, scale: 2 })
+      for (const layout of ['grid', 'list']) {
+        await page.locator(`[data-view="${layout}"]`).click()
+        await page.waitForTimeout(80)
+        const state = await shoot(page, `scenes-${scenes}-${layout}-${view.name}.png`, { view, scenes, layout })
+        if (state.view !== layout) fail(`the ${layout} switch shows ${state.view}`)
+        const expectedAdd = { starter: 'Save look', empty: 'Save the live look as scene 1', full: 'Full' }[scenes]
+        if (state.add !== expectedAdd) fail(`the save slot says "${state.add}" for ${scenes} Scenes, not "${expectedAdd}"`)
+        if (scenes === 'empty' && state.scenes.length) fail('the empty state shows Scenes')
       }
       await page.close()
     }
   }
 
-  // The toolbar's Prompter link button: off, on (from the keyboard), busy (a click), and back off with a click,
-  // checking each time that the Inline settings switch follows it. Captured at 2x, cropped to the toolbar.
+  // Autosave, Undo, delete with Undo, rename and the save form, with the settings staying open.
+  for (const layout of ['grid', 'list']) {
+    const page = await openScenes({ query: 'scenes=starter', height: 600, scale: 2 })
+    await page.locator(`[data-view="${layout}"]`).click()
+    await page.locator('.scene-main', { hasText: 'Big right' }).click()
+    await page.waitForTimeout(80)
+    let state = await readPanel(page)
+    if (!state.settingsOpen) fail(`putting a Scene on camera closed the settings (${layout})`)
+    if (!state.scenes.find((label) => label.startsWith('Big right') && label.includes('on camera'))) {
+      fail(`Big right is not marked on camera (${layout}: ${JSON.stringify(state.scenes)})`)
+    }
+    await page.locator('#shape-button').click({ force: true })
+    await page.waitForTimeout(120)
+    state = await shoot(page, `scenes-autosaved-${layout}.png`, { layout, step: 'autosave' })
+    if (state.undo !== 1 || state.savedCheck !== 1) fail(`autosave shows ${state.undo} Undo and ${state.savedCheck} checks (${layout})`)
+    await page.keyboard.press('Control+z')
+    await page.waitForTimeout(80)
+    state = await readPanel(page)
+    if (state.undo !== 0) fail(`Ctrl+Z left Undo showing (${layout})`)
+    await page.locator('.scene-main', { hasText: 'Small bottom' }).focus()
+    await page.keyboard.press('Delete')
+    await page.waitForTimeout(80)
+    state = await shoot(page, `scenes-deleted-${layout}.png`, { layout, step: 'delete' })
+    if (state.deleted[0] !== 'Small bottom deleted') fail(`delete shows ${JSON.stringify(state.deleted)} (${layout})`)
+    const focused = await page.evaluate(() => document.activeElement?.dataset.act)
+    if (focused !== 'undo-delete') fail(`focus after delete is on ${focused}, not Undo (${layout})`)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(80)
+    state = await readPanel(page)
+    if (state.scenes.length !== 2) fail(`Undo did not bring the Scene back (${layout})`)
+    await page.locator('.scene-main', { hasText: 'Big right' }).focus()
+    await page.keyboard.press('F2')
+    await page.locator('[data-role="rename"]').waitFor({ state: 'visible' })
+    await shoot(page, `scenes-rename-${layout}.png`, { layout, step: 'rename' })
+    await page.keyboard.press('Escape')
+    await page.locator('[data-act="save-open"]').click()
+    await page.locator('[data-role="new-name"]').fill('small bottom')
+    await shoot(page, `scenes-save-replace-${layout}.png`, { layout, step: 'save form, name taken' })
+    const replace = await page.locator('[data-act="save-ok"]').textContent()
+    if (!replace.includes('Replace')) fail(`the save button does not say Replace for a taken name (${layout})`)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(60)
+    if (!(await page.locator('#inline-settings').isHidden())) fail(`Escape did not close the settings (${layout})`)
+    await page.close()
+  }
+
+  // High contrast: keyboard focus stays visible on a tile, the view switch and a file button.
+  for (const layout of ['grid', 'list']) {
+    const page = await openScenes({ query: 'scenes=starter', height: 600, forcedColors: 'active', scale: 2 })
+    await page.locator(`[data-view="${layout}"]`).click()
+    const focus = {}
+    for (const selector of ['.scene-main', `[data-view="${layout}"]`, '[data-act="import"]']) {
+      await page.keyboard.press('Shift')
+      await page.locator(selector).first().focus()
+      focus[selector] = await page.locator(selector).first().evaluate((item) => ({
+        visible: item.matches(':focus-visible'),
+        outline: getComputedStyle(item).outlineStyle,
+      }))
+      if (!focus[selector].visible || focus[selector].outline === 'none') {
+        fail(`no visible keyboard focus on ${selector} in high contrast (${JSON.stringify(focus[selector])})`)
+      }
+    }
+    await page.locator('.scene-main').first().focus()
+    await shoot(page, `scenes-high-contrast-${layout}.png`, { layout, highContrastFocus: focus })
+    await page.close()
+  }
+
+  // The toolbar's Prompter link button: off, on (from the keyboard) and busy, at 2x cropped to the
+  // toolbar, checking all six toolbar buttons fit the default Overlay.
   for (const mode of ['off', 'on', 'busy']) {
     const page = await browser.newPage({ viewport: { width: 324, height: 390 }, deviceScaleFactor: 2 })
     page.on('pageerror', (error) => errors.push(`toolbar/${mode}: ${error.message}`))
@@ -185,21 +219,19 @@ try {
     if (mode === 'busy') await button.click()
     await page.locator('#camera-surface').hover()
     await page.waitForTimeout(250)
-    const read = () =>
-      page.evaluate(() => {
-        const item = document.querySelector('#prompter-button')
-        return {
-          pressed: item.getAttribute('aria-pressed'),
-          linkState: item.dataset.linkState,
-          title: item.title,
-          selected: item.classList.contains('selected'),
-          switchChecked: document.querySelector('#overlay-prompter-toggle').checked,
-        }
-      })
-    const state = await read()
+    const state = await page.evaluate(() => {
+      const item = document.querySelector('#prompter-button')
+      return {
+        pressed: item.getAttribute('aria-pressed'),
+        linkState: item.dataset.linkState,
+        title: item.title,
+        selected: item.classList.contains('selected'),
+        description: document.querySelector('#overlay-prompter-status').textContent,
+      }
+    })
     const expected = { off: ['false', 'off', false], on: ['true', 'on', true], busy: ['true', 'error', true] }[mode]
-    if (state.pressed !== expected[0] || state.linkState !== expected[1] || state.selected !== expected[2] || state.switchChecked !== expected[2]) {
-      fail(`the toolbar button and settings switch disagree for ${mode} (${JSON.stringify(state)})`)
+    if (state.pressed !== expected[0] || state.linkState !== expected[1] || state.selected !== expected[2]) {
+      fail(`the toolbar button shows the wrong state for ${mode} (${JSON.stringify(state)})`)
     }
     const file = `toolbar-prompter-${mode}.png`
     const box = await page.locator('#hover-toolbar').boundingBox()
@@ -209,16 +241,6 @@ try {
       animations: 'disabled',
     })
     shots.push({ file, mode, fit, ...state })
-    if (mode === 'on') {
-      // Back off with a click: the settings switch and its options follow.
-      await button.click()
-      const off = await read()
-      const optionsHidden = await page.evaluate(() => document.querySelector('#overlay-prompter-options').hidden)
-      if (off.pressed !== 'false' || off.switchChecked || !optionsHidden) {
-        fail(`turning the link off from the toolbar left the settings on (${JSON.stringify(off)})`)
-      }
-      shots.push({ check: 'toolbar click turns the link off', ...off, optionsHidden })
-    }
     await page.close()
   }
 } catch (error) {

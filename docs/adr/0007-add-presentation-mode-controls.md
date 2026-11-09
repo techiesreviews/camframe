@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Superseded in part by ADR 0037 (Start at login removed, 2026-11-09).
 
 ## Context
 

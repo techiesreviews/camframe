@@ -20,8 +20,16 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+.ph-arrow-counter-clockwise::before {
+  content: '\e038';
+}
+
 .ph-arrows-clockwise::before {
   content: '\e094';
+}
+
+.ph-check::before {
+  content: '\e182';
 }
 
 .ph-circle::before {
@@ -36,12 +44,52 @@
   content: '\e1d6';
 }
 
+.ph-dots-six-vertical::before {
+  content: '\eae2';
+}
+
+.ph-download-simple::before {
+  content: '\e20c';
+}
+
+.ph-list::before {
+  content: '\e2f0';
+}
+
+.ph-pencil-simple::before {
+  content: '\e3b4';
+}
+
+.ph-plus::before {
+  content: '\e3d4';
+}
+
 .ph-scroll::before {
   content: '\eb7a';
 }
 
 .ph-sliders-horizontal::before {
   content: '\e434';
+}
+
+.ph-squares-four::before {
+  content: '\e464';
+}
+
+.ph-trash::before {
+  content: '\e4a6';
+}
+
+.ph-upload-simple::before {
+  content: '\e4c0';
+}
+
+.ph-warning::before {
+  content: '\e4e0';
+}
+
+.ph-x::before {
+  content: '\e4f6';
 }
 
 .ph-x-circle::before {

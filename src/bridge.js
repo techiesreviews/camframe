@@ -49,6 +49,15 @@ export const BRIDGE_CONTRACT = Object.freeze([
     check: (name, id) => [optionalString(name), optionalString(id)],
   },
   { method: 'applyPreset', channel: 'preset:apply', kind: 'send', check: (id) => [optionalString(id)] },
+  {
+    method: 'renamePreset',
+    channel: 'preset:rename',
+    kind: 'send',
+    check: (id, name) => [optionalString(id), optionalString(name)],
+  },
+  // Undo the hand changes saved into the active Scene, or the last delete (main checks both windows).
+  { method: 'undoPresetChange', channel: 'preset:undo-change', kind: 'send', check: noArguments },
+  { method: 'undoPresetDelete', channel: 'preset:undo-delete', kind: 'send', check: noArguments },
   { method: 'deletePreset', channel: 'preset:delete', kind: 'send', check: (id) => [optionalString(id)] },
   {
     method: 'reorderPreset',

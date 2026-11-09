@@ -1,6 +1,8 @@
 import { DEFAULT_CAMERA_LABEL, createCameraSession } from './camera-session.js'
 import { createOverlayInteraction } from './overlay-interaction.js'
-import { COMPACT_SPOTS, DEFAULT_SETTINGS, SHAPES, dimensionsFor } from './settings.js'
+import { DEFAULT_SETTINGS, SHAPES, STARTER_SCENES, dimensionsFor, sanitizeSettings } from './settings.js'
+import * as sceneLibrary from './scenes.js'
+import { createScenesPanel } from './scenes-panel.js'
 import {
   cameraFramingStyles,
   cameraPositionAfterDrag,
@@ -22,15 +24,7 @@ const hoverToolbar = document.querySelector('#hover-toolbar')
 const inlineSettings = document.querySelector('#inline-settings')
 const settingsTabs = document.querySelectorAll('#inline-settings [data-settings-tab]')
 const cameraSelect = document.querySelector('#overlay-camera-select')
-const presetName = document.querySelector('#overlay-preset-name')
-const savePresetButton = document.querySelector('#overlay-save-preset')
-const presetSelect = document.querySelector('#overlay-preset-select')
-const deletePresetButton = document.querySelector('#overlay-delete-preset')
-const movePresetUpButton = document.querySelector('#overlay-move-preset-up')
-const movePresetDownButton = document.querySelector('#overlay-move-preset-down')
-const importPresetsButton = document.querySelector('#overlay-import-presets')
-const exportPresetsButton = document.querySelector('#overlay-export-presets')
-const sceneMessage = document.querySelector('#overlay-scene-message')
+const scenesPanelRoot = document.querySelector('#scenes-panel')
 const overlayResolutionSelect = document.querySelector('#overlay-resolution-select')
 const effectSelect = document.querySelector('#overlay-effect-select')
 const effectColorField = document.querySelector('#overlay-effect-color-field')
@@ -50,14 +44,9 @@ const frameRange = document.querySelector('#overlay-frame-range')
 const frameOutput = document.querySelector('#overlay-frame-output')
 const mirrorToggle = document.querySelector('#overlay-mirror-toggle')
 const topToggle = document.querySelector('#overlay-top-toggle')
-const launchToggle = document.querySelector('#overlay-launch-toggle')
-const prompterToggle = document.querySelector('#overlay-prompter-toggle')
+// The toolbar button's screen reader description: the Prompter link status (ADR 0037 removed the
+// Scenes tab's Prompter link section; the toolbar button is its only control).
 const prompterStatus = document.querySelector('#overlay-prompter-status')
-const prompterOptions = document.querySelector('#overlay-prompter-options')
-const prompterFull = document.querySelector('#overlay-prompter-full')
-const prompterSmall = document.querySelector('#overlay-prompter-small')
-const prompterMargin = document.querySelector('#overlay-prompter-margin')
-const prompterMarginOutput = document.querySelector('#overlay-prompter-margin-output')
 const presentationToast = document.querySelector('#presentation-toast')
 const sceneAnnouncer = document.querySelector('#scene-announcer')
 let sceneAnnouncerClear
@@ -89,15 +78,6 @@ const onboardingDemoMouse = document.querySelector('#onboarding-demo-mouse')
 const onboardingDemoWheel = document.querySelector('#onboarding-demo-wheel')
 const onboardingDemoClick = document.querySelector('#onboarding-demo-click')
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
-const SPOT_LABELS = Object.freeze({
-  'top-left': 'Top left',
-  'top-right': 'Top right',
-  'bottom-left': 'Bottom left',
-  'bottom-right': 'Bottom right',
-  left: 'Left',
-  right: 'Right',
-  center: 'Center',
-})
 const SHAPE_CYCLE = Object.freeze([...SHAPES])
 const onboardingMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
 const forcedColorsQuery = window.matchMedia('(forced-colors: active)')
@@ -110,20 +90,76 @@ function qaPrompterLinkStatus(patch) {
     ? { prompterLinkStatus: { state: 'error', port: 47833, message: 'Port 47833 is in use by another app.' } }
     : { prompterLinkStatus: { state: 'on', port: 47833, message: '' } }
 }
+// The QA preview runs the real Scene library on a pretend 1920x1080 display, so the Scenes tab can be
+// tried without Electron: `?scenes=empty|starter|full` picks the Scenes it starts with.
+const QA_DISPLAY = Object.freeze({ x: 0, y: 0, width: 1920, height: 1080 })
+const QA_WORK_AREA = Object.freeze({ x: 0, y: 0, width: 1920, height: 1040 })
+const qaScenes = {
+  edits: sceneLibrary.createSceneEdits(),
+  active: '',
+  context: { workArea: QA_WORK_AREA, workAreaAt: () => QA_WORK_AREA },
+  start() {
+    const extra = [
+      { id: 'qa-interview', name: 'Interview', settings: { shape: 'landscape', size: 360, borderWidth: 4, position: { x: 60, y: 600 } } },
+      { id: 'qa-demo', name: 'Demo corner', settings: { shape: 'rounded', size: 220, frameEffect: 'glow', position: { x: 40, y: 30 } } },
+      { id: 'qa-outro', name: 'Outro', settings: { shape: 'portrait', size: 420, frameEffect: 'glow', effectColor: '#22d3ee', position: { x: 760, y: 300 } } },
+      { id: 'qa-wide', name: 'Wide top', settings: { shape: 'landscape', size: 400, position: { x: 1460, y: 20 } } },
+    ]
+    const pick = qaPreviewParams.get('scenes') ?? 'starter'
+    const presets = pick === 'empty' ? [] : pick === 'full' ? [...STARTER_SCENES, ...extra] : STARTER_SCENES
+    const settings = sanitizeSettings({ ...DEFAULT_SETTINGS, presets })
+    this.active = presets.length ? presets[0].id : ''
+    const applied = this.active ? sceneLibrary.applyScene({ settings, activeSceneId: '' }, this.active, this.context) : undefined
+    return applied?.settings ?? settings
+  },
+  stateFor(settings) {
+    return {
+      ...settings,
+      activePresetId: this.active,
+      ...this.edits.view(this.active),
+      scenePreviews: sceneLibrary.scenePreviews(settings, { ...this.context, displayAt: () => QA_DISPLAY }),
+    }
+  },
+  commit(result) {
+    if (!result?.settings) return
+    this.edits.track({ settings: state, activeSceneId: this.active }, result)
+    this.active = result.activeSceneId
+    applyState({ ...this.stateFor(result.settings), prompterLinkStatus: state.prompterLinkStatus })
+  },
+  library: () => ({ settings: sanitizeSettings(state), activeSceneId: qaScenes.active }),
+}
 const qaBridge = isQaPreview
   ? createBridgeFake({
       platform: navigator.userAgent.includes('Mac') ? 'darwin' : 'win32',
       overrides: {
         getState: async () => ({
-          ...DEFAULT_SETTINGS,
-          cameraPosition: { ...DEFAULT_SETTINGS.cameraPosition },
-          presets: [],
+          ...qaScenes.stateFor(qaScenes.start()),
           completedOnboardingVersion:
             qaPreviewParams.get('state') === 'onboarding' ? 0 : CURRENT_ONBOARDING_VERSION,
         }),
-        updateState: (patch) => applyState({ ...state, ...patch, ...qaPrompterLinkStatus(patch) }),
-        exportPresets: async () => ({ canceled: false, count: 0 }),
-        importPresets: async () => ({ canceled: false, count: 0 }),
+        updateState: (patch) => {
+          const status = qaPrompterLinkStatus(patch)
+          qaScenes.commit(sceneLibrary.followLiveLook(qaScenes.library(), sanitizeSettings({ ...state, ...patch })))
+          if (status.prompterLinkStatus) applyState({ ...state, ...status })
+        },
+        savePreset: (name, id) => qaScenes.commit(sceneLibrary.saveScene(qaScenes.library(), { name, id })),
+        applyPreset: (id) => qaScenes.commit(sceneLibrary.applyScene(qaScenes.library(), id, qaScenes.context)),
+        renamePreset: (id, name) => {
+          const renamed = sceneLibrary.renameScene(qaScenes.library(), id, name)
+          if (!renamed?.error) qaScenes.commit(renamed)
+        },
+        deletePreset: (id) => qaScenes.commit(sceneLibrary.deleteScene(qaScenes.library(), id)),
+        reorderPreset: (id, offset) => qaScenes.commit(sceneLibrary.reorderScene(qaScenes.library(), id, offset)),
+        undoPresetChange: () =>
+          qaScenes.commit(
+            sceneLibrary.undoSceneChange(qaScenes.library(), qaScenes.edits.takeChange(qaScenes.active), qaScenes.context),
+          ),
+        undoPresetDelete: () => qaScenes.commit(sceneLibrary.restoreScene(qaScenes.library(), qaScenes.edits.takeDelete())),
+        exportPresets: async () => ({ canceled: false, count: state.presets.length }),
+        importPresets: async () =>
+          qaPreviewParams.get('import') === 'bad'
+            ? { canceled: false, error: sceneLibrary.SCENE_IMPORT_ERROR }
+            : { canceled: false, count: 0 },
         setOverlayOnboardingOpen: (open) => (open ? ONBOARDING_TOP_RESERVE : 0),
         toggleFullscreen: () => qaBridge.emit('onFullscreenChanged', !interaction.fullscreen),
         exitFullscreen: () => qaBridge.emit('onFullscreenChanged', false),
@@ -139,7 +175,6 @@ const interaction = createOverlayInteraction({
 })
 
 let state
-let selectedPresetId = ''
 let cameraReposition
 let presentationToastTimer
 let onboardingReturnFocus
@@ -460,7 +495,10 @@ function showPresentationNotice(message) {
 }
 
 settingsTabs.forEach((button) => {
-  button.addEventListener('click', () => selectSettingsPanel(button.dataset.settingsTab))
+  button.addEventListener('click', () => {
+    if (button.dataset.settingsTab !== 'presets') scenesPanel.reset()
+    selectSettingsPanel(button.dataset.settingsTab)
+  })
 })
 
 
@@ -505,70 +543,38 @@ function renderCameraFraming(framing = state) {
   framingZoom.textContent = `${framing.cameraZoom}%`
 }
 
-
-
-
-function renderPresets() {
-  const previousPresetId = selectedPresetId
-  if (state.presets.some((preset) => preset.id === state.activePresetId)) {
-    selectedPresetId = state.activePresetId
-  } else if (!state.presets.some((preset) => preset.id === selectedPresetId)) {
-    selectedPresetId = ''
-  }
-  presetSelect.replaceChildren(
-    new Option(state.presets.length ? 'New scene…' : 'No saved scenes', ''),
-  )
-  state.presets.forEach((preset, index) => {
-    presetSelect.add(new Option(`${index + 1}. ${preset.name}`, preset.id))
-  })
-  presetSelect.value = selectedPresetId
-  const selectedIndex = state.presets.findIndex((preset) => preset.id === selectedPresetId)
-  deletePresetButton.disabled = selectedIndex < 0
-  movePresetUpButton.disabled = selectedIndex <= 0
-  movePresetDownButton.disabled = selectedIndex < 0 || selectedIndex >= state.presets.length - 1
-  savePresetButton.textContent = selectedPresetId ? 'Update' : 'Save'
-  if (previousPresetId !== selectedPresetId) {
-    presetName.value = state.presets[selectedIndex]?.name ?? ''
-    savePresetButton.disabled = !presetName.value.trim()
-  }
+// A Scene name or a Scenes tab change for screen readers only; nothing is drawn (ADR 0036). The
+// region is emptied first so the same text twice in a row is read twice, and cleared once read.
+function announce(text) {
+  sceneAnnouncer.textContent = ''
+  setTimeout(() => {
+    sceneAnnouncer.textContent = String(text)
+  }, 50)
+  clearTimeout(sceneAnnouncerClear)
+  sceneAnnouncerClear = setTimeout(() => {
+    sceneAnnouncer.textContent = ''
+  }, 5000)
 }
 
-// Rebuilds a select's options only when they change and sets its choice only when it differs, so
-// a state update (the Corner margin slider, a status change) never closes an open dropdown.
-const filledChoices = new WeakMap()
-function fillChoices(select, options, value, fallback) {
-  const chosen = options.some(([optionValue]) => optionValue === value) ? value : fallback
-  const key = JSON.stringify(options)
-  if (filledChoices.get(select) !== key) {
-    filledChoices.set(select, key)
-    select.replaceChildren(...options.map(([optionValue, label]) => new Option(label, optionValue)))
-  }
-  if (select.value !== chosen) select.value = chosen
-}
+const scenesPanel = createScenesPanel({
+  root: scenesPanelRoot,
+  camFrame,
+  announce,
+  closeSettings() {
+    setControlsOpen(false)
+    document.querySelector('#controls-button').focus()
+  },
+})
 
-// The Prompter link: the Inline settings switch, its status line, the toolbar button, and what
-// "Face full" and a bare "Face small" do. All of them render from the stored `prompterLink`.
-// A choice naming a deleted Scene shows the default, which is also what a cue then does.
+// The toolbar's Prompter link button and its screen reader description render from the stored
+// `prompterLink` and main's link status.
 function renderPrompterLink() {
   const link = prompterLinkView(state)
-  prompterToggle.checked = link.on
-  prompterStatus.dataset.state = link.state
   if (prompterStatus.textContent !== link.status) prompterStatus.textContent = link.status
-  prompterOptions.hidden = !link.on
   prompterButton.classList.toggle('selected', link.on)
   prompterButton.setAttribute('aria-pressed', String(link.on))
   prompterButton.dataset.linkState = link.state
   prompterButton.title = link.title
-  const scenes = state.presets.map((preset) => [`scene:${preset.id}`, `Scene: ${preset.name}`])
-  fillChoices(prompterFull, [['fullscreen', 'Full screen'], ...scenes], state.prompterFaceFull, 'fullscreen')
-  fillChoices(
-    prompterSmall,
-    [['previous', 'Same place'], ...COMPACT_SPOTS.map((spot) => [spot, SPOT_LABELS[spot]]), ...scenes],
-    state.prompterFaceSmall,
-    'previous',
-  )
-  prompterMargin.value = String(state.prompterMargin)
-  prompterMarginOutput.textContent = `${state.prompterMargin} px`
 }
 
 function applyState(nextState) {
@@ -614,8 +620,7 @@ function applyState(nextState) {
   frameRange.value = String(state.borderWidth)
   frameOutput.textContent = `${state.borderWidth} px`
   topToggle.checked = state.alwaysOnTop
-  launchToggle.checked = state.launchAtLogin
-  renderPresets()
+  scenesPanel.update(state)
   renderPrompterLink()
   if (state.cameraId && [...cameraSelect.options].some((option) => option.value === state.cameraId)) {
     cameraSelect.value = state.cameraId
@@ -643,6 +648,7 @@ function applyFullscreen(nextFullscreen) {
 }
 
 function setControlsOpen(open) {
+  if (!open) scenesPanel.reset()
   interaction.set({ controlsOpen: open })
   inlineSettings.hidden = !open
   document.querySelector('#controls-button').classList.toggle('selected', open)
@@ -860,66 +866,6 @@ cameraSelect.addEventListener('change', () => {
   camFrame.updateState({ cameraId: cameraSelect.value, cameraLabel: option.textContent })
 })
 
-presetName.addEventListener('input', () => {
-  savePresetButton.disabled = !presetName.value.trim()
-})
-
-savePresetButton.addEventListener('click', () => {
-  const name = presetName.value.trim()
-  if (!name) return
-  camFrame.savePreset(name, selectedPresetId)
-  if (!selectedPresetId) {
-    presetName.value = ''
-    savePresetButton.disabled = true
-  }
-  setControlsOpen(false)
-})
-
-presetName.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !savePresetButton.disabled) savePresetButton.click()
-})
-
-presetSelect.addEventListener('change', () => {
-  selectedPresetId = presetSelect.value
-  const selected = state.presets.find((preset) => preset.id === selectedPresetId)
-  presetName.value = selected?.name ?? ''
-  savePresetButton.textContent = selected ? 'Update' : 'Save'
-  savePresetButton.disabled = !presetName.value.trim()
-  const selectedIndex = state.presets.findIndex((preset) => preset.id === selectedPresetId)
-  deletePresetButton.disabled = selectedIndex < 0
-  movePresetUpButton.disabled = selectedIndex <= 0
-  movePresetDownButton.disabled = selectedIndex < 0 || selectedIndex >= state.presets.length - 1
-  if (selectedPresetId) {
-    camFrame.applyPreset(selectedPresetId)
-    setControlsOpen(false)
-  }
-})
-
-movePresetUpButton.addEventListener('click', () => {
-  if (selectedPresetId) camFrame.reorderPreset(selectedPresetId, -1)
-})
-
-movePresetDownButton.addEventListener('click', () => {
-  if (selectedPresetId) camFrame.reorderPreset(selectedPresetId, 1)
-})
-
-importPresetsButton.addEventListener('click', async () => {
-  const result = await camFrame.importPresets()
-  sceneMessage.textContent = result.error ?? (result.canceled ? '' : `${result.count} imported`)
-})
-
-exportPresetsButton.addEventListener('click', async () => {
-  const result = await camFrame.exportPresets()
-  sceneMessage.textContent = result.error ?? (result.canceled ? '' : `${result.count} exported`)
-})
-
-deletePresetButton.addEventListener('click', () => {
-  if (!selectedPresetId) return
-  camFrame.deletePreset(selectedPresetId)
-  selectedPresetId = ''
-  setControlsOpen(false)
-})
-
 overlayResolutionSelect.addEventListener('change', () => {
   camFrame.updateState({ overlayResolution: overlayResolutionSelect.value })
 })
@@ -969,38 +915,11 @@ topToggle.addEventListener('change', () => {
   camFrame.updateState({ alwaysOnTop: topToggle.checked })
 })
 
-prompterToggle.addEventListener('change', () => {
-  if (!state) {
-    prompterToggle.checked = !prompterToggle.checked
-    return
-  }
-  pendingPrompterLink = toggledPrompterLink(pendingPrompterLink, state.prompterLink)
-  prompterToggle.checked = pendingPrompterLink
-  camFrame.updateState({ prompterLink: pendingPrompterLink })
-})
-
-// The toolbar shortcut flips the same stored setting the Inline settings switch does.
+// The toolbar button turns the Prompter link on and off (the stored `prompterLink`).
 prompterButton.addEventListener('click', () => {
   if (!state) return
   pendingPrompterLink = toggledPrompterLink(pendingPrompterLink, state.prompterLink)
   camFrame.updateState({ prompterLink: pendingPrompterLink })
-})
-
-prompterFull.addEventListener('change', () => {
-  camFrame.updateState({ prompterFaceFull: prompterFull.value })
-})
-
-prompterSmall.addEventListener('change', () => {
-  camFrame.updateState({ prompterFaceSmall: prompterSmall.value })
-})
-
-prompterMargin.addEventListener('input', () => {
-  prompterMarginOutput.textContent = `${prompterMargin.value} px`
-  camFrame.updateState({ prompterMargin: Number(prompterMargin.value) })
-})
-
-launchToggle.addEventListener('change', () => {
-  camFrame.updateState({ launchAtLogin: launchToggle.checked })
 })
 
 camFrame.onShowControls(() => {
@@ -1024,6 +943,8 @@ camFrame.getState().then((initialState) => {
   } else cameraSession.refreshDevices()
 })
 
+const typingIn = (target) => target instanceof HTMLInputElement && target.type === 'text'
+
 window.addEventListener('keydown', (event) => {
   if (tour.isOpen) {
     if (event.key !== 'Escape') return
@@ -1031,7 +952,24 @@ window.addEventListener('keydown', (event) => {
     tour.escape()
     return
   }
+  // Ctrl+Z in Inline settings undoes the last Scene delete, else the active Scene's changes.
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    event.key.toLowerCase() === 'z' &&
+    interaction.controlsOpen &&
+    !typingIn(event.target) &&
+    scenesPanel.undo()
+  ) {
+    event.preventDefault()
+    return
+  }
   if (event.key !== 'Escape') return
+  // Escape in Inline settings cancels a rename or save in progress, else closes the settings.
+  if (interaction.controlsOpen && inlineSettings.contains(event.target)) {
+    event.preventDefault()
+    scenesPanel.escape()
+    return
+  }
   if (interaction.positioning && !interaction.fullscreen) {
     event.preventDefault()
     setPositioning(false)
@@ -1043,19 +981,8 @@ window.addEventListener('keydown', (event) => {
 })
 
 camFrame.onPresentationNotice(showPresentationNotice)
-// A Scene applied or saved is read out to screen readers and never drawn. The region is emptied first
-// so the same name announced twice in a row is read twice.
-camFrame.onSceneAnnouncement((name) => {
-  sceneAnnouncer.textContent = ''
-  setTimeout(() => {
-    sceneAnnouncer.textContent = String(name)
-  }, 50)
-  // Cleared again once read, so a screen reader's page review does not find a stale name.
-  clearTimeout(sceneAnnouncerClear)
-  sceneAnnouncerClear = setTimeout(() => {
-    sceneAnnouncer.textContent = ''
-  }, 5000)
-})
+// A Scene applied or saved is read out to screen readers and never drawn.
+camFrame.onSceneAnnouncement(announce)
 
 if (!isQaPreview) navigator.mediaDevices.addEventListener('devicechange', cameraSession.refreshDevices)
 window.addEventListener('beforeunload', () => {

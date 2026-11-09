@@ -913,3 +913,13 @@ test('leaving Full screen for another display, the current work area is that dis
   assert.equal(view.geometry.isSettled(), false)
   assert.deepEqual(view.geometry.currentWorkArea(), secondary.workArea)
 })
+
+test('stopping a move-drag says whether one was running, so main saves the place into the active Scene once', () => {
+  const { geometry, screen, clock } = overlay()
+  assert.equal(geometry.stopDrag(), false, 'no drag: nothing to save')
+  geometry.startDrag()
+  screen.cursor = { x: 300, y: 300 }
+  clock.advance(32)
+  assert.equal(geometry.stopDrag(), true)
+  assert.equal(geometry.stopDrag(), false)
+})

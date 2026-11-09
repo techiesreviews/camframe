@@ -64,6 +64,7 @@ Historical validation is evidence about those revisions, not proof that the curr
 | Separate dormant Controller, its privileged relays, and Inter assets | It was unreachable and duplicated the live settings surface | Inline settings only; persisted `borderColor` remains accepted for compatibility | ADR 0025 |
 | Unapplied native Compositor mask helpers | Never wired to `setShape()`; kept only by their own tests | CSS clipping and whole-window interactivity remain | ADR 0029, KG-01 |
 | Separate Full screen quality and mode-change track renegotiation | Hardware reports showed stale, black, or wrong frames during renegotiation | One Camera quality used unchanged in both modes; old `fullscreenResolution` is ignored | ADR 0026, GitHub issue 5 |
+| Start at login; the Scenes tab's shortcut list, Prompter link section (switch, status, Face full, Face small, Corner margin) and Save/Update/"Manage scenes" controls; Scene deleted/imported/exported notices | Lex, 2026-11-09: the tab was unclear about how a Scene is saved; the toolbar button is enough for the link (TOOLS-132) | Scenes tab with list/grid, autosave and Undo; the Prompter link settings keep their stored values and defaults; the login item is turned off once on update | ADR 0037 |
 | Prompter link trust for https://preview.prompter.techies.tools | Lex, 2026-11-04: "ignore the preview, and remove it in a future issue" (TOOLS-49) | None; the live prompter site, localhost pages and `file://` copies still work; no stored setting involved | ADR 0033 (note of 2026-11-08) |
 
 ## Tried and not successful

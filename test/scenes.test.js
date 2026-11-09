@@ -15,6 +15,14 @@ import {
   reorderScene,
   saveScene,
   sceneExport,
+  SCENE_DELETE_UNDO_MS,
+  SCENE_UNDO_MS,
+  createSceneEdits,
+  followLiveLook,
+  renameScene,
+  restoreScene,
+  scenePreviews,
+  undoSceneChange,
 } from '../src/scenes.js'
 
 const scene = (id, name, settings = {}) => ({ id, name, settings: settingsForPreset(settings) })
@@ -154,7 +162,7 @@ test('saving ignores blank names and truncates long ones', () => {
 
 test('applying a Scene restores its settings without touching global preferences', () => {
   const desk = scene('desk', 'Desk', { size: 420, shape: 'landscape', position: { x: 5, y: 6 } })
-  const state = library([desk], { alwaysOnTop: false, launchAtLogin: true, completedOnboardingVersion: 1 })
+  const state = library([desk], { alwaysOnTop: false, sceneView: 'list', completedOnboardingVersion: 1 })
   const result = applyScene(state, 'desk')
 
   assert.equal(result.activeSceneId, 'desk')
@@ -165,7 +173,7 @@ test('applying a Scene restores its settings without touching global preferences
   assert.equal(result.settings.shape, 'landscape')
   assert.deepEqual(result.settings.position, { x: 5, y: 6 })
   assert.equal(result.settings.alwaysOnTop, false)
-  assert.equal(result.settings.launchAtLogin, true)
+  assert.equal(result.settings.sceneView, 'list')
   assert.equal(result.settings.completedOnboardingVersion, 1)
   assert.deepEqual(result.settings.presets, state.settings.presets)
   assert.equal(applyScene(state, 'missing'), undefined)
@@ -192,7 +200,10 @@ test('deleting the active Scene clears it; deleting another keeps it', () => {
   const deletedActive = deleteScene(state, 'one')
   assert.deepEqual(ids(deletedActive), ['two'])
   assert.equal(deletedActive.activeSceneId, '')
-  assert.equal(deletedActive.notice, 'Scene deleted')
+  // No notice on the camera: the Scenes tab shows Undo on the deleted Scene's place instead.
+  assert.equal(deletedActive.notice, undefined)
+  assert.deepEqual(deletedActive.deleted, { scene: state.settings.presets[0], index: 0, wasActive: true })
+  assert.equal(deleteScene(state, 'two').deleted.wasActive, false)
   assert.equal(deleteScene(state, 'two').activeSceneId, 'one')
   assert.equal(deleteScene(state, 'missing'), undefined)
 })
@@ -219,10 +230,11 @@ test('an ordinary settings patch is sanitized and clears the active Scene', () =
   assert.deepEqual(result.settings.presets, state.settings.presets)
 })
 
-test('imports report how many Scenes they read', () => {
+test('imports report how many Scenes they read, on the Import button, not on the camera', () => {
   const result = importScenes(library(), JSON.stringify([scene('a', 'A')]))
-  assert.equal(result.notice, '1 scene imported')
-  assert.equal(importScenes(library(), JSON.stringify([scene('a', 'A'), scene('b', 'B')])).notice, '2 scenes imported')
+  assert.equal(result.importedCount, 1)
+  assert.equal(result.notice, undefined)
+  assert.equal(importScenes(library(), JSON.stringify([scene('a', 'A'), scene('b', 'B')])).importedCount, 2)
 })
 
 test('exports identify the Scene format and version', () => {
@@ -270,4 +282,198 @@ test('a layout Scene that cannot be planned keeps its saved place on the screen'
   assert.ok(geometry.position.y >= lone.y && geometry.position.y + window.height <= lone.y + lone.height, 'inside vertically')
   // With no work area known there is nothing to keep it inside: the saved place stays.
   assert.deepEqual(layoutSceneGeometry(scene, settings).position, { x: 1518, y: 300 })
+})
+
+// --- Scenes tab (ADR 0037): autosave, undo, delete with undo, rename, reorder, tile previews ---
+
+const live = (scenes, settings = {}, activeSceneId = '') => library(scenes, settings, activeSceneId)
+const sceneById = (state, id) => state.settings.presets.find((candidate) => candidate.id === id)
+
+test('the active Scene follows a hand change of the live look and saves itself', () => {
+  const state = live([scene('one', 'One', { size: 300, shape: 'circle' }), scene('two', 'Two')], { size: 300, shape: 'circle' }, 'one')
+  const next = sanitizeSettings({ ...state.settings, size: 420, frameEffect: 'glow', borderWidth: 4, position: { x: 50, y: 60 } })
+  const result = followLiveLook(state, next)
+  assert.equal(result.activeSceneId, 'one')
+  assert.equal(result.savedSceneId, 'one')
+  const saved = sceneById(result, 'one').settings
+  assert.equal(saved.size, 420)
+  assert.equal(saved.frameEffect, 'glow')
+  assert.equal(saved.borderWidth, 4)
+  assert.deepEqual(saved.position, { x: 50, y: 60 })
+  assert.deepEqual(result.autosaved.before, state.settings.presets[0])
+  assert.deepEqual(sceneById(result, 'two'), state.settings.presets[1], 'other Scenes stay as they were')
+  assert.equal(result.settings.size, 420)
+})
+
+test('autosave leaves the camera, its quality and global switches out of the Scene', () => {
+  const state = live([scene('one', 'One', { cameraId: 'cam-a', overlayResolution: '1080p' })], { cameraId: 'cam-a', overlayResolution: '1080p' }, 'one')
+  // A missing camera falls back to the default one: that must never erase the Scene's camera.
+  const next = sanitizeSettings({ ...state.settings, cameraId: '', cameraLabel: 'Default camera', overlayResolution: '480p', alwaysOnTop: false })
+  const result = followLiveLook(state, next)
+  assert.equal(result.activeSceneId, 'one', 'the Scene stays on')
+  assert.equal(result.savedSceneId, undefined)
+  assert.equal(result.autosaved, undefined)
+  assert.equal(sceneById(result, 'one').settings.cameraId, 'cam-a')
+  assert.equal(sceneById(result, 'one').settings.overlayResolution, '1080p')
+  assert.equal(result.settings.alwaysOnTop, false)
+})
+
+test('without an active Scene a hand change saves nothing', () => {
+  const state = live([scene('one', 'One')], {}, '')
+  const result = followLiveLook(state, sanitizeSettings({ ...state.settings, size: 400 }))
+  assert.equal(result.activeSceneId, '')
+  assert.equal(result.savedSceneId, undefined)
+  assert.deepEqual(result.settings.presets, state.settings.presets)
+})
+
+test('a hand change on an active layout Scene turns it into an exact Scene of the live look', () => {
+  const layoutScene = { id: 'big', name: 'Big right', settings: settingsForPreset({}), layout: { size: 540, position: 'right' } }
+  const state = live([layoutScene], { size: 540, shape: 'circle', position: { x: 1300, y: 200 } }, 'big')
+  // A look change only: the layout Scene keeps the live look anyway, now it stores it.
+  const reshaped = followLiveLook(state, sanitizeSettings({ ...state.settings, shape: 'rounded', position: { x: 1300, y: 200 } }))
+  const converted = sceneById(reshaped, 'big')
+  assert.equal(converted.layout, undefined)
+  assert.equal(converted.settings.shape, 'rounded')
+  assert.equal(converted.settings.size, 540)
+  assert.deepEqual(converted.settings.position, { x: 1300, y: 200 })
+  assert.equal(converted.name, 'Big right')
+})
+
+test('renaming keeps the look; an empty or taken name changes nothing', () => {
+  const state = live([scene('one', 'One', { size: 400 }), scene('two', 'Two')], { size: 288 }, 'one')
+  const renamed = renameScene(state, 'one', '  Intro  ')
+  assert.equal(sceneById(renamed, 'one').name, 'Intro')
+  assert.deepEqual(sceneById(renamed, 'one').settings, state.settings.presets[0].settings)
+  assert.equal(renamed.activeSceneId, 'one')
+  assert.equal(renamed.settings.size, 288, 'the live look does not change')
+  assert.equal(renameScene(state, 'one', '   '), undefined)
+  assert.equal(renameScene(state, 'one', 'One'), undefined)
+  assert.equal(renameScene(state, 'missing', 'X'), undefined)
+  assert.deepEqual(renameScene(state, 'one', 'two'), { error: 'name-taken' })
+})
+
+test('a deleted Scene comes back in its place, on camera again when it was', () => {
+  const state = live([scene('one', 'One'), scene('two', 'Two'), scene('three', 'Three')], {}, 'two')
+  const deleted = deleteScene(state, 'two')
+  const restored = restoreScene(deleted, deleted.deleted)
+  assert.deepEqual(ids(restored), ['one', 'two', 'three'])
+  assert.equal(restored.activeSceneId, 'two')
+  // A Scene put on camera meanwhile stays on camera.
+  const otherOn = restoreScene({ ...deleted, activeSceneId: 'three' }, deleted.deleted)
+  assert.equal(otherOn.activeSceneId, 'three')
+  // No room or the name taken meanwhile: nothing comes back.
+  const full = live(Array.from({ length: SCENE_LIMIT }, (_, index) => scene(`s${index}`, `S${index}`)))
+  assert.equal(restoreScene(full, deleted.deleted), undefined)
+  assert.equal(restoreScene(live([scene('x', 'two')]), deleted.deleted), undefined)
+})
+
+test('undoing a change puts the Scene back as it was and on camera', () => {
+  const before = scene('one', 'One', { size: 300, frameEffect: 'none', position: { x: 10, y: 20 } })
+  const state = live([before], { size: 300, position: { x: 10, y: 20 } }, 'one')
+  const changed = followLiveLook(state, sanitizeSettings({ ...state.settings, size: 500, frameEffect: 'glow' }))
+  const undone = undoSceneChange(changed, { scene: changed.autosaved.before, look: {} })
+  assert.deepEqual(sceneById(undone, 'one'), before)
+  assert.equal(undone.settings.size, 300)
+  assert.equal(undone.settings.frameEffect, 'none')
+  assert.equal(undone.activeSceneId, 'one')
+  assert.equal(undone.savedSceneId, 'one')
+  assert.ok(undone.appliedScene, 'the Overlay moves back')
+  assert.equal(undoSceneChange(live([]), { scene: before }), undefined, 'a Scene deleted meanwhile is not brought back')
+})
+
+test('undoing a change to a layout Scene also brings back the live look it was shown with', () => {
+  let clock = 0
+  const edits = createSceneEdits({ now: () => clock })
+  const layoutScene = { id: 'big', name: 'Big right', settings: settingsForPreset({}), layout: { size: 540, position: 'right' } }
+  const state = live([layoutScene], { shape: 'circle', frameEffect: 'none' }, 'big')
+  const changed = followLiveLook(state, sanitizeSettings({ ...state.settings, shape: 'rounded', frameEffect: 'glow' }))
+  edits.track(state, changed)
+  const taken = edits.takeChange('big')
+  assert.deepEqual(taken.scene, layoutScene)
+  assert.equal(taken.look.shape, 'circle')
+  const undone = undoSceneChange(changed, taken, { workArea: { x: 0, y: 0, width: 1920, height: 1040 } })
+  assert.deepEqual(sceneById(undone, 'big').layout, layoutScene.layout)
+  assert.equal(undone.settings.shape, 'circle')
+  assert.equal(undone.settings.frameEffect, 'none')
+  assert.equal(undone.settings.size, 540)
+})
+
+test('reordering moves a Scene by any number of places (drag and Alt+arrow)', () => {
+  const state = live([scene('a', 'A'), scene('b', 'B'), scene('c', 'C'), scene('d', 'D')], {}, 'a')
+  assert.deepEqual(ids(reorderScene(state, 'a', 2)), ['b', 'c', 'a', 'd'])
+  assert.deepEqual(ids(reorderScene(state, 'd', -3)), ['d', 'a', 'b', 'c'])
+  assert.deepEqual(ids(reorderScene(state, 'b', 9)), ['a', 'c', 'd', 'b'], 'clamped to the end')
+  assert.equal(reorderScene(state, 'a', 2).activeSceneId, 'a')
+})
+
+test('the edit windows: Undo lives 10 seconds after a change, a delete 6 seconds', () => {
+  let clock = 1000
+  const edits = createSceneEdits({ now: () => clock })
+  const original = scene('one', 'One', { size: 300 })
+  const state = live([original, scene('two', 'Two')], { size: 300 }, 'one')
+  edits.track(live([original, scene('two', 'Two')]), { ...state, appliedScene: original })
+  assert.deepEqual(edits.view('one'), { sceneUndo: null, sceneDeleted: null, sceneSaved: null })
+
+  const first = followLiveLook(state, sanitizeSettings({ ...state.settings, size: 400 }))
+  edits.track(state, first)
+  clock += 4000
+  const second = followLiveLook(first, sanitizeSettings({ ...first.settings, size: 500 }))
+  edits.track(first, second)
+  assert.equal(SCENE_UNDO_MS, 10_000)
+  assert.deepEqual(edits.view('one').sceneUndo, { id: 'one', endsAt: clock + SCENE_UNDO_MS })
+  assert.deepEqual(edits.view('one').sceneSaved, { id: 'one', at: clock })
+  // Undo goes back to how the Scene was when it went on camera, not one step.
+  assert.deepEqual(edits.takeChange('one').scene, original)
+  assert.equal(edits.takeChange('one'), undefined, 'one undo per window')
+
+  // After the window closes the next change starts a new one from the Scene as it is then.
+  const third = followLiveLook(second, sanitizeSettings({ ...second.settings, size: 520 }))
+  edits.track(second, third)
+  clock += SCENE_UNDO_MS + 1
+  assert.equal(edits.view('one').sceneUndo, null)
+  assert.equal(edits.takeChange('one'), undefined)
+
+  // Switching Scenes closes the window.
+  const fourth = followLiveLook(third, sanitizeSettings({ ...third.settings, size: 530 }))
+  edits.track(third, fourth)
+  const switched = applyScene(fourth, 'two')
+  edits.track(fourth, switched)
+  assert.equal(edits.view('two').sceneUndo, null)
+
+  const deleted = deleteScene(switched, 'one')
+  edits.track(switched, deleted)
+  assert.equal(SCENE_DELETE_UNDO_MS, 6000)
+  assert.deepEqual(edits.view('two').sceneDeleted, { id: 'one', name: 'One', index: 0, endsAt: clock + SCENE_DELETE_UNDO_MS })
+  clock += SCENE_DELETE_UNDO_MS + 1
+  assert.equal(edits.view('two').sceneDeleted, null)
+  assert.equal(edits.takeDelete(), undefined)
+})
+
+test('Scene tiles draw the camera where it really is on its display', () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 }
+  const workArea = { x: 0, y: 0, width: 1920, height: 1040 }
+  const exact = scene('exact', 'Exact', { size: 288, shape: 'circle', position: { x: 100, y: 200 } })
+  const right = { id: 'big', name: 'Big right', settings: settingsForPreset({}), layout: { size: 540, position: 'right' } }
+  const settings = sanitizeSettings({ size: 288, shape: 'circle', position: { x: 1500, y: 600 }, presets: [exact, right] })
+  const previews = scenePreviews(settings, { workArea, workAreaAt: () => workArea, displayAt: () => display })
+  // The camera surface sits inside the window's chrome.
+  assert.deepEqual(previews.scenes.exact, {
+    x: (100 + OVERLAY_CHROME.left) / 1920,
+    y: (200 + OVERLAY_CHROME.top) / 1080,
+    width: 288 / 1920,
+    height: 288 / 1080,
+  })
+  const big = previews.scenes.big
+  assert.equal(Math.round(big.width * 1920), 540)
+  // Right place: the camera's right edge is the 32 px margin from the work area's edge.
+  assert.equal(Math.round((big.x + big.width) * 1920), 1920 - 32)
+  assert.deepEqual(previews.live, {
+    x: (1500 + OVERLAY_CHROME.left) / 1920,
+    y: (600 + OVERLAY_CHROME.top) / 1080,
+    width: 288 / 1920,
+    height: 288 / 1080,
+  })
+  // The live window's real bounds win over a stored position that may be older.
+  const moved = scenePreviews(settings, { workArea, workAreaAt: () => workArea, displayAt: () => display, liveBounds: { x: 0, y: 0, ...overlayDimensionsFor(settings) } })
+  assert.equal(moved.live.x, OVERLAY_CHROME.left / 1920)
 })

@@ -114,9 +114,9 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 
 - Resizing the Overlay by hand sets the small size, also while a large layout is showing (holding a corner still does not). Then a later `"small"` and "Live small corner" restore that hand-picked size. The prompter can check `smallSize` in the status and reset it with `POST /camframe/small-size`.
 - Saving a seventh Scene from Inline settings still drops the oldest Scene, and importing past six still skips new names (KG-09 area). Only Prompter link saves refuse instead.
-- Saving over a layout Scene from Inline settings turns it into a snapshot Scene (it then applies its saved look again).
+- Saving over a layout Scene from Inline settings, or changing the look by hand while it is on camera (autosave, ADR 0037), turns it into a snapshot Scene (it then applies its saved look again, and the status reports `kind: "snapshot"`).
 - A very large `margin` at a bottom place on a short display is not met in full (the window is kept on screen), and the cue answer still says `clamped: false`.
-- Resizing the Overlay by hand while a Scene is active leaves that Scene marked active (the tray tick and the status `activeScene`), although the camera no longer matches it. This is older behaviour (the hand-resize handler never cleared it before API 2) and is unchanged here; a prompter checking a cue should compare `view` too.
+- Resizing the Overlay by hand while a Scene is active leaves that Scene marked active (the tray tick and the status `activeScene`). Since ADR 0037 (2026-11-09) that is right: the resize is saved into the active Scene, so the camera matches it again.
 - Going back to an older CamFrame build (before schema 14) and letting it save drops the new fields: layout Scenes become ordinary snapshot Scenes and the small size resets to the camera size when API 2 opens them again. Save the layout Scenes again from the prompter after such a downgrade.
 - Layout planning uses Electron's work area in screen coordinates. Mixed display scaling and displays left of or above the primary one are not yet checked by hand (W-30, M-12).
 
@@ -124,3 +124,17 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 
 **Status:** Open, 2026-11-06 (found in the 0.7.0 release review).
 **Evidence:** `docs/rebuild-guide.md` still says Preferences schema 12 and "schema-12 migration", has no reconstruction step for the Prompter link or `src/prompter-control.js`, and still lists "notices" for Scenes without ADR 0036. The Prompter link predates 0.7.0; `src/prompter-control.js` and schema 14 are new in 0.7.0, so 0.7.0 widened the gap.
+
+## KG-16 — Scenes tab autosave and Undo lack Windows hand checks
+
+**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132).
+**Evidence:** Automated: unit tests (`followLiveLook`, `createSceneEdits`, `restoreScene`, `undoSceneChange`, `scenePreviews`, the Scenes tab model, the schema-15 load fixtures) and a real-Electron run on Linux with Chromium's synthetic camera (`docs/verification/runs/2026-11-09-scenes-tab.md`): open the tab, apply, autosave a shape change, Undo, rename, Save look, delete and Ctrl+Z, Alt+arrow, list/grid, Escape, the Prompter link status and a cue by name, and the saved file. Browser screenshots of both views from `kit shots`.
+
+Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.md`):
+
+- A real drag of the Overlay and a real corner resize saving into the active Scene (the smoke changes the look through the bridge and the toolbar; native pointer polling cannot be faked).
+- Whether the tiles match the real screen on Lex's displays: the tile is a 16:9 screen, so on a display of another shape the camera's place is right as a share of the display but the screen around it is drawn 16:9.
+- Dragging Scenes into a new order in the transparent, always-on-top Overlay window.
+- That updating a PC where Start at login was on stops CamFrame starting at sign-in (the one-time unregister runs only in a packaged build).
+- Screen reader names for the tiles, the saved state and the delete announcement (NVDA or Narrator).
+- A hand change can no longer be tried "outside" the active Scene: it is saved into it. Undo (10 s) or switching to another Scene first are the only ways back.

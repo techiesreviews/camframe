@@ -67,9 +67,32 @@ test('every camera shape is clipped in CSS', () => {
   assert.match(overlayCss, /\.overlay\[data-fullscreen='true'\] \.camera-surface\s*\{[^}]*clip-path:\s*inset\(0\)/s)
 })
 
-test('Scene controls are available in the reachable Overlay', () => {
-  assert.match(overlayHtml, /id="overlay-preset-name"/)
-  assert.match(overlayHtml, /id="overlay-preset-select"/)
+test('the Scenes tab holds only Scenes; Start at login, the shortcut list and the Prompter link section are gone', () => {
+  const settings = overlayHtml.match(/<section class="inline-settings"[\s\S]*?<\/section>/)?.[0] ?? ''
+  assert.match(settings, /<div class="scenes-panel" id="scenes-panel" data-settings-panel="presets" role="group" aria-labelledby="scenes-title"><\/div>/)
+  assert.equal((settings.match(/data-settings-panel="presets"/g) ?? []).length, 1)
+  for (const gone of ['overlay-launch-toggle', 'shortcut-list', 'inline-prompter', 'overlay-prompter-toggle', 'overlay-prompter-full', 'overlay-prompter-small', 'overlay-prompter-margin', 'overlay-preset-select', 'Manage scenes']) {
+    assert.doesNotMatch(overlayHtml, new RegExp(gone))
+  }
+  assert.doesNotMatch(mainSource, /setLoginItemSettings\(\{ openAtLogin: settings/)
+  assert.match(overlaySource, /const scenesPanel = createScenesPanel\(\{/)
+  assert.match(overlaySource, /scenesPanel\.update\(state\)/)
+  // The settings stay open while Scenes are applied, saved and deleted (ADR 0037).
+  assert.doesNotMatch(read('scenes-panel.js'), /setControlsOpen|closeSettings\(\)\s*\n\s*camFrame/)
+})
+
+test('the Scenes tab uses only Phosphor glyphs that the embedded font maps', () => {
+  const icons = read('assets/icons.css')
+  const panel = read('scenes-panel.js')
+  const used = new Set([
+    ...[...panel.matchAll(/icon\('([a-z-]+)'\)/g)].map((match) => match[1]),
+    ...[...panel.matchAll(/viewButton\('[a-z]+', '[^']+', '([a-z-]+)'\)/g)].map((match) => match[1]),
+    ...[...panel.matchAll(/fileButton\('[a-z]+', '([a-z-]+)'/g)].map((match) => match[1]),
+  ])
+  for (const glyph of ['check', 'list', 'squares-four', 'pencil-simple', 'trash', 'arrow-counter-clockwise', 'plus']) {
+    assert.ok(used.has(glyph), glyph)
+  }
+  for (const glyph of used) assert.match(icons, new RegExp(`\\.ph-${glyph}::before \\{`), glyph)
 })
 
 test('Inline settings use tabs instead of one long control stack', () => {
@@ -94,13 +117,13 @@ test('framing uses the target tool without duplicate size or zoom controls', () 
   assert.match(overlaySource, /const framing = centeredFraming\(\)/)
 })
 
-test('presentation controls expose shortcuts, startup, tray Scenes, and notices', () => {
-  assert.match(overlayHtml, /id="overlay-launch-toggle"/)
+test('presentation controls expose shortcuts, tray Scenes, and notices', () => {
   assert.match(overlayHtml, /id="presentation-toast"[^>]*aria-live="polite"/)
   // Scene names are read out, never drawn (ADR 0036).
   assert.match(overlayHtml, /id="scene-announcer"[^>]*role="status" aria-live="polite"/)
-  assert.match(overlayCss, /\.scene-announcer \{[^}]*width: 1px;[^}]*clip-path: inset\(50%\)/)
-  assert.match(overlaySource, /camFrame\.onSceneAnnouncement\(\(name\) => \{\s*sceneAnnouncer\.textContent = ''/)
+  assert.match(overlayCss, /\.scene-announcer,\n\.visually-hidden \{[^}]*width: 1px;[^}]*clip-path: inset\(50%\)/)
+  assert.match(overlaySource, /function announce\(text\) \{\s*sceneAnnouncer\.textContent = ''/)
+  assert.match(overlaySource, /camFrame\.onSceneAnnouncement\(announce\)/)
   assert.match(mainSource, /if \(result\.announce\) announceScene\(result\.announce\)/)
   assert.match(mainSource, /label: 'Scenes', submenu: presetMenu/)
   assert.match(mainSource, /CommandOrControl\+Shift\+H/)
@@ -203,29 +226,19 @@ test('high contrast preserves boundaries, selection, focus, and status without e
   assert.doesNotMatch(highContrast, /var\(--effect-color\)/)
 })
 
-test('the Prompter link is an opt-in Scenes setting that closes with the app', () => {
-  const scenesPanel = overlayHtml.match(/<div class="inline-prompter" data-settings-panel="presets"[\s\S]*?<\/div>\n {10}<\/div>\n {8}<\/div>/)?.[0] ?? ''
-  assert.match(scenesPanel, /role="group" aria-labelledby="overlay-prompter-title"/)
-  assert.match(scenesPanel, /id="overlay-prompter-title"><i class="ph ph-scroll" aria-hidden="true"><\/i>Prompter link</)
-  assert.match(scenesPanel, /id="overlay-prompter-toggle"[^>]*type="checkbox" role="switch"/)
-  assert.doesNotMatch(scenesPanel, /id="overlay-prompter-toggle"[^>]*checked/)
-  assert.match(scenesPanel, /id="overlay-prompter-status"[^>]*aria-live="polite"/)
-  assert.match(scenesPanel, /id="overlay-prompter-options" hidden/)
-  assert.match(scenesPanel, /id="overlay-prompter-full"/)
-  assert.match(scenesPanel, /id="overlay-prompter-small"/)
-  assert.match(scenesPanel, /id="overlay-prompter-margin"[^>]*min="0" max="160"/)
+test('the Prompter link is opt-in through the toolbar button and closes with the app', () => {
   assert.match(mainSource, /prompterLink\.setEnabled\(settings\.prompterLink\)/)
   // A layout Scene from the tray, the cycle shortcut or a numbered shortcut plans on the live display.
   assert.match(mainSource, /sceneLibrary\.applyScene\(sceneState\(\), id, sceneContext\(\)\)/)
   assert.match(mainSource, /sceneLibrary\.cycleScene\(sceneState\(\), sceneContext\(\)\)/)
   assert.match(mainSource, /sceneLibrary\.applySceneAt\(sceneState\(\), index, sceneContext\(\)\)/)
-  // Resizing by hand sets the small size (KG-14): the geometry's onResize goes through the helper.
-  assert.match(mainSource, /onResize\(patch\) \{\s*settings = settingsAfterHandResize\(settings, patch\)/)
+  // Resizing by hand sets the small size (KG-14) and is saved into the active Scene (ADR 0037).
+  assert.match(mainSource, /onResize\(patch\) \{\s*commitState\(sceneLibrary\.followLiveLook\(sceneState\(\), settingsAfterHandResize\(settings, patch\)\), \{ tray: false \}\)/)
   assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\.prompterLink\)/)
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
 })
 
-test('the toolbar Prompter link button flips the same stored setting as the settings switch', () => {
+test('the toolbar Prompter link button turns the link on and off', () => {
   const toolbar = overlayHtml.match(/<nav class="hover-toolbar"[\s\S]*?<\/nav>/)?.[0] ?? ''
   const buttons = [...toolbar.matchAll(/<button type="button" id="([a-z-]+)"/g)].map((match) => match[1])
   assert.deepEqual(buttons, ['close-button', 'fullscreen-button', 'shape-button', 'position-button', 'prompter-button', 'controls-button'])
@@ -237,13 +250,13 @@ test('the toolbar Prompter link button flips the same stored setting as the sett
   assert.match(button, /<i class="ph ph-scroll" aria-hidden="true"><\/i>/)
   assert.match(button, /<span class="link-dot" aria-hidden="true"><\/span>/)
   assert.match(read('assets/icons.css'), /\.ph-scroll::before\s*\{\s*content:\s*'\\eb7a';/)
-  // One stored setting, one IPC path: both controls send `prompterLink` and render from prompterLinkView.
-  // Both controls flip the same request and send it.
-  const flip = /pendingPrompterLink = toggledPrompterLink\(pendingPrompterLink, state\.prompterLink\)\n(?: {2}prompterToggle\.checked = pendingPrompterLink\n)? {2}camFrame\.updateState\(\{ prompterLink: pendingPrompterLink \}\)/g
-  assert.equal(overlaySource.match(flip)?.length, 2)
-  assert.match(overlaySource, /prompterToggle\.addEventListener\('change', \(\) => \{\n {2}if \(!state\) \{\n[^}]*\}\n {2}pendingPrompterLink = toggledPrompterLink/)
+  // The button is the only control: it flips the stored `prompterLink` and renders from prompterLinkView.
+  const flip = /pendingPrompterLink = toggledPrompterLink\(pendingPrompterLink, state\.prompterLink\)\n {2}camFrame\.updateState\(\{ prompterLink: pendingPrompterLink \}\)/g
+  assert.equal(overlaySource.match(flip)?.length, 1)
   assert.match(overlaySource, /const link = prompterLinkView\(state\)/)
-  assert.match(overlaySource, /prompterToggle\.checked = link\.on/)
+  // Its description (the link status, for screen readers) stays in a visually hidden element.
+  assert.match(overlayHtml, /<p class="visually-hidden" id="overlay-prompter-status">/)
+  assert.match(overlaySource, /prompterStatus\.textContent = link\.status/)
   assert.match(overlaySource, /prompterButton\.setAttribute\('aria-pressed', String\(link\.on\)\)/)
   assert.match(overlaySource, /prompterButton\.dataset\.linkState = link\.state/)
   assert.match(overlayCss, /\.prompter-button\[data-link-state='error'\] \.link-dot\s*\{[^}]*background:\s*#f97316/)
@@ -251,7 +264,7 @@ test('the toolbar Prompter link button flips the same stored setting as the sett
 
 test('on/off settings are switches, with a forced-colors fallback and no motion when reduced', () => {
   const switches = overlayHtml.match(/type="checkbox"[^>]*>/g) ?? []
-  assert.equal(switches.length, 4)
+  assert.equal(switches.length, 2)
   for (const item of switches) assert.match(item, /role="switch"/)
   assert.match(overlayCss, /\.inline-toggle input\[role='switch'\]\s*\{[^}]*appearance:\s*none/)
   assert.match(overlayCss, /\.overlay\[data-high-contrast='true'\] \.inline-toggle input\[role='switch'\]:checked\s*\{[^}]*background:\s*Highlight/)

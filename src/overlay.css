@@ -618,128 +618,6 @@ video {
   display: block;
 }
 
-.preset-save-row,
-.preset-load-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 7px;
-}
-
-.preset-manager input[type='text'] {
-  min-width: 0;
-  height: 30px;
-  padding: 0 9px;
-  color: #f4f4f5;
-  border: 0;
-  border-radius: 7px;
-  outline: 1px solid rgb(255 255 255 / 12%);
-  outline-offset: -1px;
-  background: #202023;
-  font: 500 11px/1 'Segoe UI Variable', 'Segoe UI', sans-serif;
-}
-
-.preset-manager button {
-  height: 30px;
-  padding: 0 9px;
-  color: #d4d4d8;
-  border: 0;
-  border-radius: 7px;
-  outline: 1px solid rgb(255 255 255 / 12%);
-  outline-offset: -1px;
-  background: #202023;
-  cursor: pointer;
-  font: 600 10px/1 'Segoe UI Variable', 'Segoe UI', sans-serif;
-}
-
-.preset-manager button:disabled {
-  opacity: 0.42;
-  cursor: default;
-}
-
-.scene-manager {
-  color: #71717a;
-  font: 600 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
-}
-
-.scene-manager summary {
-  width: max-content;
-  cursor: pointer;
-}
-
-.scene-manager[open] {
-  display: grid;
-  gap: 7px;
-}
-
-.scene-order-row,
-.scene-file-row {
-  display: grid;
-  gap: 6px;
-}
-
-.scene-order-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.scene-file-row {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.scene-order-row button,
-.scene-file-row button {
-  width: 100%;
-  padding: 0 5px;
-}
-
-.scene-message {
-  margin: 0;
-  color: #a1a1aa;
-  font: 500 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
-}
-
-.scene-message:empty {
-  display: none;
-}
-
-.inline-presentation {
-  display: grid;
-  gap: 8px;
-  padding-top: 2px;
-  border-top: 1px solid rgb(255 255 255 / 8%);
-}
-
-.shortcut-list {
-  display: grid;
-  gap: 5px;
-  color: #71717a;
-  font: 500 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
-}
-
-.shortcut-list > div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.shortcut-list kbd {
-  flex: 0 0 auto;
-  padding: 1px 4px;
-  color: #a1a1aa;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 4px;
-  background: #202023;
-  font: inherit;
-}
-
-.inline-prompter {
-  display: grid;
-  gap: 2px;
-  padding-top: 2px;
-  border-top: 1px solid rgb(255 255 255 / 8%);
-}
-
 .inline-group-title {
   display: flex;
   align-items: center;
@@ -753,64 +631,635 @@ video {
   font-size: 14px;
 }
 
-.prompter-status {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 0 0 6px;
-  color: #a1a1aa;
-  font: 500 10px/14px 'Segoe UI Variable', 'Segoe UI', sans-serif;
-}
-
-.prompter-status::before {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  margin-top: 4px;
-  border-radius: 50%;
-  background: #52525b;
-  content: '';
-}
-
-.prompter-status[data-state='starting']::before {
-  background: #a1a1aa;
-}
-
-.prompter-status[data-state='on']::before {
-  background: #22c55e;
-}
-
-.prompter-status[data-state='error']::before {
-  background: #f97316;
-}
-
-/* The link's choices sit in one quiet inset, shown only while the link is on. */
-.inline-prompter-options {
+/* The Scenes tab (ADR 0037): Scenes as a list or a grid of small screens. The colours are the
+   Inline settings ones; state shows on the controls themselves. */
+.scenes-panel {
+  --scene-font: 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  --scene-text: #f4f4f5;
+  --scene-muted: #a1a1aa;
+  --scene-faint: #71717a;
+  --scene-raised: #27272a;
+  --scene-hover: #1c1c1f;
+  --scene-field: #202023;
+  --scene-line: rgb(255 255 255 / 12%);
+  --scene-line-soft: rgb(255 255 255 / 8%);
+  --scene-focus: #fb923c;
+  --scene-saved: #86efac;
   display: grid;
+  min-width: 0;
   gap: 8px;
-  padding: 8px;
-  border-radius: 9px;
-  background: rgb(255 255 255 / 4%);
-  transition:
-    opacity 160ms ease-out,
-    translate 160ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-@starting-style {
-  .inline-prompter-options {
-    opacity: 0;
-    translate: 0 -4px;
+.scenes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scenes-head h2 {
+  margin: 0;
+}
+
+.scene-view-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 5%);
+}
+
+.scene-view-switch button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  color: var(--scene-faint);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.scene-view-switch button:hover {
+  color: #e4e4e7;
+}
+
+.scene-view-switch button[aria-pressed='true'] {
+  color: #fafafa;
+  background: var(--scene-raised);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 7%);
+}
+
+.scenes-panel :is(button, input):focus-visible {
+  outline: 2px solid var(--scene-focus);
+  outline-offset: 1px;
+}
+
+.scene-slot {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--scene-muted);
+  border-radius: 5px;
+  background: #18181b;
+  box-shadow: inset 0 0 0 1px var(--scene-line-soft);
+  font: 600 10px/1 var(--scene-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.scene-slot.dashed {
+  border: 1px dashed rgb(255 255 255 / 24%);
+  background: transparent;
+  box-shadow: none;
+}
+
+.active > .scene-main .scene-slot:not(.saved) {
+  color: #0c0c0d;
+  background: var(--scene-text);
+  box-shadow: none;
+}
+
+.scene-slot.saved {
+  color: #0c0c0d;
+  background: var(--scene-saved);
+  box-shadow: none;
+  font-size: 11px;
+}
+
+.scene-icon-button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--scene-muted);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.scene-icon-button:hover {
+  color: #fafafa;
+  background: #2a2a2e;
+}
+
+.scene-icon-button:active,
+.scene-button:active:not(:disabled),
+.scene-primary:active:not(:disabled) {
+  scale: 0.96;
+}
+
+.scene-icon-button.danger:hover,
+.scene-button.danger:hover {
+  color: #fca5a5;
+  background: rgb(239 68 68 / 14%);
+}
+
+.scene-button,
+.scene-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  color: #d4d4d8;
+  border: 0;
+  border-radius: 7px;
+  outline: 1px solid var(--scene-line);
+  outline-offset: -1px;
+  background: var(--scene-field);
+  cursor: pointer;
+  font: 600 10px/1 var(--scene-font);
+  white-space: nowrap;
+}
+
+.scene-button:hover:not(:disabled) {
+  color: #fafafa;
+  background: #2a2a2e;
+}
+
+.scene-button:disabled,
+.scene-primary:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.scene-primary {
+  color: #0c0c0d;
+  outline-color: transparent;
+  background: var(--scene-text);
+}
+
+.scene-primary:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.scene-primary.icon-only {
+  width: 30px;
+  padding: 0;
+}
+
+.scene-primary i,
+.scene-button i {
+  font-size: 13px;
+}
+
+.scene-field {
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  color: var(--scene-text);
+  border: 0;
+  border-radius: 7px;
+  outline: 1px solid var(--scene-line);
+  outline-offset: -1px;
+  background: var(--scene-field);
+  font: 500 11px/1 var(--scene-font);
+  user-select: text;
+}
+
+.scene-field[aria-invalid='true'] {
+  outline: 2px solid #f97316;
+}
+
+.scene-name {
+  overflow: hidden;
+  color: var(--scene-text);
+  font: 600 11px/15px var(--scene-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-meta {
+  overflow: hidden;
+  color: var(--scene-faint);
+  font: 500 10px/13px var(--scene-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+/* The Undo line runs out with the time Undo has left. */
+.scene-drain {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--scene-muted);
+  transform-origin: left;
+  animation-name: scene-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  pointer-events: none;
+}
+
+@keyframes scene-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
   }
 }
 
-.inline-setting-row {
-  grid-template-columns: 64px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+.scene-item {
+  position: relative;
 }
 
-.inline-prompter-options[hidden] {
-  display: none;
+.scene-item.drag-over {
+  box-shadow: inset 0 2px 0 var(--scene-focus);
+}
+
+/* List view */
+.scene-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scene-list .scene-item {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.scene-list .scene-item:hover:not(.active, .scene-editing, .scene-deleted) {
+  background: var(--scene-hover);
+}
+
+.scene-list .scene-item.active {
+  background: var(--scene-raised);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 7%);
+}
+
+.scene-grip {
+  display: grid;
+  align-self: stretch;
+  place-items: center;
+  width: 14px;
+  color: #52525b;
+  cursor: grab;
+  font-size: 12px;
+  opacity: 0;
+}
+
+.scene-item:is(:hover, :focus-within) .scene-grip {
+  opacity: 1;
+}
+
+.scene-list .scene-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 4px 0 0;
+  color: inherit;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.scene-actions {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: flex;
+  gap: 1px;
+  padding-left: 6px;
+  border-radius: 7px;
+  background: var(--scene-hover);
+  box-shadow: -10px 0 10px var(--scene-hover);
+  opacity: 0;
+  pointer-events: none;
+  translate: 0 -50%;
+}
+
+.scene-list .scene-item.active .scene-actions {
+  background: var(--scene-raised);
+  box-shadow: -10px 0 10px var(--scene-raised);
+}
+
+.scene-list .scene-item:is(:hover, :focus-within) .scene-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.scene-list .scene-item.undoable .scene-actions {
+  right: 30px;
+}
+
+.scene-undo-row {
+  flex: none;
+  margin-right: 3px;
+}
+
+.scene-list .scene-editing {
+  gap: 6px;
+  padding: 5px 4px 5px 14px;
+  background: var(--scene-raised);
+}
+
+.scene-list .scene-editing .scene-field {
+  flex: 1 1 0;
+  width: 0;
+}
+
+.scene-deleted {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 0 14px;
+  color: var(--scene-faint);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 3%);
+  font: 500 11px/1 var(--scene-font);
+}
+
+.scene-deleted-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 8px 0 14px;
+  color: var(--scene-muted);
+  border: 1px dashed rgb(255 255 255 / 16%);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.scene-add > i {
+  color: var(--scene-faint);
+  font-size: 14px;
+}
+
+.scene-add .scene-name {
+  color: #d4d4d8;
+}
+
+button.scene-add:hover {
+  color: #fafafa;
+  border-color: rgb(255 255 255 / 30%);
+  background: rgb(255 255 255 / 3%);
+}
+
+.scene-add.full,
+.scene-add-tile.full {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.scene-add.big {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.scene-add.big .scene-screen {
+  width: 62%;
+}
+
+.scene-save-form {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--scene-raised);
+}
+
+/* A small screen: the camera drawn at its real place, size, shape and frame. */
+.scene-screen {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  background: #0f0f11;
+}
+
+.scene-screen::before {
+  position: absolute;
+  top: 14%;
+  left: 8%;
+  width: 46%;
+  height: 26%;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 6%);
+  box-shadow: 0 12px 0 0 rgb(255 255 255 / 3%);
+  content: '';
+}
+
+.scene-screen-camera {
+  position: absolute;
+  background: #71717a;
+}
+
+.scene-screen.live .scene-screen-camera {
+  background: #a1a1aa;
+}
+
+/* Grid view */
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.scene-tile {
+  position: relative;
+  min-width: 0;
+  border-radius: 9px;
+}
+
+.scene-tile.wide {
+  grid-column: 1 / -1;
+}
+
+.scene-tile .scene-main,
+.scene-add-tile {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 5px;
+  color: inherit;
+  border: 0;
+  border-radius: 9px;
+  background: #18181b;
+  box-shadow: inset 0 0 0 1px var(--scene-line-soft);
+  cursor: pointer;
+  text-align: left;
+}
+
+.scene-tile .scene-main:hover {
+  background: #1f1f22;
+}
+
+.scene-tile.active .scene-main {
+  background: var(--scene-raised);
+  box-shadow: inset 0 0 0 1.5px #eeeeef;
+}
+
+.scene-add-tile {
+  padding: 4px;
+  border: 1px dashed rgb(255 255 255 / 16%);
+  background: transparent;
+  box-shadow: none;
+}
+
+button.scene-add-tile:hover {
+  border-color: rgb(255 255 255 / 30%);
+  background: rgb(255 255 255 / 3%);
+}
+
+.scene-add-tile .scene-name {
+  color: #d4d4d8;
+}
+
+.scene-add-tile.full {
+  align-content: end;
+  height: 100%;
+  min-height: 40px;
+}
+
+.scene-tile.wide .scene-add-tile .scene-screen {
+  width: 62%;
+  margin: 0 auto;
+}
+
+.scene-tile.wide .scene-add-tile .scene-foot {
+  justify-content: center;
+}
+
+.scene-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scene-tile.undoable .scene-foot {
+  padding-right: 24px;
+}
+
+.scene-undo-tile {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  background: rgb(12 12 13 / 85%);
+}
+
+.scene-edit {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  background: rgb(12 12 13 / 80%);
+  opacity: 0;
+}
+
+.scene-tile:is(:hover, :focus-within) .scene-edit {
+  opacity: 1;
+}
+
+.scene-panel {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  border-radius: 9px;
+  background: var(--scene-raised);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 7%);
+}
+
+.scene-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scene-panel-row .scene-field {
+  flex: 1 1 0;
+  width: 0;
+}
+
+.scene-grid .scene-deleted {
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 76px;
+  padding: 0 6px;
+  overflow: hidden;
+  font-size: 10px;
+  text-align: center;
+}
+
+.scene-grid .scene-deleted-name {
+  max-width: 100%;
+}
+
+.scene-files {
+  display: flex;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--scene-line-soft);
+}
+
+.scene-file {
+  flex: 1;
+  height: 26px;
+  color: var(--scene-muted);
+  outline-color: var(--scene-line-soft);
+  background: transparent;
+}
+
+.scene-file.ok {
+  color: var(--scene-saved);
+}
+
+.scene-file.error {
+  color: #fdba74;
 }
 
 .inline-toggle-list {
@@ -1149,7 +1598,8 @@ video {
 }
 
 /* Read out by screen readers each time a Scene is applied or saved; never drawn, so nothing shows on stream. */
-.scene-announcer {
+.scene-announcer,
+.visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1236,13 +1686,12 @@ video {
 .overlay[data-high-contrast='true'] :is(
   .hover-toolbar button,
   .settings-tabs button,
-  .preset-manager button,
+  .scenes-panel button,
   .onboarding-coachmark button,
   .inline-setting select,
   .inline-toggle input[role='switch'],
   .inline-effect-color input[type='text'],
-  .preset-manager input[type='text'],
-  .shortcut-list kbd
+  .scene-field
 ) {
   color: ButtonText;
   border: 1px solid ButtonText;
@@ -1286,23 +1735,65 @@ video {
   background: HighlightText;
 }
 
-/* Without color, the dots take the text color, and a problem shows as a hollow dot. */
-.overlay[data-high-contrast='true'] .prompter-button .link-dot,
-.overlay[data-high-contrast='true'] .prompter-status::before {
+/* Without color, the dot takes the text color, and a problem shows as a hollow dot. */
+.overlay[data-high-contrast='true'] .prompter-button .link-dot {
   forced-color-adjust: none;
   background: currentColor;
   box-shadow: none;
 }
 
-.overlay[data-high-contrast='true'] .prompter-button[data-link-state='error'] .link-dot,
-.overlay[data-high-contrast='true'] .prompter-status[data-state='error']::before {
+.overlay[data-high-contrast='true'] .prompter-button[data-link-state='error'] .link-dot {
   border: 2px solid currentColor;
   background: transparent;
 }
 
-.overlay[data-high-contrast='true'] .inline-prompter-options {
+/* Scenes tab: the small screens keep their drawing in system colours, the Scene on camera is marked
+   with Highlight, and a saved check and the Undo line stay visible. */
+.overlay[data-high-contrast='true'] :is(.scene-screen, .scene-screen-camera, .scene-slot, .scene-drain) {
+  forced-color-adjust: none;
+}
+
+.overlay[data-high-contrast='true'] .scene-screen {
   border: 1px solid CanvasText;
   background: Canvas;
+}
+
+.overlay[data-high-contrast='true'] .scene-screen::before {
+  display: none;
+}
+
+.overlay[data-high-contrast='true'] .scene-screen-camera {
+  background: CanvasText;
+  box-shadow: none !important;
+}
+
+.overlay[data-high-contrast='true'] .scene-slot {
+  color: CanvasText;
+  border: 1px solid CanvasText;
+  background: Canvas;
+  box-shadow: none;
+}
+
+.overlay[data-high-contrast='true'] .scene-slot.dashed {
+  border-style: dashed;
+}
+
+.overlay[data-high-contrast='true'] .scene-item.active > .scene-main {
+  border: 2px solid Highlight;
+}
+
+.overlay[data-high-contrast='true'] :is(.active > .scene-main .scene-slot, .scene-slot.saved) {
+  color: HighlightText;
+  border-color: Highlight;
+  background: Highlight;
+}
+
+.overlay[data-high-contrast='true'] .scene-drain {
+  background: CanvasText;
+}
+
+.overlay[data-high-contrast='true'] .scene-field[aria-invalid='true'] {
+  outline: 2px dashed CanvasText;
 }
 
 .overlay[data-high-contrast='true'] .hover-toolbar button[data-onboarding-target='true'] {
@@ -1329,11 +1820,9 @@ video {
   .inline-resolution-setting legend,
   .inline-resolution-grid span,
   .inline-group-title,
-  .inline-group-title i,
-  .scene-manager,
-  .scene-message,
-  .prompter-status,
-  .shortcut-list,
+  .scene-meta,
+  .scene-name,
+  .scene-deleted,
   .onboarding-kicker,
   .onboarding-copy h2,
   .onboarding-copy > p,
@@ -1345,8 +1834,7 @@ video {
 
 .overlay[data-high-contrast='true'] :is(
   .settings-tabs,
-  .inline-presentation,
-  .inline-prompter,
+  .scene-files,
   .inline-toggle-list,
   .inline-toggle + .inline-toggle,
   .onboarding-copy .onboarding-note
@@ -1400,7 +1888,6 @@ video {
   .selection-corner,
   .onboarding-demo-mouse,
   .prompter-button .link-dot,
-  .inline-prompter-options,
   .inline-toggle input[role='switch'],
   .inline-toggle input[role='switch']::before {
     animation: none;
@@ -1413,5 +1900,10 @@ video {
 
   .presentation-toast {
     animation: none;
+  }
+
+  /* The Undo line only shows time running out; Undo itself stays for its full time. */
+  .scene-drain {
+    display: none;
   }
 }

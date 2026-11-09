@@ -140,6 +140,10 @@ test('main checks and normalizes renderer arguments', async () => {
   send('preset:reorder', 'one', 'up')
   send('preset:reorder', 'one', -1)
   send('preset:save', undefined, null)
+  send('preset:rename', 'one', '  Intro ')
+  send('preset:rename', 'one')
+  send('preset:undo-change', 'ignored')
+  send('preset:undo-delete')
   send('overlay:interactive', 'yes')
   send('overlay:resize-start', { handle: 'top-left' })
   send('overlay:resize-start', 'top-left')
@@ -154,6 +158,10 @@ test('main checks and normalizes renderer arguments', async () => {
     ['updateState', { size: 320 }],
     ['reorderPreset', 'one', -1],
     ['savePreset', '', ''],
+    ['renamePreset', 'one', '  Intro '],
+    ['renamePreset', 'one', ''],
+    ['undoPresetChange'],
+    ['undoPresetDelete'],
     ['setOverlayInteractive', true],
     ['startOverlayResize', 'top-left'],
     ['reportAccessibilityPreferences', { reducedMotion: true, highContrast: false }],

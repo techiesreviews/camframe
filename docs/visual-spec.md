@@ -66,11 +66,11 @@ In Full screen, the camera surface becomes `inset:0`, width/height 100%, square 
 - Selects and text inputs are 30 px high with 7 px radius, `#202023` background, and a 12%-white inset outline. Standard horizontal padding is 9 px.
 - Glow hex input is 68×30 px, uppercase 10 px monospace. Six swatches are 18×18 px with 5 px radius and 4 px gaps: orange `#fb923c`, cyan `#22d3ee`, violet `#8b5cf6`, pink `#ec4899`, green `#22c55e`, white `#ffffff`. Selected swatch has a 2 px white outline plus 1 px offset.
 - Sliders have a 3 px `#3f3f46` pill track and 12 px `#f4f4f5` circular thumb. Output uses tabular 10 px numerals.
-- Scene action buttons are 30 px high; management grids use three equal columns for order/delete and two for import/export. Disabled controls use opacity 0.42.
+- Scenes tab (ADR 0037): a "Scenes" heading (600 12/16 px `#f4f4f5`) with a two-button list/grid switch at the right (26×22 px Phosphor `list` and `squares-four`, `#71717a`, selected `#27272a` with a 7%-white inset). Scene numbers are 18 px squares (5 px radius, 600 10 px tabular numerals): `#18181b` with a hairline normally, `#f4f4f5` with dark text for the Scene on camera, `#86efac` with a check for 1.8 s after it saves itself, dashed for the slot that saves the live look.
+- List rows are 40 px high (8 px radius): number, name (600 11/15 px) and a 10/13 px `#71717a` line "shape · size · place · frame"; the Scene on camera sits on `#27272a`. A grip shows on hover; pencil and trash appear at the right on hover or focus. Grid tiles are two columns, 6 px apart: a 16:9 `#0f0f11` screen (5 px radius) drawing the camera in `#71717a` at its real place, width and shape with its border or glow, over a number and name; the Scene on camera has a 1.5 px `#eeeeef` inset ring, an edit pencil shows on hover. The live look is drawn in `#a1a1aa`.
+- Undo after a change is a 24 px (grid 22 px) `arrow-counter-clockwise` button on the Scene, with a 2 px `#a1a1aa` line along the bottom that runs out over 10 s (hidden under reduced motion). A deleted Scene keeps its place as a 3%-white row or tile, "<name> deleted" in `#71717a` with an Undo button and a 6 s line. The save slot is a dashed 16%-white box; the save form and rename sit on `#27272a` with a 28 px field and a check button (`#f4f4f5` filled, "Replace" when the name is taken). Import/Export are two quiet 26 px buttons under a hairline; their result shows on them (green check "Imported 2", orange warning "Not imported") for 2.4 s. Disabled controls use opacity 0.42.
 - Toggle rows have 7 px vertical padding and subtle separators. On/off settings are 28×16 px switches (`role="switch"` checkboxes drawn in CSS): `#3f3f46` track with a 12 px `#a1a1aa` knob when off, `#f4f4f5` track with a `#0c0c0d` knob when on; the knob slides 12 px over 160 ms. Focus uses the 2 px orange outline with 2 px offset.
-- The Prompter link group (Scenes) has a heading row (14 px `#a1a1aa` scroll icon, “Prompter link” at 600 12/16 px `#f4f4f5`, switch), a 10/14 px `#a1a1aa` status line led by a 6 px dot (`#52525b` off, `#a1a1aa` starting, `#22c55e` on, `#f97316` problem), and, only while on, an inset (8 px padding, 9 px radius, 4%-white background) holding Face full and Face small as 64 px label + select rows and the Corner margin slider. The inset fades in from 4 px above over 160 ms.
 - Camera quality uses one full-width resolution select; there is no separate Full screen quality column.
-- Scene keyboard hints are muted 10/14 px; `<kbd>` chips have 1×4 px padding, 4 px radius, hairline border, and `#202023` background.
 
 ## Onboarding
 
@@ -97,7 +97,7 @@ Progressive blur renders the live second video through `blur(configured px) satu
 
 ## Scene notice
 
-Since ADR 0036 it appears only for deleted, imported or exported Scenes and "No saved scenes", not when a Scene is applied or saved; a hidden live region (`#scene-announcer`) carries the Scene name for screen readers.
+Since ADR 0036 it does not appear when a Scene is applied or saved, and since ADR 0037 not for a deleted, imported or exported Scene either (the Scenes tab shows those on its controls); it remains only for "No saved scenes" (the next-Scene shortcut with none saved). A hidden live region (`#scene-announcer`) carries the Scene name for screen readers.
 
 The notice has 7×10 px padding, 8 px radius, 10%-white border, 88%-opaque `#0c0c0d`, `0 8px 20px` black/28% shadow, white 600 weight 11/16 px text, ellipsis, and no input. It appears with a 140 ms fade/up animation and is removed after 1.6 s.
 
