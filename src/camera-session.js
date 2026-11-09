@@ -35,6 +35,11 @@ function stopTracks(stream) {
 // applying quality changes in order without renegotiating, feeding the blur Frame effect's second
 // video, and scanning devices. The Overlay renders what the callbacks report.
 //
+// Every change of capture mode on a live track is a visible risk on Windows (stale, black or another
+// camera's frames, GitHub issue 5), so the track is only switched when the final Camera quality
+// differs from the one it runs at, and a quality chosen while the camera starts is applied before
+// the camera is shown.
+//
 // `mediaDevices` is `navigator.mediaDevices` (or a fake). Without it the session runs as the
 // browser QA preview: it reports a working camera and never scans devices.
 export function createCameraSession({
@@ -50,6 +55,8 @@ export function createCameraSession({
   let current
   let activeStream
   let activeCameraId
+  // The Camera quality the active track runs at: the one it opened with, or the last one applied.
+  let activeResolution
   let startRequest = 0
   let deviceRequest = 0
   let qualityUpdates = Promise.resolve()
@@ -92,9 +99,12 @@ export function createCameraSession({
   function queueQualityUpdate() {
     qualityUpdates = qualityUpdates.then(async () => {
       const track = activeTrack()
+      const { resolution } = current
       if (!track || track.readyState === 'ended' || !track.applyConstraints) return
+      if (resolution === activeResolution) return
       try {
-        await track.applyConstraints(cameraTrackConstraintsFor({ resolution: current.resolution }))
+        await track.applyConstraints(cameraTrackConstraintsFor({ resolution }))
+        if (track === activeTrack()) activeResolution = resolution
       } catch {
         // An unsupported profile leaves the camera running at its current mode.
       }
@@ -102,15 +112,13 @@ export function createCameraSession({
     return qualityUpdates
   }
 
-  async function getStream(cameraId) {
+  async function getStream(cameraId, resolution) {
     try {
-      return await mediaDevices.getUserMedia(
-        cameraConstraintsFor(cameraId, { resolution: current.resolution }),
-      )
+      return await mediaDevices.getUserMedia(cameraConstraintsFor(cameraId, { resolution }))
     } catch (error) {
       if (error.name !== 'OverconstrainedError') throw error
       return mediaDevices.getUserMedia(
-        cameraConstraintsFor(cameraId, { allowSlowerFrameRate: true, resolution: current.resolution }),
+        cameraConstraintsFor(cameraId, { allowSlowerFrameRate: true, resolution }),
       )
     }
   }
@@ -141,13 +149,19 @@ export function createCameraSession({
     }
 
     try {
-      const stream = await getStream(cameraId)
+      const { resolution } = current
+      const stream = await getStream(cameraId, resolution)
       if (request !== startRequest) {
         stopTracks(stream)
         return
       }
       activeStream = stream
       activeCameraId = cameraId
+      activeResolution = resolution
+      // A Camera quality chosen while the camera was starting was skipped then; apply it now,
+      // before anything is shown, so the change of mode is never seen.
+      if (current.resolution !== resolution) await queueQualityUpdate()
+      if (request !== startRequest) return
       video.srcObject = stream
       const [track] = stream.getVideoTracks()
       if (track && 'contentHint' in track) track.contentHint = 'motion'

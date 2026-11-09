@@ -128,7 +128,7 @@ The camera session in `camera-session.js` owns this flow behind `update({cameraI
 6. Progressive blur conditionally attaches the same stream to the second video; other effects detach and pause it.
 7. Enumeration after capture obtains permission-revealed labels and reports normalized device options for the Overlay to render. A selected camera that is missing falls back to the default camera.
 
-Mode changes do not touch the track profile. A Camera quality change appends one `applyConstraints()` operation to a Promise chain so rapid user changes settle in order. Failures are swallowed and preserve the working profile.
+Mode changes do not touch the track profile. A Camera quality change appends one `applyConstraints()` operation to a Promise chain so rapid user changes settle in order. Each operation applies the latest Camera quality and is skipped when the track already runs at it, so a burst of changes switches the camera mode at most once and a burst that ends on the running quality switches nothing. A Camera quality chosen while the camera is starting is applied to the new track before the stream is attached to the video, and a newer camera start supersedes it. Failures are swallowed and preserve the working profile, which the session remembers as the track's quality.
 
 ## Native Overlay interaction
 

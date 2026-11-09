@@ -229,7 +229,7 @@ test('switching to a different camera stops the previous stream first', async ()
   assert.equal(video.srcObject.track.deviceId, 'two')
 })
 
-test('Camera quality changes apply to the running track in order without renegotiating', async () => {
+test('rapid Camera quality changes switch the running track once, to the final quality', async () => {
   const { session, requests, video } = harness()
   await session.update(camera('cam', '720p'))
   const { track } = video.srcObject
@@ -237,10 +237,59 @@ test('Camera quality changes apply to the running track in order without renegot
   await session.update(camera('cam', '2160p'))
 
   assert.equal(requests.length, 1)
-  assert.deepEqual(track.applied, [
-    cameraTrackConstraintsFor({ resolution: '2160p' }),
-    cameraTrackConstraintsFor({ resolution: '2160p' }),
-  ])
+  assert.deepEqual(track.applied, [cameraTrackConstraintsFor({ resolution: '2160p' })])
+})
+
+test('Camera quality changes that end on the running quality never switch the camera mode', async () => {
+  const { session, requests, video } = harness()
+  await session.update(camera('cam', '720p'))
+  const { track } = video.srcObject
+  session.update(camera('cam', '2160p'))
+  await session.update(camera('cam', '720p'))
+
+  assert.equal(requests.length, 1)
+  assert.deepEqual(track.applied, [])
+})
+
+test('a Camera quality change while the camera starts is applied before the camera is shown', async () => {
+  const opening = deferred()
+  const { session, requests, video } = harness({ respond: () => opening.promise })
+  const starting = session.update(camera('cam', '720p'))
+  const qualityChange = session.update(camera('cam', '2160p'))
+  const stream = fakeStream('cam')
+  const shownWhenApplied = []
+  const applyConstraints = stream.track.applyConstraints
+  stream.track.applyConstraints = (constraints) => {
+    shownWhenApplied.push(video.srcObject)
+    return applyConstraints(constraints)
+  }
+  opening.resolve(stream)
+  await Promise.all([starting, qualityChange])
+
+  assert.equal(requests.length, 1)
+  assert.equal(video.srcObject, stream)
+  assert.deepEqual(stream.track.applied, [cameraTrackConstraintsFor({ resolution: '2160p' })])
+  assert.deepEqual(shownWhenApplied, [null])
+})
+
+test('a camera replaced while its late Camera quality is applied is stopped and never shown', async () => {
+  const opening = deferred()
+  const applying = deferred()
+  const { session, video } = harness({
+    respond: (constraints, attempt) => (attempt === 1 ? opening.promise : fakeStream('second')),
+  })
+  const starting = session.update(camera('first', '720p'))
+  session.update(camera('first', '2160p'))
+  const late = fakeStream('first')
+  late.track.applyConstraints = () => applying.promise
+  opening.resolve(late)
+  await new Promise((resolve) => setImmediate(resolve))
+  await session.update(camera('second', '2160p'))
+  applying.resolve()
+  await starting
+
+  assert.equal(late.track.stopped, true)
+  assert.equal(video.srcObject.track.deviceId, 'second')
 })
 
 test('an unsupported Camera quality leaves the camera running', async () => {
@@ -251,6 +300,10 @@ test('an unsupported Camera quality leaves the camera running', async () => {
 
   assert.equal(video.srcObject.track.stopped, false)
   assert.equal(events.status.at(-1), undefined)
+
+  // The camera never left 720p, so going back to it switches nothing.
+  await session.update(camera('cam', '720p'))
+  assert.deepEqual(video.srcObject.track.applied, [cameraTrackConstraintsFor({ resolution: '2160p' })])
 })
 
 test('unrelated preference changes never touch the camera', async () => {
