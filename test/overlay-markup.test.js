@@ -233,7 +233,7 @@ test('the Prompter link is opt-in through the toolbar button and closes with the
   assert.match(mainSource, /sceneLibrary\.cycleScene\(sceneState\(\), sceneContext\(\)\)/)
   assert.match(mainSource, /sceneLibrary\.applySceneAt\(sceneState\(\), index, sceneContext\(\)\)/)
   // Resizing by hand sets the small size (KG-14) and is saved into the active Scene (ADR 0037).
-  assert.match(mainSource, /onResize\(patch\) \{\s*commitState\(sceneLibrary\.followLiveLook\(sceneState\(\), settingsAfterHandResize\(settings, patch\)\), \{ tray: false \}\)/)
+  assert.match(mainSource, /onResize\(patch\) \{\s*commitState\(\s*sceneLibrary\.followLiveLook\(sceneState\(\), settingsAfterHandResize\(settings, patch\), \{ keys: \['size', 'position'\] \}\),\s*\{ tray: false \},\s*\)/)
   assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\.prompterLink\)/)
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
 })

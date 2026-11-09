@@ -288,7 +288,10 @@ function createOverlayWindow() {
     // Resizing by hand also sets the size a Prompter link "small" cue restores, and is saved into
     // the active Scene.
     onResize(patch) {
-      commitState(sceneLibrary.followLiveLook(sceneState(), settingsAfterHandResize(settings, patch)), { tray: false })
+      commitState(
+        sceneLibrary.followLiveLook(sceneState(), settingsAfterHandResize(settings, patch), { keys: ['size', 'position'] }),
+        { tray: false },
+      )
       overlayGeometry.apply({ keepCenter: false })
     },
     onCompactPositionChanged(position) {
@@ -406,7 +409,8 @@ function registerIpc() {
       stopOverlayDrag: () => {
         const bounds = overlayGeometry?.compactBounds()
         if (!overlayGeometry?.stopDrag() || !bounds) return
-        commitState(sceneLibrary.followLiveLook(sceneState(), sanitizeSettings({ ...settings, position: { x: bounds.x, y: bounds.y } })))
+        const next = sanitizeSettings({ ...settings, position: { x: bounds.x, y: bounds.y } })
+        commitState(sceneLibrary.followLiveLook(sceneState(), next, { keys: ['position'] }))
       },
       startOverlayResize: (handle) => overlayGeometry?.startResize(handle),
       stopOverlayResize: () => overlayGeometry?.stopResize(),

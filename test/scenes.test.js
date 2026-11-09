@@ -305,16 +305,24 @@ test('the active Scene follows a hand change of the live look and saves itself',
   assert.equal(result.settings.size, 420)
 })
 
-test('a hand change saves every followed value that differs from the active Scene, also one a demo left', () => {
+test('a hand change saves what it set when it differs from the active Scene, also a value a demo left', () => {
   // The onboarding demo changed the live shape without saving it; the takeover commit sends the same shape.
   const state = live([scene('one', 'One', { shape: 'circle' })], { shape: 'rounded' }, 'one')
-  const result = followLiveLook(state, sanitizeSettings({ ...state.settings, shape: 'rounded' }))
+  const result = followLiveLook(state, sanitizeSettings({ ...state.settings, shape: 'rounded' }), { keys: ['shape'] })
   assert.equal(sceneById(result, 'one').settings.shape, 'rounded')
   assert.equal(result.savedSceneId, 'one')
   // A change of something no Scene stores (the Scenes view, Always on top) saves nothing.
   const view = followLiveLook(state, sanitizeSettings({ ...state.settings, sceneView: 'list' }), { keys: ['sceneView'] })
   assert.equal(view.savedSceneId, undefined)
   assert.equal(sceneById(view, 'one').settings.shape, 'circle')
+})
+
+test('a hand change saves only what it set: a place the window was moved to by itself stays out', () => {
+  // The Scene's display is gone, so the window was put back on screen at B and the native move stored B.
+  const state = live([scene('one', 'One', { position: { x: 2500, y: 100 }, mirror: true })], { position: { x: 1500, y: 100 }, mirror: true }, 'one')
+  const result = followLiveLook(state, sanitizeSettings({ ...state.settings, mirror: false }), { keys: ['mirror'] })
+  assert.deepEqual(sceneById(result, 'one').settings.position, { x: 2500, y: 100 })
+  assert.equal(sceneById(result, 'one').settings.mirror, false)
 })
 
 test('autosave leaves the camera, its quality and global switches out of the Scene', () => {

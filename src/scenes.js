@@ -60,19 +60,20 @@ const LOOK_KEYS = FOLLOWED_SETTING_KEYS.filter((key) => key !== 'size' && key !=
 const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right)
 
 // A hand change of the live look (Inline settings, the toolbar's Shape, dragging or resizing the
-// Overlay). `next` is the full settings after the change. The active Scene saves itself and stays
-// active: every followed value of `next` that differs from the Scene is written into it (also one an
-// onboarding demo left unsaved). A layout Scene keeps the live look rather than storing one, so it
-// changes only when the hand change changed a followed value; it then becomes an exact Scene of the
-// live look. Without an active Scene, or with nothing to save, only the settings change. `keys`
-// (the keys the change set; default all) keeps a change of something no Scene stores, such as the
-// Scenes view, from saving anything. `autosaved` holds the Scene before and after, for Undo.
+// Overlay). `next` is the full settings after the change; `keys` are the keys the change set
+// (default all). The active Scene saves itself and stays active: each followed key the change set
+// whose value differs from the Scene is written into it (so the takeover of an onboarding demo saves
+// the framing the demo left), and nothing else: a place the window was moved to by itself (its
+// display is gone) or a change of something no Scene stores (the Scenes view) is not saved. A layout
+// Scene keeps the live look rather than storing one, so it changes only when the hand change changed
+// a followed value; it then becomes an exact Scene of the live look. Without an active Scene, or
+// with nothing to save, only the settings change. `autosaved` holds the Scene before and after, for
+// Undo.
 export function followLiveLook({ settings, activeSceneId }, next, { keys } = {}) {
   const active = settings.presets.find((scene) => scene.id === activeSceneId)
   const reference = active?.layout ? settings : active?.settings
-  const touchesLook = !keys || keys.some((key) => FOLLOWED_SETTING_KEYS.includes(key))
-  const changed =
-    active && touchesLook ? FOLLOWED_SETTING_KEYS.filter((key) => !sameValue(reference[key], next[key])) : []
+  const set = keys ? FOLLOWED_SETTING_KEYS.filter((key) => keys.includes(key)) : FOLLOWED_SETTING_KEYS
+  const changed = active ? set.filter((key) => !sameValue(reference[key], next[key])) : []
   if (!active || !changed.length) return { settings: next, activeSceneId: active ? activeSceneId : '' }
   const scene = active.layout
     ? { id: active.id, name: active.name, settings: settingsForPreset(next) }
