@@ -15,7 +15,7 @@ Every execution gets a dated file under `runs/`; never overwrite the last known 
 
 ## Current automated suite
 
-Commands: `npm test` for 337 module and static contracts (behavioral through module interfaces with fakes, plus static markup/CSS/wiring and release-version checks) and `npm run test:electron` for five real Electron integration smokes (Windows CI; they also run on a Linux X11/XWayland desktop).
+Commands: `npm test` for 338 module and static contracts (behavioral through module interfaces with fakes, plus static markup/CSS/wiring and release-version checks) and `npm run test:electron` for five real Electron integration smokes (Windows CI; they also run on a Linux X11/XWayland desktop).
 
 | Coverage area | Tests demonstrate | Important limitation |
 | --- | --- | --- |
