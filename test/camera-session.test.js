@@ -459,6 +459,75 @@ test('each Camera quality a starting camera rejects is tried only once', async (
   ])
 })
 
+test('a camera replaced while its late Camera quality fails with another error is never shown', async () => {
+  const opening = deferred()
+  const applying = deferred()
+  const { session, video } = harness({
+    respond: (constraints, attempt) => (attempt === 1 ? opening.promise : fakeStream('second')),
+  })
+  const starting = session.update(camera('first', '720p'))
+  session.update(camera('first', '2160p'))
+  const late = fakeStream('first')
+  late.track.applyConstraints = () => applying.promise
+  opening.resolve(late)
+  await new Promise((resolve) => setImmediate(resolve))
+  await session.update(camera('second', '2160p'))
+  // Chromium rejects a switch on an ended track with InvalidStateError.
+  applying.reject(namedError('InvalidStateError'))
+  await starting
+
+  assert.equal(late.track.stopped, true)
+  assert.equal(video.srcObject.track.deviceId, 'second')
+})
+
+test('a late Camera quality that fails for another reason is tried again once the camera shows', async () => {
+  const opening = deferred()
+  const { session, video } = harness({ respond: () => opening.promise })
+  const starting = session.update(camera('cam', '720p'))
+  session.update(camera('cam', '2160p'))
+  const stream = fakeStream('cam')
+  let attempts = 0
+  const applyConstraints = stream.track.applyConstraints
+  stream.track.applyConstraints = (constraints) => {
+    attempts++
+    if (attempts === 1) return Promise.reject(namedError('AbortError'))
+    return applyConstraints(constraints)
+  }
+  opening.resolve(stream)
+  await starting
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(video.srcObject, stream)
+  assert.equal(attempts, 2)
+  assert.deepEqual(stream.track.applied, [cameraTrackConstraintsFor({ resolution: '2160p' })])
+})
+
+test('Camera quality changes during start that end on the opening quality never switch the camera', async () => {
+  const opening = deferred()
+  const { session } = harness({ respond: () => opening.promise })
+  const starting = session.update(camera('cam', '720p'))
+  session.update(camera('cam', '1080p'))
+  session.update(camera('cam', '720p'))
+  const stream = fakeStream('cam')
+  opening.resolve(stream)
+  await starting
+
+  assert.deepEqual(stream.track.applied, [])
+})
+
+test('a Camera quality a camera refused is tried again after the camera restarts', async () => {
+  const { session, video } = harness()
+  await session.update(camera('cam', '720p'))
+  video.srcObject.track.rejectConstraints = true
+  await session.update(camera('cam', '2160p'))
+  await session.update(camera('cam', '720p'))
+  await session.update(camera('other', '720p'))
+  await session.update(camera('cam', '720p'))
+  await session.update(camera('cam', '2160p'))
+
+  assert.deepEqual(video.srcObject.track.applied, [cameraTrackConstraintsFor({ resolution: '2160p' })])
+})
+
 test('stopping while a starting camera gets its late Camera quality never shows it', async () => {
   const opening = deferred()
   const applying = deferred()
