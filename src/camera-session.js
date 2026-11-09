@@ -62,6 +62,8 @@ export function createCameraSession({
   let startRequest = 0
   let deviceRequest = 0
   let qualityUpdates = Promise.resolve()
+  // Bumped at every camera start: operations queued on an older chain do nothing.
+  let qualityChain = 0
 
   const activeTrack = () => activeStream?.getVideoTracks()[0]
   const activeDeviceId = () => activeTrack()?.getSettings().deviceId
@@ -99,7 +101,9 @@ export function createCameraSession({
   }
 
   function queueQualityUpdate() {
+    const chain = qualityChain
     qualityUpdates = qualityUpdates.then(async () => {
+      if (chain !== qualityChain) return
       const track = activeTrack()
       const { resolution } = current
       if (!track || track.readyState === 'ended' || !track.applyConstraints) return
@@ -144,8 +148,10 @@ export function createCameraSession({
     onStatus(STARTING_CAMERA_MESSAGE)
     stopTracks(startingStream)
     startingStream = undefined
-    // A switch still pending on the old camera (a stalled driver) must not hold back the new one;
-    // when it ends it no longer matches the active track, so it changes nothing.
+    // A switch still pending on the old camera (a stalled driver) must not hold back the new one.
+    // Operations queued behind it belong to the old chain and do nothing when they finally run, and
+    // the pending one no longer matches the active track, so it changes nothing either.
+    qualityChain++
     qualityUpdates = Promise.resolve()
     if (activeStream) {
       stopTracks(activeStream)

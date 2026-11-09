@@ -312,6 +312,8 @@ test('a stalled Camera quality change on the old camera never holds back the nex
   session.update(camera('new', '2160p'))
   const stream = fakeStream('new')
   opening.resolve(stream)
+  // Settles without waiting on the stalled driver: one macrotask lets every promise step finish.
+  // Do not lengthen this into a timeout, which would hide a real hang.
   const settled = (work) =>
     Promise.race([work.then(() => 'done'), new Promise((resolve) => setImmediate(() => resolve('stuck')))])
 
@@ -322,6 +324,39 @@ test('a stalled Camera quality change on the old camera never holds back the nex
   // Later Camera quality changes reach the new camera too.
   assert.equal(await settled(session.update(camera('new', '1080p'))), 'done')
   assert.deepEqual(stream.track.applied.at(-1), cameraTrackConstraintsFor({ resolution: '1080p' }))
+})
+
+test('Camera quality changes queued behind a stalled old camera never reach the next camera', async () => {
+  const { session, video } = harness({
+    respond: (constraints, attempt) => fakeStream(attempt === 1 ? 'old' : 'new'),
+  })
+  await session.update(camera('old', '720p'))
+  const answer = deferred()
+  const stalled = deferred()
+  video.srcObject.track.applyConstraints = () => {
+    stalled.resolve()
+    return answer.promise
+  }
+  session.update(camera('old', '1080p'))
+  await stalled.promise
+  session.update(camera('old', '2160p'))
+  await session.update(camera('new', '2160p'))
+  const { track } = video.srcObject
+  const holding = deferred()
+  const applyConstraints = track.applyConstraints
+  track.applyConstraints = async (constraints) => {
+    await holding.promise
+    return applyConstraints(constraints)
+  }
+  const change = session.update(camera('new', '720p'))
+  // The old camera's driver answers late, while the new camera is mid-switch.
+  answer.resolve()
+  await new Promise((resolve) => setImmediate(resolve))
+  holding.resolve()
+  await change
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(track.applied, [cameraTrackConstraintsFor({ resolution: '720p' })])
 })
 
 test('a Camera quality the camera rejects while starting is tried once and the camera still shows', async () => {
