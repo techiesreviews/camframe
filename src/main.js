@@ -299,6 +299,11 @@ function createOverlayWindow() {
       saveSettings()
     },
     onFullscreenChanged: emitFullscreen,
+    // A move-drag that moved the camera is a hand change of the place: saved into the active Scene.
+    onDragEnd(position) {
+      const next = sanitizeSettings({ ...settings, position })
+      commitState(sceneLibrary.followLiveLook(sceneState(), next, { keys: ['position'] }))
+    },
   })
   overlayWindow.loadFile(join(currentDirectory, 'overlay.html'))
 
@@ -405,13 +410,7 @@ function registerIpc() {
       setOverlayOnboardingOpen: setOnboardingOpen,
       completeOnboarding,
       startOverlayDrag: () => overlayGeometry?.startDrag(),
-      // A move-drag that ran is a hand change of the place: saved into the active Scene.
-      stopOverlayDrag: () => {
-        const bounds = overlayGeometry?.compactBounds()
-        if (!overlayGeometry?.stopDrag() || !bounds) return
-        const next = sanitizeSettings({ ...settings, position: { x: bounds.x, y: bounds.y } })
-        commitState(sceneLibrary.followLiveLook(sceneState(), next, { keys: ['position'] }))
-      },
+      stopOverlayDrag: () => overlayGeometry?.stopDrag(),
       startOverlayResize: (handle) => overlayGeometry?.startResize(handle),
       stopOverlayResize: () => overlayGeometry?.stopResize(),
       toggleFullscreen,

@@ -207,6 +207,9 @@ export function createOverlayGeometry({
   onResize = () => {},
   onCompactPositionChanged = () => {},
   onFullscreenChanged = () => {},
+  // A move-drag that moved the window ended (released, or cut short by hiding, Full screen or a
+  // corner drag): its place, without the reserve. Main saves it into the active Scene (ADR 0037).
+  onDragEnd = () => {},
 }) {
   let fullscreen = false
   let compactBase
@@ -309,12 +312,22 @@ export function createOverlayGeometry({
     frame()
   }
 
-  // True when a move-drag was running (main then saves the new place into the active Scene).
-  function stopDrag() {
-    const wasDragging = Boolean(drag)
-    if (drag) timers.clearInterval(drag.timer)
+  // Ends a move-drag. When it moved the window, its place is reported through `onDragEnd`, unless
+  // `report` is false (a Scene or cue moving the window cut it short, so its spot must not win).
+  // Returns whether the window moved.
+  function stopDrag({ report = true } = {}) {
+    const ended = drag
+    if (!ended) return false
+    timers.clearInterval(ended.timer)
     drag = undefined
-    return wasDragging
+    if (!alive()) return false
+    const [x, y] = window.getPosition()
+    const moved = x !== ended.start.x || y !== ended.start.y
+    if (moved && report) {
+      const base = baseFromWindow(window.getBounds())
+      onDragEnd({ x: base.x, y: base.y })
+    }
+    return moved
   }
 
   function stopResize() {
@@ -326,7 +339,7 @@ export function createOverlayGeometry({
   // so the drag cannot undo the move, save its own spot over the cue's, or save its size as the
   // small size. A corner only held keeps waiting and starts from the new size when the pointer moves.
   function endHandResize() {
-    stopDrag()
+    stopDrag({ report: false })
     if (resize?.moved) stopResize()
   }
 
@@ -543,6 +556,7 @@ export function createOverlayGeometry({
       const [windowX, windowY] = window.getPosition()
       const offset = { x: cursor.x - windowX, y: cursor.y - windowY }
       drag = {
+        start: { x: windowX, y: windowY },
         timer: timers.setInterval(() => {
           if (!alive()) {
             stopDrag()
@@ -553,7 +567,7 @@ export function createOverlayGeometry({
         }, POINTER_POLL_MS),
       }
     },
-    stopDrag,
+    stopDrag: () => stopDrag(),
 
     startResize(handle) {
       if (!alive() || fullscreen || !RESIZE_HANDLES.has(handle)) return
@@ -600,7 +614,7 @@ export function createOverlayGeometry({
     stopResize,
 
     dispose() {
-      stopDrag()
+      stopDrag({ report: false })
       stopResize()
       stopAnimation()
       fullscreen = false

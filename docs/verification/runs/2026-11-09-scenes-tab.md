@@ -17,7 +17,7 @@ The Scenes tab holds only Scenes and Import/Export (ADR 0037): a list or a grid 
 | --- | --- | --- | --- |
 | `scripts/agents/kit doctor` | Pass | 12/12 checks | |
 | `scripts/agents/kit unit --affected` | Pass | 249/249, 10 files | `.scratch/unit/` |
-| `npm test` (`node --test`) | Pass | 317 pass, 1 skipped (tag-build check, not a tag build) | |
+| `npm test` (`node --test`) | Pass | 320 pass, 1 skipped (tag-build check, not a tag build) | |
 | `npm run test:electron` | Pass | 4/4 | new: the Scenes tab test below; the Prompter link tests now drive the toolbar button only |
 | `scripts/agents/kit shots` | Pass | 25 screenshots | starters, no Scenes and six Scenes in list and grid at 324x390 and 324x820; autosave, delete, rename, save form (Replace); high contrast focus; toolbar Prompter link off, on, busy |
 | Syntax checks | Pass | `node --check` on every `src/*.js`, `preload.cjs`, the smoke and `shots` | |

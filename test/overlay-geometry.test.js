@@ -100,7 +100,7 @@ function overlay({ settings: initial = {}, reducedMotion = false } = {}) {
     getPrimaryDisplay: () => ({ workArea: WORK_AREA }),
     getDisplayMatching: () => ({ bounds: DISPLAY }),
   }
-  const events = { fullscreen: [], positions: [], resizes: [] }
+  const events = { fullscreen: [], positions: [], resizes: [], dragEnds: [] }
   const geometry = createOverlayGeometry({
     window,
     screen,
@@ -117,6 +117,7 @@ function overlay({ settings: initial = {}, reducedMotion = false } = {}) {
       events.positions.push(position)
     },
     onFullscreenChanged: (fullscreen) => events.fullscreen.push(fullscreen),
+    onDragEnd: (position) => events.dragEnds.push(position),
   })
   geometry.setReducedMotion(reducedMotion)
   return {
@@ -914,24 +915,41 @@ test('leaving Full screen for another display, the current work area is that dis
   assert.deepEqual(view.geometry.currentWorkArea(), secondary.workArea)
 })
 
-test('a native move event during a move-drag stores nothing, so the end of the drag saves the place into the active Scene', () => {
+test('a native move event during a move-drag stores nothing; the end of the drag reports its place once', () => {
   const { geometry, screen, clock, events, window } = overlay()
   geometry.startDrag()
   screen.cursor = { x: 300, y: 300 }
   clock.advance(32)
   geometry.windowMoved()
   assert.deepEqual(events.positions, [], 'macOS reports moved on every step of a drag')
-  assert.equal(geometry.stopDrag(), true)
-  geometry.windowMoved()
-  assert.deepEqual(events.positions, [{ x: window.bounds.x, y: window.bounds.y }])
+  geometry.stopDrag()
+  assert.deepEqual(events.dragEnds, [{ x: window.bounds.x, y: window.bounds.y }])
+  geometry.stopDrag()
+  assert.equal(events.dragEnds.length, 1)
 })
 
-test('stopping a move-drag says whether one was running, so main saves the place into the active Scene once', () => {
-  const { geometry, screen, clock } = overlay()
-  assert.equal(geometry.stopDrag(), false, 'no drag: nothing to save')
+test('a click on the camera without moving it reports no drag end, so nothing is saved', () => {
+  const { geometry, clock, events } = overlay()
   geometry.startDrag()
-  screen.cursor = { x: 300, y: 300 }
-  clock.advance(32)
-  assert.equal(geometry.stopDrag(), true)
-  assert.equal(geometry.stopDrag(), false)
+  clock.advance(48)
+  geometry.stopDrag()
+  assert.deepEqual(events.dragEnds, [])
+})
+
+test('a drag ended by hiding or Full screen reports its place; one ended by a Scene or cue move does not', () => {
+  const hidden = overlay()
+  hidden.geometry.startDrag()
+  hidden.screen.cursor = { x: 300, y: 300 }
+  hidden.clock.advance(32)
+  hidden.patch({ overlayVisible: false })
+  hidden.geometry.apply({ updateBounds: false })
+  assert.equal(hidden.events.dragEnds.length, 1)
+
+  const moved = overlay()
+  moved.geometry.startDrag()
+  moved.screen.cursor = { x: 300, y: 300 }
+  moved.clock.advance(32)
+  moved.patch({ position: { x: 1500, y: 700 } })
+  moved.geometry.showCompact()
+  assert.deepEqual(moved.events.dragEnds, [], 'the drag must not save its spot over the cue')
 })

@@ -447,20 +447,22 @@ test('the edit windows: Undo lives 10 seconds after a change, a delete 6 seconds
   assert.equal(SCENE_UNDO_MS, 10_000)
   assert.deepEqual(edits.view('one').sceneUndo, { id: 'one', endsAt: clock + SCENE_UNDO_MS })
   assert.deepEqual(edits.view('one').sceneSaved, { id: 'one', at: clock })
-  // Undo goes back to how the Scene was when it went on camera, not one step.
-  assert.deepEqual(edits.takeChange('one').scene, original)
-  assert.equal(edits.takeChange('one'), undefined, 'one undo per window')
 
-  // After the window closes the next change starts a new one from the Scene as it is then.
+  // After the window closes Undo is gone; the next change opens a new window that still goes back to
+  // how the Scene was when it went on camera, not one step.
   const third = followLiveLook(second, sanitizeSettings({ ...second.settings, size: 520 }))
   edits.track(second, third)
   clock += SCENE_UNDO_MS + 1
   assert.equal(edits.view('one').sceneUndo, null)
   assert.equal(edits.takeChange('one'), undefined)
+  const later = followLiveLook(third, sanitizeSettings({ ...third.settings, size: 510 }))
+  edits.track(third, later)
+  assert.deepEqual(edits.takeChange('one').scene, original)
+  assert.equal(edits.takeChange('one'), undefined, 'one undo per window')
 
   // Switching Scenes closes the window.
-  const fourth = followLiveLook(third, sanitizeSettings({ ...third.settings, size: 530 }))
-  edits.track(third, fourth)
+  const fourth = followLiveLook(later, sanitizeSettings({ ...later.settings, size: 530 }))
+  edits.track(later, fourth)
   const switched = applyScene(fourth, 'two')
   edits.track(fourth, switched)
   assert.equal(edits.view('two').sceneUndo, null)
@@ -501,4 +503,33 @@ test('Scene tiles draw the camera where it really is on its display', () => {
   // The live window's real bounds win over a stored position that may be older.
   const moved = scenePreviews(settings, { workArea, workAreaAt: () => workArea, displayAt: () => display, liveBounds: { x: 0, y: 0, ...overlayDimensionsFor(settings) } })
   assert.equal(moved.live.x, OVERLAY_CHROME.left / 1920)
+})
+
+test('Undo after a rename puts the look back and keeps the new name', () => {
+  let clock = 0
+  const edits = createSceneEdits({ now: () => clock })
+  const one = scene('one', 'One', { size: 300 })
+  const state = live([one, scene('two', 'Two')], { size: 300 }, 'one')
+  const changed = followLiveLook(state, sanitizeSettings({ ...state.settings, size: 500 }))
+  edits.track(state, changed)
+  const renamed = renameScene(changed, 'one', 'Intro')
+  edits.track(changed, renamed)
+  // Another Scene takes the freed name meanwhile.
+  const taken = renameScene(renamed, 'two', 'One')
+  edits.track(renamed, taken)
+  const undone = undoSceneChange(taken, edits.takeChange('one'))
+  assert.equal(sceneById(undone, 'one').name, 'Intro')
+  assert.equal(sceneById(undone, 'one').settings.size, 300)
+  assert.deepEqual(undone.settings.presets.map(({ name }) => name), ['Intro', 'One'])
+})
+
+test('saving over the Scene on camera on purpose ends its Undo window', () => {
+  let clock = 0
+  const edits = createSceneEdits({ now: () => clock })
+  const state = live([scene('one', 'One', { size: 300 })], { size: 300 }, 'one')
+  const changed = followLiveLook(state, sanitizeSettings({ ...state.settings, size: 500 }))
+  edits.track(state, changed)
+  const replaced = saveScene(changed, { name: 'one' })
+  edits.track(changed, replaced)
+  assert.equal(edits.view('one').sceneUndo, null)
 })

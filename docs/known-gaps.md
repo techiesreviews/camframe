@@ -123,7 +123,7 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 ## KG-15 — The rebuild guide is behind the source
 
 **Status:** Open, 2026-11-06 (found in the 0.7.0 release review).
-**Evidence:** `docs/rebuild-guide.md` still says Preferences schema 12 and "schema-12 migration", has no reconstruction step for the Prompter link or `src/prompter-control.js`, and still lists "notices" for Scenes without ADR 0036. The Prompter link predates 0.7.0; `src/prompter-control.js` and schema 14 are new in 0.7.0, so 0.7.0 widened the gap.
+**Evidence:** `docs/rebuild-guide.md` still says Preferences schema 12 and "schema-12 migration", has no reconstruction step for the Prompter link or `src/prompter-control.js`, and still lists "notices" for Scenes without ADR 0036. The Prompter link predates 0.7.0; `src/prompter-control.js` and schema 14 are new in 0.7.0, so 0.7.0 widened the gap. ADR 0037 (2026-11-09) widened it again: schema 15, the Scenes tab module `src/scenes-panel.js`, autosave and the Undo windows (`followLiveLook`, `createSceneEdits` in `src/scenes.js`) and the removed Start at login have no step there yet.
 
 ## KG-16 — Scenes tab autosave and Undo lack Windows hand checks
 

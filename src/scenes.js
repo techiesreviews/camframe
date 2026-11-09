@@ -125,12 +125,14 @@ export function restoreScene({ settings, activeSceneId }, deleted, context = {})
   return { ...restored, announce: scene.name }
 }
 
-// Puts a Scene back as it was and on camera. `taken` is `createSceneEdits().takeChange(…)`: the
-// Scene before the changes and the live look then; a layout Scene keeps the live look, so that look
-// comes back with it.
+// Puts a Scene's look back as it was and on camera. `taken` is `createSceneEdits().takeChange(…)`:
+// the Scene before the changes and the live look then; a layout Scene keeps the live look, so that
+// look comes back with it. A rename since stays (Undo is about the look, and the old name may be
+// another Scene's now).
 export function undoSceneChange(state, taken, context = {}) {
-  const before = taken?.scene
-  if (!before || !state.settings.presets.some((scene) => scene.id === before.id)) return undefined
+  const current = state.settings.presets.find((scene) => scene.id === taken?.scene?.id)
+  if (!current) return undefined
+  const before = { ...taken.scene, name: current.name }
   const scenes = state.settings.presets.map((scene) => (scene.id === before.id ? before : scene))
   const look = before.layout ? taken.look : {}
   const settings = withScenes({ ...state.settings, ...look }, scenes)
@@ -354,8 +356,9 @@ export const SCENE_DELETE_UNDO_MS = 6_000
 // The Scenes tab's two short-lived Undo offers, kept beside the Scene library state (ADR 0037).
 // `track(before, result)` sees every committed Scene library result:
 // - a hand change saved into the active Scene opens (or extends) a 10 second Undo window; Undo goes
-//   back to the Scene as it was when it went on camera, or as it was when the last window closed;
-// - another Scene going on camera, or the active Scene put on camera again, closes that window;
+//   back to the Scene as it was when it went on camera, also after an earlier window closed;
+// - another Scene going on camera, the active Scene put on camera again, or a save on purpose
+//   (Save look, Replace) ends that, and the next change starts from the Scene as it is then;
 // - a delete opens a 6 second Undo window for the deleted Scene; a save or an import closes it.
 // `view(activeSceneId)` is what the Overlay draws: `endsAt` and `at` are `now()` times.
 export function createSceneEdits({ now = () => Date.now() } = {}) {
@@ -371,10 +374,10 @@ export function createSceneEdits({ now = () => Date.now() } = {}) {
       if (result.savedSceneId) saved = { id: result.savedSceneId, at: now() }
       if (result.autosaved) {
         const { before: scene } = result.autosaved
-        const keep = open(change) && change.base.id === scene.id
+        const keep = change?.base.id === scene.id
         const look = Object.fromEntries(LOOK_KEYS.map((key) => [key, before.settings[key]]))
         change = keep ? { ...change, endsAt: now() + SCENE_UNDO_MS } : { base: scene, look, endsAt: now() + SCENE_UNDO_MS }
-      } else if (result.appliedScene || result.activeSceneId !== before?.activeSceneId) {
+      } else if (result.appliedScene || result.savedSceneId || result.activeSceneId !== before?.activeSceneId) {
         change = undefined
       }
       if (result.deleted) removal = { ...result.deleted, endsAt: now() + SCENE_DELETE_UNDO_MS }
@@ -385,7 +388,8 @@ export function createSceneEdits({ now = () => Date.now() } = {}) {
     // The Scene as it was before the open window's changes and the live look then (`{ scene, look }`),
     // once; undefined when there is none.
     takeChange(activeSceneId) {
-      const taken = open(change) && change.base.id === activeSceneId ? { scene: change.base, look: change.look } : undefined
+      if (!open(change) || change.base.id !== activeSceneId) return undefined
+      const taken = { scene: change.base, look: change.look }
       change = undefined
       return taken
     },
