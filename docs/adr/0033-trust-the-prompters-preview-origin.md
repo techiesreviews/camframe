@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-10-31 (Lex). Supersedes in part ADR 0031 (its list of allowed `Origin`s).
+Accepted — 2026-10-31 (Lex). Reversed 2026-11-08: see the note at the end. Supersedes in part ADR 0031 (its list of allowed `Origin`s).
 
 ## Context
 
@@ -17,3 +17,7 @@ The prompter now has a test copy at https://preview.prompter.techies.tools, its 
 
 - Whoever can deploy the `techies-prompter-preview` Worker (today only Lex's Cloudflare account) can, while the link is on, move or resize the camera view and read the Scene names, as the live site can. The effect stays view-only.
 - Chrome and Edge treat the preview as its own public origin, so it asks once more for permission to reach apps on this device (W-30 in `docs/verification/README.md`).
+
+## Note, 2026-11-08: preview address removed
+
+Lex decided on 2026-11-04 to ignore the preview and remove it later ("ignore the preview, and remove it in a future issue"; Orbit card TOOLS-49). The Prompter link no longer trusts `https://preview.prompter.techies.tools`: `PROMPTER_PREVIEW_SITE` is gone and `originAllowed` refuses that address with `403` and no CORS header, like any other unknown site. The live site `https://prompter.techies.tools`, localhost pages, `file://` copies and local programs are unchanged. The text above stays as the record of the 2026-10-31 decision. `test/prompter-link.test.js` checks that the live site still works and the preview address is refused.

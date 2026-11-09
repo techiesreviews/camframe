@@ -8,7 +8,7 @@ API 2 needs a CamFrame build that contains it. Check before relying on it: `GET 
 
 - Base address: `http://127.0.0.1:47833`, only while the Prompter link is on in CamFrame.
 - `POST` bodies are JSON (`Content-Type: application/json`), at most 1024 bytes.
-- Allowed pages: `https://prompter.techies.tools`, `https://preview.prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, `file://` copies, and local programs that send no `Origin`.
+- Allowed pages: `https://prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, `file://` copies, and local programs that send no `Origin`.
 - `POST /camframe/scenes` and `POST /camframe/small-size` refuse `file://` copies (`Origin: null`, `403`). A `file://` copy may send cues, but its status has only `app`, `version`, `scenes` and `api`, and its cue answers have only `ok` and `cue`.
 - Every answer is JSON. Success is `200 {"ok":true,…}` (except `GET /camframe/status`, which is the status object itself). A refusal is `{"ok":false,"error":"<plain English>","code":"<code>"}`:
 
@@ -27,7 +27,7 @@ Older errors (wrong host or page `403`, wrong method `405`, too large `413`, not
 
 - **Camera size**: the camera's size in screen pixels, 180–640. A circle or rounded square is `size` × `size`; portrait is 0.75 × `size` wide; landscape is `size` wide and 0.5625 × `size` tall.
 - **Small size** (`smallSize` in the status): the size `"small"` restores. Scenes and Prompter cues never change it. Resizing CamFrame by hand with a corner handle sets it (just clicking or holding a corner does not), and so does `POST /camframe/small-size`. After upgrading, it starts as the size CamFrame had.
-- **Place**: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `left`, `right`, `center`, on the display the camera is on now (or still moving to, the one the last answer's `view.workArea` named). The camera sits `margin` px from the edges it touches (default: the Corner margin in CamFrame's settings, 32). `left` and `right` are vertically centred. The whole window (camera plus its border and toolbar space) stays on the display, so a very large `margin` on a short display, or a top place, can leave the camera nearer the edge than `margin`; the answer does not flag this.
+- **Place**: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `left`, `right`, `center`, on the display the camera is on now (or still moving to, the one the last answer's `view.workArea` named). The camera sits `margin` px from the edges it touches (default: CamFrame's stored Corner margin, 32; it has no control since ADR 0037). `left` and `right` are vertically centred. The whole window (camera plus its border and toolbar space) stays on the display, so a very large `margin` on a short display, or a top place, can leave the camera nearer the edge than `margin`; the answer does not flag this.
 - **Point**: `{ "x": …, "y": … }`, the screen pixel for the camera's top-left corner, kept on the display that pixel is on (or the nearest one).
 - **`withinRight`**: with `right`, `top-right` or `bottom-right`, a share of the display from 0.1 to 1. The camera and its margin (at least 18 px, the window border that always stays on screen) stay inside that share of the display's right side; a size that does not fit shrinks until it does, never below 180.
 - **Layout Scene**: a Scene saved through `POST /camframe/scenes`. Applying it changes only the camera size and place, worked out again when applied: a place on the display the camera is on at that moment (or still moving to, the one the last answer's `view.workArea` named), a saved point on the display nearest that point. The camera, shape, style (frame, effect, colours) and crop stay as they are live. A Scene saved in CamFrame's own settings is a **snapshot Scene**: it also applies the camera and look it saved.
@@ -39,7 +39,7 @@ Read-only. The first three fields are the same as before API 2.
 ```json
 {
   "app": "camframe",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "scenes": ["Interview", "Live small corner", "Live right large"],
   "api": 2,
   "sceneLimit": 6,
@@ -133,8 +133,8 @@ Changes the view now. Every cue that worked before API 2 is still accepted.
 
 What each cue does:
 
-- `{"size":"full"}`: Full screen, or the Scene chosen for Face full in CamFrame.
-- `{"size":"small"}`: the Face small choice in CamFrame. By default ("Same place"): out of Full screen back to the previous place, at the small size; already in Compact mode, it shrinks or grows to the small size around the camera's centre, and does nothing when the camera already has that size (also if it was dragged partly off the display). When it moves the camera, the whole window stays on the display (a small size too big for it shrinks, and `layout.clamped` says so).
+- `{"size":"full"}`: Full screen, or the Scene stored as Face full (chosen in an older CamFrame; there is no control for it since ADR 0037).
+- `{"size":"small"}`: the stored Face small choice (default "Same place"; no control since ADR 0037). By default ("Same place"): out of Full screen back to the previous place, at the small size; already in Compact mode, it shrinks or grows to the small size around the camera's centre, and does nothing when the camera already has that size (also if it was dragged partly off the display). When it moves the camera, the whole window stays on the display (a small size too big for it shrinks, and `layout.clamped` says so).
 - `{"size":"small","position":"bottom-right"}`: the small size at that place.
 - `{"size":432,"position":"right","withinRight":0.3}`: exactly 432 px (or less, to fit) at that place. It does not change the small size.
 - `{"size":400,"position":{"x":1200,"y":100}}`: exactly 400 px with its top-left at (1200, 100), kept on screen.
@@ -163,7 +163,7 @@ Saves a layout Scene. It does not move the camera unless `apply` is `true`.
 | `name` | 1–40 characters, no line breaks or invisible characters, no joiner at either end | required. A name that matches another Scene's (ignoring case, accents written two ways, joiners) is `409 scene-exists` without `replace` |
 | `size` | `"small"` (follows the small size, now and later), `"current"`, or 180–640 | `"current"` |
 | `position` | a place, a point `{x,y}`, or `"current"` | `"current"` |
-| `margin` | 0–160, only with a place | CamFrame's Corner margin when applied |
+| `margin` | 0–160, only with a place | CamFrame's stored Corner margin (32) when applied |
 | `withinRight` | 0.1–1, only with a right-hand place | none |
 | `replace` | `true` to save over a Scene with the same name (keeps its id and place in the list) | `false` |
 | `apply` | `true` to apply it right after saving | `false` |

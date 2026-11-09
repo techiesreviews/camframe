@@ -58,7 +58,7 @@ The CI release path is authoritative for cross-platform artifacts: tag `v<versio
 ## Reconstruction invariants
 
 - One camera MediaStream per Overlay; no canvas frame-copy pipeline.
-- Compact and Full screen share one Camera quality; Full screen/Scene changes reuse the stream without applying constraints.
+- Compact and Full screen share one Camera quality; Full screen and Scene changes reuse the stream. Full screen never applies constraints; a Scene applies them only when its Camera quality differs from the running one.
 - Preferences are sanitized in main after every patch, and every implementation passes the Preferences fixtures.
 - Every bridge channel accepts only the Overlay renderer and checks its arguments.
 - Startup always reveals and raises the camera.

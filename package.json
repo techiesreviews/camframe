@@ -1,6 +1,6 @@
 {
   "name": "camframe",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "license": "MIT",
   "description": "A fast, shapeable camera overlay for Windows.",
   "author": "Techies",

@@ -8,6 +8,7 @@ export const SHAPES = new Set(['circle', 'rounded', 'portrait', 'landscape'])
 export const CAPTURE_RESOLUTIONS = new Set(['480p', '720p', '1080p', '2160p'])
 export const FRAME_EFFECTS = new Set(['none', 'glow', 'blur'])
 export const SCENE_LIMIT = 6
+export const SCENE_VIEWS = new Set(['grid', 'list'])
 // The places a Prompter link cue can put the Compact Overlay on its current display.
 export const COMPACT_SPOTS = Object.freeze([
   'top-left',
@@ -46,7 +47,7 @@ export const PRESET_SETTING_KEYS = Object.freeze([
 ])
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  schemaVersion: 14,
+  schemaVersion: 15,
   cameraId: '',
   cameraLabel: 'Default camera',
   shape: 'circle',
@@ -65,7 +66,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   cameraPosition: Object.freeze({ x: 50, y: 50 }),
   alwaysOnTop: true,
   overlayVisible: true,
-  launchAtLogin: false,
+  // How the Scenes tab shows Scenes. Not part of a Scene.
+  sceneView: 'grid',
   completedOnboardingVersion: 0,
   position: null,
   prompterLink: false,
@@ -128,7 +130,7 @@ export function sanitizeSettings(input = {}, includePresets = true) {
   }
   if (typeof input.alwaysOnTop === 'boolean') settings.alwaysOnTop = input.alwaysOnTop
   if (typeof input.overlayVisible === 'boolean') settings.overlayVisible = input.overlayVisible
-  if (typeof input.launchAtLogin === 'boolean') settings.launchAtLogin = input.launchAtLogin
+  if (SCENE_VIEWS.has(input.sceneView)) settings.sceneView = input.sceneView
   if (typeof input.prompterLink === 'boolean') settings.prompterLink = input.prompterLink
   if (
     typeof input.prompterFaceFull === 'string' &&
@@ -246,16 +248,47 @@ export function settingsForPreset(input = {}) {
   )
 }
 
-
-
-
-
+// The Scenes a new installation starts with (ADR 0037). Small bottom has the default camera size (also
+// the default Prompter link small size). Both are layout Scenes: a size and a place,
+// planned on the display the Overlay is on, with the live look. Changing one by hand while it is on
+// camera turns it into an exact Scene (`followLiveLook` in scenes.js).
+export const STARTER_SCENES = Object.freeze([
+  Object.freeze({
+    id: 'starter-small-bottom',
+    name: 'Small bottom',
+    settings: Object.freeze({ size: 288 }),
+    layout: Object.freeze({ size: 288, position: 'bottom-right' }),
+  }),
+  Object.freeze({
+    id: 'starter-big-right',
+    name: 'Big right',
+    settings: Object.freeze({ size: 540 }),
+    layout: Object.freeze({ size: 540, position: 'right' }),
+  }),
+])
+// The first schema that may have no Scenes on purpose (everything deleted). Older files without
+// Scenes, and a new installation, get the starter Scenes; a file with Scenes keeps exactly those.
+const STARTER_SCENES_SCHEMA = 15
 
 function startupSettings(input = {}) {
+  const settings = sanitizeSettings(input)
+  if (!settings.presets.length && (input.schemaVersion ?? 0) < STARTER_SCENES_SCHEMA) {
+    settings.presets = sanitizeSettings({ presets: STARTER_SCENES }).presets
+  }
   return {
-    ...sanitizeSettings(input),
+    ...settings,
     alwaysOnTop: true,
     overlayVisible: true,
+  }
+}
+
+// Whether a saved Preferences file had the retired Start at login switch on, so main can turn the
+// old login item off once (the setting and its control are gone, ADR 0037).
+export function legacyLaunchAtLogin(documentText) {
+  try {
+    return JSON.parse(documentText)?.launchAtLogin === true
+  } catch {
+    return false
   }
 }
 

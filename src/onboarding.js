@@ -75,6 +75,8 @@ export function onboardingStepsFor() {
   ]
 }
 
+const DEMO = Object.freeze({ demo: true })
+
 const systemTimers = {
   setTimeout: (callback, ms) => setTimeout(callback, ms),
   clearTimeout: (timer) => clearTimeout(timer),
@@ -91,8 +93,10 @@ const systemTimers = {
 // It drives the Overlay only through `overlay`:
 //   state(), showChrome(), scheduleHideChrome(), setTourOpen(open) -> top reserve in px,
 //   settingsOpen(), openSettings(panel), selectSettingsPanel(panel), closeSettings(),
-//   isFraming(), setFraming(on), cycleShape(), previewFraming(framing), patchState(patch),
+//   isFraming(), setFraming(on), cycleShape(options), previewFraming(framing), patchState(patch, options),
 //   surfaceSize(), completeOnboarding()
+// Demo steps and their restore pass `{ demo: true }`: they are stored but never saved into the
+// active Scene (ADR 0037); only what the user takes over is a hand change.
 // and draws only through `view`:
 //   show(offset, invoker), hide(), setLayoutOffset(px), restoreFocus(), clearStep(),
 //   renderStep(content, index, count), relayout(reveal), focusTitle(),
@@ -163,14 +167,14 @@ export function createOnboardingTour({
     if (!stopped) return
 
     if (restore && stopped.type === 'shape') {
-      overlay.patchState({ shape: stopped.snapshot.shape })
+      overlay.patchState({ shape: stopped.snapshot.shape }, DEMO)
     } else if (restore && stopped.type === 'framing') {
       const framing = {
         cameraPosition: { ...stopped.snapshot.cameraPosition },
         cameraZoom: stopped.snapshot.cameraZoom,
       }
       overlay.previewFraming(framing)
-      overlay.patchState(framing)
+      overlay.patchState(framing, DEMO)
     } else if (commit && stopped.type === 'framing' && stopped.framingChanged) {
       const { cameraPosition, cameraZoom } = overlay.state()
       overlay.patchState({ cameraPosition: { ...cameraPosition }, cameraZoom })
@@ -183,7 +187,7 @@ export function createOnboardingTour({
     let clicks = 0
     const playNextClick = () => {
       view.playCursor('click')
-      later(current, () => overlay.cycleShape(), SHAPE_DEMO_ACTIVATE_MS)
+      later(current, () => overlay.cycleShape(DEMO), SHAPE_DEMO_ACTIVATE_MS)
       later(current, () => view.hideCursor(), SHAPE_DEMO_CURSOR_MS)
       clicks += 1
       if (clicks < ONBOARDING_SHAPE_DEMO_CLICKS) {
@@ -222,7 +226,7 @@ export function createOnboardingTour({
         previewDemoFraming(current, { cameraPosition, cameraZoom })
       },
       () => {
-        overlay.patchState({ cameraPosition })
+        overlay.patchState({ cameraPosition }, DEMO)
         later(current, () => playFramingZoom(current), FRAMING_PAN_TO_ZOOM_MS)
       },
     )
@@ -244,7 +248,7 @@ export function createOnboardingTour({
         previewDemoFraming(current, { cameraPosition: { ...overlay.state().cameraPosition }, cameraZoom })
       },
       () => {
-        overlay.patchState({ cameraZoom })
+        overlay.patchState({ cameraZoom }, DEMO)
         later(current, () => playFramingReset(current), FRAMING_ZOOM_TO_RESET_MS)
       },
     )
@@ -256,7 +260,7 @@ export function createOnboardingTour({
       current,
       () => {
         previewDemoFraming(current, centeredFraming())
-        overlay.patchState(centeredFraming())
+        overlay.patchState(centeredFraming(), DEMO)
       },
       FRAMING_RESET_MS,
     )

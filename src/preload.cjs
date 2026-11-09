@@ -3,11 +3,14 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('camFrame', {
   platform: process.platform,
   getState: () => ipcRenderer.invoke('state:get'),
-  updateState: (patch) => ipcRenderer.send('state:update', patch),
+  updateState: (patch, options) => ipcRenderer.send('state:update', patch, options),
   reportAccessibilityPreferences: (preferences) =>
     ipcRenderer.send('accessibility:preferences', preferences),
   savePreset: (name, id) => ipcRenderer.send('preset:save', name, id),
   applyPreset: (id) => ipcRenderer.send('preset:apply', id),
+  renamePreset: (id, name) => ipcRenderer.send('preset:rename', id, name),
+  undoPresetChange: () => ipcRenderer.send('preset:undo-change'),
+  undoPresetDelete: () => ipcRenderer.send('preset:undo-delete'),
   deletePreset: (id) => ipcRenderer.send('preset:delete', id),
   reorderPreset: (id, direction) => ipcRenderer.send('preset:reorder', id, direction),
   exportPresets: () => ipcRenderer.invoke('preset:export'),

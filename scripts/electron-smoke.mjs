@@ -12,7 +12,7 @@ const projectRoot = resolve(import.meta.dirname, '..')
 const electronExecutable = require('electron')
 const artifactDirectory = join(projectRoot, 'qa', 'electron-smoke')
 
-async function launchCamFrame(userDataDirectory) {
+async function launchCamFrame(userDataDirectory, { args = [] } = {}) {
   const environment = { ...process.env }
   delete environment.ELECTRON_RUN_AS_NODE
   environment.CAMFRAME_E2E = '1'
@@ -20,7 +20,7 @@ async function launchCamFrame(userDataDirectory) {
 
   return electron.launch({
     executablePath: electronExecutable,
-    args: ['.'],
+    args: [...args, '.'],
     cwd: projectRoot,
     env: environment,
     timeout: 30_000,
@@ -236,12 +236,13 @@ test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', 
     const missing = await prompterCall('POST', '/camframe/cue', { scene: 'Outro' })
     assert.equal(missing.status, 404)
 
-    // The toolbar button and the Inline settings switch flip the same stored setting through main.
+    // The toolbar button is the Prompter link's only control (ADR 0037): it flips the stored setting
+    // through main, and its hidden description follows the link status.
     const linkControls = () =>
       page.evaluate(() => ({
         pressed: document.querySelector('#prompter-button').getAttribute('aria-pressed'),
         linkState: document.querySelector('#prompter-button').dataset.linkState,
-        switchOn: document.querySelector('#overlay-prompter-toggle').checked,
+        switchOn: document.querySelector('#overlay-prompter-status').textContent.startsWith('On.'),
       }))
     await page.evaluate(() => document.querySelector('#prompter-button').click())
     await page.waitForFunction(() => document.querySelector('#prompter-button').dataset.linkState === 'off')
@@ -254,19 +255,18 @@ test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', 
     assert.deepEqual(await linkControls(), { pressed: 'true', linkState: 'on', switchOn: true })
     assert.equal((await prompterCall('GET', '/camframe/status')).status, 200)
 
-    // Quick presses before main answers: every press, on the button or the switch, flips the one recent
-    // request, so an even batch ends where it started and an odd batch flips it. One renderer's IPC
-    // messages arrive in order, so `getState()` answers after the presses' patches.
+    // Quick presses before main answers: every press flips the one recent request, so an even batch
+    // ends where it started and an odd batch flips it. One renderer's IPC messages arrive in order,
+    // so `getState()` answers after the presses' patches.
     for (const [presses, end] of [
-      [['button', 'button'], true],
-      [['button', 'switch', 'button'], false],
-      [['button', 'button', 'button'], true],
+      [2, true],
+      [3, false],
+      [3, true],
     ]) {
       await page.evaluate((presses) => {
-        const controls = { button: '#prompter-button', switch: '#overlay-prompter-toggle' }
-        for (const press of presses) document.querySelector(controls[press]).click()
+        for (let press = 0; press < presses; press += 1) document.querySelector('#prompter-button').click()
       }, presses)
-      assert.equal((await page.evaluate(() => window.camFrame.getState())).prompterLink, end, presses.join(' → '))
+      assert.equal((await page.evaluate(() => window.camFrame.getState())).prompterLink, end, `${presses} presses`)
       const linkState = end ? 'on' : 'off'
       await page.waitForFunction((linkState) => document.querySelector('#prompter-button').dataset.linkState === linkState, linkState)
       assert.deepEqual(await linkControls(), { pressed: String(end), linkState, switchOn: end })
@@ -274,7 +274,7 @@ test('real Electron: Prompter link cues switch Full screen, spots, and Scenes', 
       else await assert.rejects(prompterCall('GET', '/camframe/status'), /ECONNREFUSED/)
     }
 
-    await page.evaluate(() => document.querySelector('#overlay-prompter-toggle').click())
+    await page.evaluate(() => document.querySelector('#prompter-button').click())
     await page.waitForFunction(() => document.querySelector('#prompter-button').dataset.linkState === 'off')
     assert.deepEqual(await linkControls(), { pressed: 'false', linkState: 'off', switchOn: false })
     await assert.rejects(prompterCall('GET', '/camframe/status'), /ECONNREFUSED/)
@@ -354,7 +354,7 @@ test('real Electron: layout Scenes go large and back to the original small size,
     await application.close()
     application = undefined
     const saved = JSON.parse(await readFile(join(userDataDirectory, 'preferences.json'), 'utf8'))
-    assert.equal(saved.schemaVersion, 14)
+    assert.equal(saved.schemaVersion, 15)
     assert.equal(saved.prompterSmallSize, 288)
     assert.deepEqual(saved.presets.map((scene) => scene.name), ['Demo', 'Live small corner', 'Live right large'])
     assert.deepEqual(saved.presets[1].layout, { size: 'small', position: 'bottom-right' })
@@ -387,6 +387,325 @@ test('real Electron: layout Scenes go large and back to the original small size,
     await again.waitForTimeout(200)
     assert.equal(await again.evaluate(() => document.querySelector('#presentation-toast').hidden), true)
     assert.equal(await again.evaluate(() => document.querySelector('#scene-announcer').textContent), 'Live right large')
+  } finally {
+    await application?.close().catch(() => {})
+    const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`
+    if (resolve(userDataDirectory).startsWith(expectedPrefix)) {
+      await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+    }
+  }
+})
+
+test('real Electron: the Scenes tab applies, autosaves, undoes, deletes, renames, saves, and switches list and grid', async () => {
+  assert.ok(await portFree(47833), 'Port 47833 is busy (is CamFrame running with the Prompter link on?).')
+  await mkdir(artifactDirectory, { recursive: true })
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
+  // A schema-14 file from before the Scenes tab: Start at login on, no Scenes, so the starters arrive.
+  await writeFile(
+    join(userDataDirectory, 'preferences.json'),
+    JSON.stringify({ schemaVersion: 14, completedOnboardingVersion: 1, launchAtLogin: true, presets: [] }),
+  )
+  const errors = []
+  let application
+  try {
+    application = await launchCamFrame(userDataDirectory)
+    const page = await application.firstWindow()
+    page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(`console: ${message.text()}`)
+    })
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    const state = () => page.evaluate(() => window.camFrame.getState())
+    const until = async (check, what) => {
+      const deadline = Date.now() + 4000
+      for (;;) {
+        const current = await state()
+        if (check(current)) return current
+        assert.ok(Date.now() < deadline, `timed out waiting for ${what}`)
+        await page.waitForTimeout(50)
+      }
+    }
+    const tile = (name) => page.locator('.scene-main', { hasText: name })
+
+    const first = await state()
+    assert.equal(Object.hasOwn(first, 'launchAtLogin'), false)
+    assert.deepEqual(first.presets.map((scene) => scene.name), ['Small bottom', 'Big right'])
+
+    // The Overlay opens without focus; focus it as a click on it would, so its settings stay open.
+    await application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')?.focus()
+    })
+    await page.waitForFunction(() => document.querySelector('.scenes-panel .scene-main'))
+    // The toolbar shows while the pointer is over the camera.
+    await page.locator('#camera-surface').hover()
+    await page.locator('#controls-button').click()
+    await page.locator('#inline-settings').waitFor({ state: 'visible' })
+    await page.locator('[data-settings-tab="presets"]').click()
+    assert.equal(await page.locator('#overlay-launch-toggle').count(), 0)
+    assert.equal(await page.locator('#overlay-prompter-toggle').count(), 0)
+    assert.equal(await page.locator('.scene-grid .scene-main').count(), 2)
+    assert.equal(await page.locator('.scene-add-tile .scene-name').textContent(), 'Save look')
+
+    // Putting a Scene on camera keeps the settings open.
+    await tile('Big right').click()
+    const big = await until((current) => current.activePresetId === 'starter-big-right', 'Big right on camera')
+    assert.equal(big.size, 540)
+    await page.waitForTimeout(400)
+    assert.equal(await page.locator('#inline-settings').isVisible(), true)
+    const bigBounds = await overlayBounds(application)
+    assert.equal(bigBounds.width, 540 + 36)
+    // The tile draws the camera where the window really put it, as a share of its display (the
+    // Windows CI runner's display is 1024x768, so a fixed share would not hold).
+    const display = await application.evaluate(
+      ({ screen }, bounds) => screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }).bounds,
+      bigBounds,
+    )
+    const drawn = await page.locator('.scene-tile.active .scene-screen-camera').evaluate((item) => ({
+      left: Number.parseFloat(item.style.left),
+      width: Number.parseFloat(item.style.width),
+    }))
+    const expected = {
+      left: ((bigBounds.x + 18 - display.x) / display.width) * 100,
+      width: (540 / display.width) * 100,
+    }
+    assert.ok(
+      Math.abs(drawn.left - expected.left) < 0.5 && Math.abs(drawn.width - expected.width) < 0.5,
+      `Big right's tile matches its place on a ${display.width}x${display.height} display (drawn ${JSON.stringify(drawn)}, real ${JSON.stringify(expected)})`,
+    )
+    assert.ok(drawn.left + drawn.width > 90, `Big right's tile camera reaches the right edge (${drawn.left + drawn.width}%)`)
+    await captureOverlay(application, '10-scenes-grid.png')
+
+    // Autosave: a hand change of the look is saved into the active Scene; its number shows a check
+    // and Undo shows on it.
+    await page.locator('#shape-button').click({ force: true })
+    const changed = await until(
+      (current) => current.presets[1].settings.shape === 'rounded' && current.sceneUndo?.id === 'starter-big-right',
+      'the shape saved into Big right',
+    )
+    assert.equal(changed.activePresetId, 'starter-big-right')
+    assert.equal(changed.presets[1].layout, undefined)
+    await page.locator('.scene-tile.active .scene-slot.saved').waitFor({ state: 'visible' })
+    await page.locator('.scene-tile.active [data-act="undo-change"]').waitFor({ state: 'visible' })
+    await captureOverlay(application, '11-scenes-autosaved.png')
+
+    // Undo puts Big right back as it was when it went on camera.
+    await page.locator('.scene-tile.active [data-act="undo-change"]').click()
+    const undone = await until((current) => current.presets[1].layout?.position === 'right', 'Big right restored')
+    assert.equal(undone.shape, 'circle')
+    assert.equal(undone.activePresetId, 'starter-big-right')
+
+    // Rename keeps the look.
+    await tile('Big right').focus()
+    await page.keyboard.press('F2')
+    await page.locator('[data-role="rename"]').fill('Talk')
+    await page.keyboard.press('Enter')
+    const renamed = await until((current) => current.presets[1].name === 'Talk', 'the rename')
+    assert.deepEqual(renamed.presets[1].layout, undone.presets[1].layout)
+
+    // Save look by keyboard: a third Scene from the live look, on camera at once, and focus on it.
+    await page.locator('[data-act="save-open"]').focus()
+    await page.keyboard.press('Enter')
+    await page.locator('[data-role="new-name"]').waitFor({ state: 'visible' })
+    const nameField = await page.locator('[data-role="new-name"]').elementHandle()
+    const fieldKept = () => nameField.evaluate((field) => field.isConnected && document.activeElement === field)
+    const saveButton = () =>
+      page.locator('[data-act="save-ok"]').evaluate((button) => ({
+        disabled: button.disabled,
+        label: button.getAttribute('aria-label'),
+        text: button.textContent.trim(),
+      }))
+    // Typing never swaps the name field (a swap cancels input-method composition and makes screen
+    // readers read the field again); the save button follows the name in place.
+    await page.keyboard.type('talk', { delay: 20 })
+    assert.equal(await fieldKept(), true, 'the name field survives typing')
+    assert.deepEqual(await saveButton(), { disabled: false, label: 'Replace Talk', text: 'Replace' })
+    await page.keyboard.press('Control+a')
+    await page.keyboard.press('Backspace')
+    assert.equal(await fieldKept(), true, 'the name field survives clearing')
+    assert.equal((await saveButton()).disabled, true)
+    const composed = await nameField.evaluate((field) => {
+      field.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }))
+      field.value = 'Interv'
+      field.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, data: 'Interv' }))
+      // Enter and Escape while composing belong to the input method: no save, the form stays open.
+      for (const key of ['Enter', 'Escape']) field.dispatchEvent(new KeyboardEvent('keydown', { key, isComposing: true, bubbles: true }))
+      const during = field.isConnected && document.activeElement === field
+      field.value = 'Interview'
+      field.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'Interview' }))
+      field.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'Interview' }))
+      return { during, after: field.isConnected && document.activeElement === field }
+    })
+    assert.deepEqual(composed, { during: true, after: true }, 'the name field survives input-method composition')
+    assert.deepEqual(await saveButton(), { disabled: false, label: 'Save as scene 3', text: '' })
+    await page.keyboard.press('Enter')
+    const saved = await until((current) => current.presets.length === 3, 'the new Scene')
+    assert.equal(saved.presets[2].name, 'Interview')
+    assert.equal(saved.activePresetId, saved.presets[2].id)
+    await page
+      .waitForFunction((key) => document.activeElement?.dataset.key === key, `apply:${saved.presets[2].id}`, { timeout: 2000 })
+      .catch(() => {})
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.dataset.key),
+      `apply:${saved.presets[2].id}`,
+      'focus follows the saved Scene onto the camera',
+    )
+    // Save look with a taken name replaces that Scene (Small bottom, then a snapshot Scene); focus goes to it too.
+    const smallId = saved.presets[0].id
+    await page.locator('[data-act="save-open"]').focus()
+    await page.keyboard.press('Enter')
+    await page.locator('[data-role="new-name"]').waitFor({ state: 'visible' })
+    await page.keyboard.type('Small bottom')
+    assert.equal((await saveButton()).text, 'Replace')
+    await page.keyboard.press('Enter')
+    const replaced = await until((current) => current.activePresetId === smallId, 'Small bottom replaced and on camera')
+    assert.equal(replaced.presets.length, 3)
+    await page.waitForFunction((key) => document.activeElement?.dataset.key === key, `apply:${smallId}`, { timeout: 2000 }).catch(() => {})
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.key), `apply:${smallId}`, 'focus follows a replaced Scene')
+
+    // Delete shows Undo in the Scene's place; Ctrl+Z brings it back.
+    await tile('Small bottom').focus()
+    await page.keyboard.press('Delete')
+    await until((current) => current.presets.length === 2 && current.sceneDeleted?.name === 'Small bottom', 'the delete')
+    await page.locator('.scene-deleted [data-act="undo-delete"]').waitFor({ state: 'visible' })
+    await page.keyboard.press('Control+z')
+    const restored = await until((current) => current.presets.length === 3, 'the delete undone')
+    assert.equal(restored.presets[0].name, 'Small bottom')
+
+    // Alt+arrow moves a Scene; its number follows.
+    await tile('Interview').focus()
+    await page.keyboard.press('Alt+ArrowUp')
+    const moved = await until((current) => current.presets[1].name === 'Interview', 'the reorder')
+    assert.deepEqual(moved.presets.map((scene) => scene.name), ['Small bottom', 'Interview', 'Talk'])
+
+    // Grid arrows go to the nearest Scene in the row above or below, also around a wide rename tile.
+    const focusedName = () => page.evaluate(() => document.activeElement?.closest('[data-id]')?.querySelector('.scene-name')?.textContent)
+    await tile('Talk').focus()
+    await page.keyboard.press('ArrowUp')
+    assert.equal(await focusedName(), 'Small bottom')
+    await page.keyboard.press('ArrowUp')
+    assert.equal(await focusedName(), 'Small bottom', 'up from the top row stays')
+    await page.keyboard.press('ArrowRight')
+    assert.equal(await focusedName(), 'Interview')
+    await page.keyboard.press('F2')
+    await tile('Small bottom').focus()
+    await page.keyboard.press('ArrowDown')
+    assert.equal(await focusedName(), 'Talk', 'down skips the wide rename tile to the nearest Scene below')
+    await page.locator('[data-role="rename"]').focus()
+    await page.keyboard.press('Escape')
+    await page.locator('[data-role="rename"]').waitFor({ state: 'detached' })
+
+    // List view, kept in Preferences.
+    await page.locator('[data-view="list"]').click()
+    await until((current) => current.sceneView === 'list', 'the list view')
+    assert.equal(await page.locator('.scene-list .scene-main').count(), 3)
+    await captureOverlay(application, '12-scenes-list.png')
+
+    // Escape closes the settings; the Prompter link still answers with the Scenes and applies one by name.
+    await page.locator('.scene-list .scene-main').first().focus()
+    await page.keyboard.press('Escape')
+    await page.locator('#inline-settings').waitFor({ state: 'hidden' })
+    await page.locator('#prompter-button').click({ force: true })
+    await until((current) => current.prompterLinkStatus?.state === 'on', 'the Prompter link')
+    const status = await prompterCall('GET', '/camframe/status')
+    assert.deepEqual(status.body.scenes, ['Small bottom', 'Interview', 'Talk'])
+    assert.equal(status.body.sceneDetails[2].kind, 'layout')
+    assert.equal((await prompterCall('POST', '/camframe/cue', { scene: 'talk' })).status, 200)
+    await until((current) => current.activePresetId === 'starter-big-right', 'the cue')
+    assert.deepEqual(errors, [])
+
+    await application.close()
+    application = undefined
+    const file = JSON.parse(await readFile(join(userDataDirectory, 'preferences.json'), 'utf8'))
+    assert.equal(file.schemaVersion, 15)
+    assert.equal(file.sceneView, 'list')
+    assert.equal(Object.hasOwn(file, 'launchAtLogin'), false)
+    assert.deepEqual(file.presets.map((scene) => scene.name), ['Small bottom', 'Interview', 'Talk'])
+  } finally {
+    await application?.close().catch(() => {})
+    const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`
+    if (resolve(userDataDirectory).startsWith(expectedPrefix)) {
+      await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+    }
+  }
+})
+
+// TOOLS-156: a window position saved on a display that is gone ran CamFrame out of sight.
+test('real Electron: a saved place off every screen opens on screen, and a lost window comes back', async () => {
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
+  const offScreen = { x: 30000, y: -20000 }
+  await writeFile(
+    join(userDataDirectory, 'preferences.json'),
+    JSON.stringify({
+      schemaVersion: 15,
+      completedOnboardingVersion: 1,
+      position: offScreen,
+      presets: [{ id: 'preset-desk', name: 'Desk', settings: { size: 288, position: { x: 30000, y: 400 } } }],
+    }),
+  )
+  // Whether the Overlay's camera is mostly on a connected display's work area.
+  const onScreen = (application) =>
+    application.evaluate(({ BrowserWindow, screen }) => {
+      const overlay = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')
+      const bounds = overlay.getBounds()
+      const camera = { x: bounds.x + 18, y: bounds.y + 84, width: bounds.width - 36, height: bounds.height - 102 }
+      let visible = 0
+      for (const { workArea: area } of screen.getAllDisplays()) {
+        const width = Math.min(camera.x + camera.width, area.x + area.width) - Math.max(camera.x, area.x)
+        const height = Math.min(camera.y + camera.height, area.y + area.height) - Math.max(camera.y, area.y)
+        if (width > 0 && height > 0) visible += width * height
+      }
+      return { visible: overlay.isVisible(), share: visible / (camera.width * camera.height), bounds }
+    })
+  let application
+  try {
+    // Wayland reports no window positions, so Linux runs this one through X11 (Xwayland).
+    application = await launchCamFrame(userDataDirectory, { args: process.platform === 'linux' ? ['--ozone-platform=x11'] : [] })
+    const page = await application.firstWindow()
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    const until = async (what) => {
+      const deadline = Date.now() + 4000
+      for (;;) {
+        const current = await onScreen(application)
+        if (current.visible && current.share >= 0.5) return current
+        assert.ok(Date.now() < deadline, `${what}: ${JSON.stringify(current)}`)
+        await page.waitForTimeout(50)
+      }
+    }
+    const started = await until('the Overlay did not open on screen')
+    const state = await page.evaluate(() => window.camFrame.getState())
+    assert.deepEqual(state.position, { x: started.bounds.x, y: started.bounds.y }, 'the place it opened at is stored')
+    assert.deepEqual(state.presets[0].settings.position, { x: 30000, y: 400 }, 'the Scenes are kept as saved')
+
+    // A display change (the desk display unplugged) with the window lost brings it back.
+    await application.evaluate(({ BrowserWindow, screen }) => {
+      const overlay = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')
+      overlay.setPosition(30000, -20000)
+      screen.emit('display-removed', {}, screen.getPrimaryDisplay())
+    })
+    await until('the Overlay did not come back after a display change')
+
+    // The Desk Scene, saved on a display that is gone, opens clamped onto the display nearest it,
+    // against its right edge at its saved height (not moved to the bottom right corner).
+    await page.evaluate(() => window.camFrame.applyPreset('preset-desk'))
+    await page.waitForTimeout(500)
+    const desk = await until('the Desk Scene opened off screen')
+    const nearest = await application.evaluate(({ screen }) => screen.getDisplayNearestPoint({ x: 30018, y: 484 }).workArea)
+    assert.deepEqual(
+      { x: desk.bounds.x, y: desk.bounds.y },
+      { x: nearest.x + nearest.width - desk.bounds.width, y: Math.min(400, nearest.y + nearest.height - desk.bounds.height) },
+    )
+
+    // Bringing the window back stores the place in Preferences only: the active Scene keeps its spot.
+    await application.evaluate(({ BrowserWindow, screen }) => {
+      const overlay = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')
+      overlay.setPosition(30000, -20000)
+      screen.emit('display-removed', {}, screen.getPrimaryDisplay())
+    })
+    const back = await until('the Overlay did not come back with Desk on camera')
+    const after = await page.evaluate(() => window.camFrame.getState())
+    assert.equal(after.activePresetId, 'preset-desk')
+    assert.deepEqual(after.position, { x: back.bounds.x, y: back.bounds.y })
+    assert.deepEqual(after.presets[0].settings.position, { x: 30000, y: 400 })
   } finally {
     await application?.close().catch(() => {})
     const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`

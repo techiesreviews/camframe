@@ -35,6 +35,11 @@ function stopTracks(stream) {
 // applying quality changes in order without renegotiating, feeding the blur Frame effect's second
 // video, and scanning devices. The Overlay renders what the callbacks report.
 //
+// Every change of capture mode on a live track is a visible risk on Windows (stale, black or another
+// camera's frames, GitHub issue 5), so the track is only switched when the final Camera quality
+// differs from the one it runs at, and a quality chosen while the camera starts is applied before
+// the camera is shown.
+//
 // `mediaDevices` is `navigator.mediaDevices` (or a fake). Without it the session runs as the
 // browser QA preview: it reports a working camera and never scans devices.
 export function createCameraSession({
@@ -50,9 +55,17 @@ export function createCameraSession({
   let current
   let activeStream
   let activeCameraId
+  // The Camera quality the active track runs at: the one it opened with, or the last one applied.
+  let activeResolution
+  // Camera qualities the camera being started or shown refused: never tried on it again.
+  let refusedResolutions = new Set()
+  // A started stream that is still getting its late Camera quality, not yet shown.
+  let startingStream
   let startRequest = 0
   let deviceRequest = 0
   let qualityUpdates = Promise.resolve()
+  // Bumped at every camera start: operations queued on an older chain do nothing.
+  let qualityChain = 0
 
   const activeTrack = () => activeStream?.getVideoTracks()[0]
   const activeDeviceId = () => activeTrack()?.getSettings().deviceId
@@ -90,27 +103,31 @@ export function createCameraSession({
   }
 
   function queueQualityUpdate() {
+    const chain = qualityChain
     qualityUpdates = qualityUpdates.then(async () => {
+      if (chain !== qualityChain) return
       const track = activeTrack()
+      const { resolution } = current
       if (!track || track.readyState === 'ended' || !track.applyConstraints) return
+      if (resolution === activeResolution || refusedResolutions.has(resolution)) return
       try {
-        await track.applyConstraints(cameraTrackConstraintsFor({ resolution: current.resolution }))
-      } catch {
+        await track.applyConstraints(cameraTrackConstraintsFor({ resolution }))
+        if (track === activeTrack()) activeResolution = resolution
+      } catch (error) {
         // An unsupported profile leaves the camera running at its current mode.
+        if (error?.name === 'OverconstrainedError' && track === activeTrack()) refusedResolutions.add(resolution)
       }
     })
     return qualityUpdates
   }
 
-  async function getStream(cameraId) {
+  async function getStream(cameraId, resolution) {
     try {
-      return await mediaDevices.getUserMedia(
-        cameraConstraintsFor(cameraId, { resolution: current.resolution }),
-      )
+      return await mediaDevices.getUserMedia(cameraConstraintsFor(cameraId, { resolution }))
     } catch (error) {
       if (error.name !== 'OverconstrainedError') throw error
       return mediaDevices.getUserMedia(
-        cameraConstraintsFor(cameraId, { allowSlowerFrameRate: true, resolution: current.resolution }),
+        cameraConstraintsFor(cameraId, { allowSlowerFrameRate: true, resolution }),
       )
     }
   }
@@ -126,12 +143,22 @@ export function createCameraSession({
       cameraId === activeCameraId || (Boolean(cameraId) && cameraId === deviceId)
     if (activeStream && reusable) {
       activeCameraId = cameraId
-      await refreshDevices()
+      // The same update may also have changed the Camera quality (a Scene naming this device).
+      await Promise.all([queueQualityUpdate(), refreshDevices()])
       return
     }
 
     const request = ++startRequest
     onStatus(STARTING_CAMERA_MESSAGE)
+    stopTracks(startingStream)
+    startingStream = undefined
+    // A switch still pending on the old camera (a stalled driver) must not hold back the new one.
+    // Operations queued behind it belong to the old chain and do nothing when they finally run, and
+    // the pending one no longer matches the active track, so it changes nothing either.
+    qualityChain++
+    qualityUpdates = Promise.resolve()
+    const refused = new Set()
+    refusedResolutions = refused
     if (activeStream) {
       stopTracks(activeStream)
       activeStream = undefined
@@ -141,15 +168,41 @@ export function createCameraSession({
     }
 
     try {
-      const stream = await getStream(cameraId)
+      let { resolution } = current
+      const stream = await getStream(cameraId, resolution)
       if (request !== startRequest) {
         stopTracks(stream)
         return
       }
+      const [track] = stream.getVideoTracks()
+      // A Camera quality chosen while the camera was starting was skipped then. It is applied to
+      // the new track here, before the stream reaches either video, so the change of mode is never
+      // seen; and directly, not through the quality chain, which may still wait on the old camera.
+      startingStream = stream
+      const pending = () => current.resolution !== resolution && !refused.has(current.resolution)
+      while (track?.applyConstraints && pending()) {
+        const wanted = current.resolution
+        let failure
+        try {
+          await track.applyConstraints(cameraTrackConstraintsFor({ resolution: wanted }))
+          resolution = wanted
+        } catch (error) {
+          failure = error ?? new Error('applyConstraints failed')
+        }
+        if (request !== startRequest) {
+          stopTracks(stream)
+          return
+        }
+        if (failure?.name === 'OverconstrainedError') refused.add(wanted)
+        else if (failure) break
+      }
+      startingStream = undefined
       activeStream = stream
       activeCameraId = cameraId
+      activeResolution = resolution
+      // A late quality that failed for another reason gets one more try on the shown camera.
+      if (pending()) queueQualityUpdate()
       video.srcObject = stream
-      const [track] = stream.getVideoTracks()
       if (track && 'contentHint' in track) track.contentHint = 'motion'
       await video.play()
       await syncEffectVideo()
@@ -182,7 +235,9 @@ export function createCameraSession({
     },
     refreshDevices,
     stop() {
+      startRequest++
       effectVideo.srcObject = null
+      stopTracks(startingStream)
       stopTracks(activeStream)
     },
   }

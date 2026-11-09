@@ -135,11 +135,16 @@ test('main checks and normalizes renderer arguments', async () => {
   }
 
   send('state:update', { size: 320, presets: [], completedOnboardingVersion: 1, schemaVersion: 1, prompterSmallSize: 999 })
+  send('state:update', { shape: 'rounded' }, { demo: 1, extra: true })
   send('state:update', 'not a patch')
   send('state:update', [{ size: 1 }])
   send('preset:reorder', 'one', 'up')
   send('preset:reorder', 'one', -1)
   send('preset:save', undefined, null)
+  send('preset:rename', 'one', '  Intro ')
+  send('preset:rename', 'one')
+  send('preset:undo-change', 'ignored')
+  send('preset:undo-delete')
   send('overlay:interactive', 'yes')
   send('overlay:resize-start', { handle: 'top-left' })
   send('overlay:resize-start', 'top-left')
@@ -151,9 +156,14 @@ test('main checks and normalizes renderer arguments', async () => {
   )
 
   assert.deepEqual(log, [
-    ['updateState', { size: 320 }],
+    ['updateState', { size: 320 }, { demo: false }],
+    ['updateState', { shape: 'rounded' }, { demo: true }],
     ['reorderPreset', 'one', -1],
     ['savePreset', '', ''],
+    ['renamePreset', 'one', '  Intro '],
+    ['renamePreset', 'one', ''],
+    ['undoPresetChange'],
+    ['undoPresetDelete'],
     ['setOverlayInteractive', true],
     ['startOverlayResize', 'top-left'],
     ['reportAccessibilityPreferences', { reducedMotion: true, highContrast: false }],

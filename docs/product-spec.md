@@ -35,9 +35,9 @@ Inline settings open over the Overlay and use three mutually exclusive sections:
 
 - **Camera**: camera device; one Camera quality used in Compact and Full screen; Mirror camera; Always on top.
 - **Style**: frame effect and contextual effect controls; frame width.
-- **Scenes**: create/update/apply/reorder/delete/import/export Scenes; Start at login; shortcut reference; Prompter link (off by default) with its status, what "Face full" and a bare "Face small" do, and the corner margin.
+- **Scenes**: only Scenes (a list or a grid of small screens, a Save look slot, rename, delete with Undo, Undo after a change, reorder) and Import/Export (ADR 0037). Start at login, the shortcut reference and the Prompter link section are gone; the toolbar's Prompter link button is the link's only control.
 
-Camera is the default section. Opening settings keeps the Overlay interactive. Saving, applying, or deleting a Scene closes Inline settings.
+Camera is the default section. Opening settings keeps the Overlay interactive. Applying, saving, renaming, deleting, undoing or reordering a Scene keeps Inline settings open; Escape cancels a rename or save in progress, else closes them.
 
 ### Onboarding and Help
 
@@ -54,7 +54,7 @@ New installations show a four-step contextual coach-mark tour inside the Overlay
 - Existing Preferences documents that predate schema 12 migrate as completed, so existing users are not interrupted.
 - Tray “Help & onboarding” shows the Overlay, focuses it, and reopens the guide without clearing completion state.
 - The coach mark occupies a temporary 220 px transparent reserve added above the compact Overlay. The renderer shifts all ordinary content down by the same amount inside the enlarged native window, preserving the Toolbar, Camera, resize handles, and Inline settings at their established screen coordinates. The coach mark ends 12 px above the unchanged six-button Toolbar. If the user opens Camera or Scenes, Inline settings starts 12 px below the Toolbar and scrolls in the remaining space. Opening and closing the tour must not produce an intermediate frame in which the ordinary UI jumps.
-- The Scenes step explains that each Scene retains its selected camera source, screen position, shape, framing, and style. The opened Scenes panel provides the complete controls and shortcut reference.
+- The Scenes step explains that each Scene retains its selected camera source, screen position, shape, framing, and style. The opened Scenes panel provides the complete controls.
 
 ## Camera behavior
 
@@ -68,7 +68,7 @@ New installations show a four-step contextual coach-mark tour inside the Overlay
 - Permission blocked, device busy, and generic failures have distinct status messages. Permission recovery copy names Windows Settings/desktop-app permission on Windows and System Settings/CamFrame permission on macOS.
 - Device changes trigger a fresh enumeration.
 
-Camera quality is one setting shared by Compact mode and Full screen. It defaults to 720p (1280×720), offers 480p, 720p, 1080p, and 2160p, and requests at least 30 fps while preferring 50 fps or faster modes without ever setting a frame-rate ideal or maximum (ADR 0028); the overconstrained retry may omit the minimum. Changing modes never calls `MediaStreamTrack.applyConstraints()`. A user Camera quality change is serialized on the existing stream, and an unsupported profile leaves the current working track in place.
+Camera quality is one setting shared by Compact mode and Full screen. It defaults to 720p (1280×720), offers 480p, 720p, 1080p, and 2160p, and requests at least 30 fps while preferring 50 fps or faster modes without ever setting a frame-rate ideal or maximum (ADR 0028); the overconstrained retry may omit the minimum. Changing modes never calls `MediaStreamTrack.applyConstraints()`. A user Camera quality change is serialized on the existing stream. Changes made in one go or while a switch is in progress collapse into one switch to the latest choice, and none when that choice is the mode the camera runs at; a choice made while the camera starts is applied before the camera is shown. An unsupported profile leaves the current working track in place and is not tried on that camera again until it restarts.
 
 ## Compact-mode geometry and manipulation
 
@@ -86,6 +86,7 @@ The transparent native window reserves 18 px on the left/right, 84 px above, and
 - Dragging the camera surface moves the native Overlay by polling the global cursor every 16 ms.
 - Four 14 px corner handles resize while preserving aspect ratio and anchor the opposite corner.
 - Shape, size, position, and frame-effect changes may reapply native bounds. Resolution, framing, mirror, and topmost changes must not resize the window.
+- The Overlay can never be lost off screen (ADR 0038). At startup, whenever it is shown, and when a display is added or removed, changes resolution or scale, or the laptop docks, an Overlay with less than half of the window or of its camera on a connected display moves to the bottom right of the main display, Corner margin (32 px by default) from its edges, at the same size. A Full screen Overlay on a display that is gone covers the nearest display. Places stay absolute screen points, so a camera parked half over an edge on purpose stays there.
 
 ## Camera framing
 
@@ -125,12 +126,20 @@ Camera framing is active only after selecting the target/crosshair tool.
 The UI calls saved layouts **Scenes** while persistence uses `presets`.
 
 - At most six Scenes exist, in user-controlled order.
+- A Scene saved on a display that is gone, or at a higher resolution, opens on screen: when less than half of it would be visible, its place is kept wholly on the display nearest where it was saved. The Scene keeps its saved place, so it opens there again once that display is back.
+- A new installation, and an older Preferences file (schema below 15) without Scenes, start with two layout Scenes: **Small bottom** (288 px, bottom right) and **Big right** (540 px, right), planned on the display the Overlay is on. A file with Scenes keeps exactly those. Full screen is not a Scene.
 - Saving captures camera identity/label, shape, size, Camera quality, frame/effect styling, mirror, camera zoom/crop, and compact Overlay position.
-- Saving does not capture visibility, Always on top, Start at login, current Full screen state, active Scene, or other Scenes.
-- Saving with a selected ID updates that Scene. A case-insensitive name match also replaces an existing Scene. Adding beyond six retains the latest five and adds the new Scene.
+- Saving does not capture visibility, Always on top, the Scenes view, current Full screen state, active Scene, or other Scenes.
+- **Save look** saves the live look as a new Scene with the next number and puts it on camera. With no Scenes it is the only slot ("Save the live look as scene 1"); at six Scenes it says "Full". A case-insensitive name match replaces that Scene (the check button then says "Replace").
+- **Autosave** (ADR 0037): the active Scene follows the live look. A hand change (Inline settings, Shape, dragging, a corner resize) is saved into it at once and it stays active; its number flashes a green check. The camera and its quality are not followed. A layout Scene becomes an exact Scene on its first hand change. A Prompter link cue that moves the camera clears the active Scene instead, and onboarding demo steps are never saved into it.
+- **Undo** shows on the active Scene for 10 seconds after its last change (a line runs out); Undo or Ctrl+Z (on the Scenes tab) puts the Scene's look and the live look back as they were when the Scene went on camera, keeping a rename. Switching Scenes or saving over it on purpose ends it.
+- **Delete** (trash, Delete key) needs no confirmation: the Scene's place shows "<name> deleted" with Undo for 6 seconds (Ctrl+Z too), which puts it back in its place, on camera with its look if it was.
+- **Rename** (pencil, F2) keeps the look; a name another Scene has is refused on the field.
+- **Tiles** draw the camera at its real place, size and shape with its glow or border, on a small 16:9 screen; hovering shows shape, size, place and frame. The list shows the same as text.
+- Keyboard: arrows move between Scenes (all four in the grid), Enter applies, F2 renames, Delete deletes, Ctrl+Z undoes, Alt+arrow moves a Scene one place, Escape cancels or closes. Scenes can also be dragged into a new order.
 - Applying a Scene immediately applies its settings, draws nothing on the camera (the Overlay is what gets captured on stream; saving a Scene is silent too; screen readers still hear the name through a hidden live region, ADR 0036), and animates compact bounds when visible unless reduced motion is active.
 - Reordering controls the numeric direct-shortcut order.
-- Export writes a versioned JSON document. Import accepts that document, a legacy `presets` property, or a bare array, then merges by ID or case-insensitive name without deleting unrelated local Scenes or exceeding six.
+- Export writes a versioned JSON document. Import accepts that document, a legacy `presets` property, or a bare array, then merges by ID or case-insensitive name without deleting unrelated local Scenes or exceeding six. The Import and Export buttons show the result on themselves ("Imported 2", "Not imported"); nothing is drawn on the camera.
 - Full screen is transient and is not entered/exited by applying a Scene.
 
 Presentation entry points:
@@ -150,11 +159,11 @@ Presentation entry points:
 
 ## Prompter link
 
-An optional link that lets the Techies teleprompter (https://prompter.techies.tools, its preview https://preview.prompter.techies.tools (ADR 0033), a local copy, or a file:// copy) switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it can also save layout Scenes and the small size (ADR 0035), but it never records, streams, or changes the camera itself (ADR 0031).
+An optional link that lets the Techies teleprompter (https://prompter.techies.tools, a local copy, or a file:// copy) switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it can also save layout Scenes and the small size (ADR 0035), but it never records, streams, or changes the camera itself (ADR 0031).
 
-- Off by default. Turning it on in Inline settings → Scenes, or with the toolbar's Prompter link button (scroll icon), starts a tiny HTTP server bound to `127.0.0.1` only, on port `47833`. Turning it off, or quitting, closes the port. With it off nothing listens.
-- The toolbar button and the settings switch are two views of the one stored setting and always agree. The button is pressed while the link is on and shows a dot: green ready, grey starting, orange a problem.
-- The status line under the switch says Off, On (waiting for prompter cues on port 47833), Starting…, or why it could not start (for example "Port 47833 is in use by another app."); turning the link off and on retries. Face full, Face small and Corner margin show only while the link is on.
+- Off by default. Turning it on with the toolbar's Prompter link button (scroll icon), its only control since ADR 0037, starts a tiny HTTP server bound to `127.0.0.1` only, on port `47833`. Turning it off, or quitting, closes the port. With it off nothing listens.
+- The button is pressed while the link is on and shows a dot: green ready, grey starting, orange a problem. Its title and screen reader description say Off, On (waiting for prompter cues on port 47833), Starting…, or why it could not start (for example "Port 47833 is in use by another app."); turning the link off and on retries.
+- Face full, Face small and Corner margin no longer have controls (ADR 0037). Their stored values and defaults still decide what the cues below do: a file that chose a Scene for Face full keeps that choice.
 - **Face full** (cue `{size:"full"}`): Full screen by default, or a chosen Scene.
 - **Small size**: "small" always means the stored small size, never the size the camera has now, so a larger Scene or cue never changes what "small" restores. Resizing the Overlay by hand sets it; Scenes and cues do not (ADR 0035).
 - **Face small** without a place (cue `{size:"small"}`): by default "Same place" (leave Full screen back to the previous Compact position at the small size; in Compact mode, shrink or grow to the small size around the camera's centre, and nothing changes when it already has that size, also if it was dragged partly off the display; when it moves the camera, the whole window stays on the display, and the active Scene stays when the camera ends up at the same size and place), or one of the seven places at the small size, or a chosen Scene.
@@ -178,9 +187,9 @@ Global shortcut registration failures are not surfaced. Tray actions remain the 
 
 ## Persistence and startup
 
-Preferences are stored per OS user as `preferences.json` under Electron's `app.getPath('userData')`. Writes are debounced by 120 ms and forced synchronously before quit. Invalid or missing files fall back to defaults. A pre-schema-3 migration resets frame width and size. A schema-12 onboarding migration marks existing Preferences documents complete when the new field is absent.
+Preferences are stored per OS user as `preferences.json` under Electron's `app.getPath('userData')`. Writes are debounced by 120 ms and forced synchronously before quit. Invalid or missing files fall back to defaults. A pre-schema-3 migration resets frame width and size. A schema-12 onboarding migration marks existing Preferences documents complete when the new field is absent. The schema-15 migration adds the starter Scenes to a file without Scenes and drops `launchAtLogin`.
 
-Start at login is applied only in packaged builds. Development runs never register Electron itself. The application remains alive with no normal windows because `window-all-closed` intentionally does nothing; the tray is the process anchor.
+Start at login is removed (ADR 0037). A packaged build whose loaded Preferences had it on turns the login item off once. The application remains alive with no normal windows because `window-all-closed` intentionally does nothing; the tray is the process anchor.
 
 ## Security and packaging constraints
 

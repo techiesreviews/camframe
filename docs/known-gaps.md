@@ -22,12 +22,14 @@ The dormant renderer, BrowserWindow lifecycle, privileged relays/actions, and Co
 
 ## KG-03 — Fullscreen camera continuity needs hardware confirmation
 
-**Status:** Source trigger removed by ADR 0026; manual acceptance remains open in GitHub issue 5.
+**Status:** Source trigger removed by ADR 0026; manual acceptance remains open in GitHub issue 5. Updated 2026-11-09: Lex ran the ten-step Elgato check on Windows (TOOLS-22) and answered "Pass"; the build he ran is not recorded (`verification/runs/2026-11-09-v0.8.0-go.md`).
 **Evidence:** Historical issue, current source inspection, and automated stable-profile contracts.
 
 Dynamic `applyConstraints()` switching was reported to show stale, black, or wrong camera frames on Windows with multiple devices including Elgato hardware. A local canvas-held-frame workaround passed an automated race test but still failed manual testing and was never committed.
 
 The unreleased implementation now has one Camera quality and never applies track constraints because Full screen state changed. This removes the observed renegotiation trigger, but Windows multiple-device/Elgato verification is still required before closing issue 5.
+
+The 2026-11-09 review (TOOLS-22) found two remaining paths that switched the live camera mode needlessly or late, both fixed: every queued Camera quality change re-applied the latest quality, so a burst of changes (Inline settings or Scene applies) switched the camera mode once per change, even when it ended on the quality already running; and a Camera quality chosen while the camera was starting was dropped, so the camera stayed at the old quality. Applying a Scene saved with a different Camera quality still switches the live camera mode once, which is the hardware-risky step this gap tracks. See `verification/runs/2026-11-09-camera-quality-switch-once.md`.
 
 See `experiments/2026-08-12-fullscreen-capture-renegotiation.md`.
 
@@ -100,10 +102,10 @@ During the Onboarding framing step, `Escape` turns framing mode off and keeps th
 
 ## KG-13 — The Prompter link lacks manual Windows and macOS evidence
 
-**Status:** Open verification gap, 2026-10-30; updated 2026-10-31 (the preview origin, ADR 0033) and 2026-11-06 (Lex's six-step hand check on his streaming PC, reported OK as a whole, "All works"; per-step observations not given, so Inconclusive: `docs/verification/runs/2026-11-06-v0.7.0-go.md`; every open item below stays open).
-**Evidence:** Automated: unit tests (server, origins including the prompter's preview, host, cue checks, placement on several displays) and real-Electron cue runs on Linux (`docs/verification/runs/2026-10-30-prompter-link.md`, `2026-10-30-prompter-link-review.md`, `2026-10-30-prompter-link-toolbar.md`; the preview origin in `2026-10-31-prompter-link-preview-origin.md`, unit tests only). Lex reported on 2026-10-30 that the link works on Lex's Windows PC (browser, prompts and display layout not recorded); not yet observed on macOS.
+**Status:** Open verification gap, 2026-10-30; updated 2026-10-31 (the preview origin, ADR 0033), 2026-11-06 (Lex's six-step hand check on his streaming PC, reported OK as a whole, "All works"; per-step observations not given, so Inconclusive: `docs/verification/runs/2026-11-06-v0.7.0-go.md`; every open item below stays open) and 2026-11-08 (the preview address removed, ADR 0033 note).
+**Evidence:** Automated: unit tests (server, origins, host, cue checks, placement on several displays) and real-Electron cue runs on Linux (`docs/verification/runs/2026-10-30-prompter-link.md`, `2026-10-30-prompter-link-review.md`, `2026-10-30-prompter-link-toolbar.md`; the preview origin, now removed, in `2026-10-31-prompter-link-preview-origin.md` (unit tests only) and `2026-11-08-prompter-preview-origin-removed.md`). Lex reported on 2026-10-30 that the link works on Lex's Windows PC (browser, prompts and display layout not recorded); not yet observed on macOS.
 
-Still to confirm by hand: Chrome's one-time Local Network Access prompt when https://prompter.techies.tools, and again when its preview https://preview.prompter.techies.tools (ADR 0033), first reaches `127.0.0.1:47833`; whether the Windows Defender Firewall or macOS firewall prompts for a `127.0.0.1`-only listener (not expected); Safari reaching `http://127.0.0.1` from an https page (may be refused, so Chrome or Edge is the supported pairing); corner placement with mixed display scaling, a display left of or above the primary one, and a taskbar or Dock on the side. Lex decided on 2026-11-04 not to run the preview step of 0.6.1 ("ignore the preview, and remove it in a future issue"); removal of the preview address is fleet issue #28 (techiesreviews/fleet). These are the manual rows W-30 and M-12 in `docs/verification/README.md`.
+Still to confirm by hand: Chrome's one-time Local Network Access prompt when https://prompter.techies.tools first reaches `127.0.0.1:47833`; whether the Windows Defender Firewall or macOS firewall prompts for a `127.0.0.1`-only listener (not expected); Safari reaching `http://127.0.0.1` from an https page (may be refused, so Chrome or Edge is the supported pairing); corner placement with mixed display scaling, a display left of or above the primary one, and a taskbar or Dock on the side. Lex decided on 2026-11-04 not to run the preview step of 0.6.1 ("ignore the preview, and remove it in a future issue"); the preview address was removed from the Prompter link on 2026-11-08 (ADR 0033 note), so the preview step no longer exists. These are the manual rows W-30 and M-12 in `docs/verification/README.md`.
 
 ## KG-14 — Prompter link API 2: deployment and edge cases
 
@@ -112,8 +114,34 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 
 - Resizing the Overlay by hand sets the small size, also while a large layout is showing (holding a corner still does not). Then a later `"small"` and "Live small corner" restore that hand-picked size. The prompter can check `smallSize` in the status and reset it with `POST /camframe/small-size`.
 - Saving a seventh Scene from Inline settings still drops the oldest Scene, and importing past six still skips new names (KG-09 area). Only Prompter link saves refuse instead.
-- Saving over a layout Scene from Inline settings turns it into a snapshot Scene (it then applies its saved look again).
+- Saving over a layout Scene from Inline settings, or changing the look by hand while it is on camera (autosave, ADR 0037), turns it into a snapshot Scene (it then applies its saved look again, and the status reports `kind: "snapshot"`).
 - A very large `margin` at a bottom place on a short display is not met in full (the window is kept on screen), and the cue answer still says `clamped: false`.
-- Resizing the Overlay by hand while a Scene is active leaves that Scene marked active (the tray tick and the status `activeScene`), although the camera no longer matches it. This is older behaviour (the hand-resize handler never cleared it before API 2) and is unchanged here; a prompter checking a cue should compare `view` too.
+- Resizing the Overlay by hand while a Scene is active leaves that Scene marked active (the tray tick and the status `activeScene`). Since ADR 0037 (2026-11-09) that is right: the resize is saved into the active Scene, so the camera matches it again.
 - Going back to an older CamFrame build (before schema 14) and letting it save drops the new fields: layout Scenes become ordinary snapshot Scenes and the small size resets to the camera size when API 2 opens them again. Save the layout Scenes again from the prompter after such a downgrade.
 - Layout planning uses Electron's work area in screen coordinates. Mixed display scaling and displays left of or above the primary one are not yet checked by hand (W-30, M-12).
+
+## KG-15 — The rebuild guide is behind the source
+
+**Status:** Open, 2026-11-06 (found in the 0.7.0 release review).
+**Evidence:** `docs/rebuild-guide.md` still says Preferences schema 12 and "schema-12 migration", has no reconstruction step for the Prompter link or `src/prompter-control.js`, and still lists "notices" for Scenes without ADR 0036. The Prompter link predates 0.7.0; `src/prompter-control.js` and schema 14 are new in 0.7.0, so 0.7.0 widened the gap. ADR 0037 (2026-11-09) widened it again: schema 15, the Scenes tab module `src/scenes-panel.js`, autosave and the Undo windows (`followLiveLook`, `createSceneEdits` in `src/scenes.js`) and the removed Start at login have no step there yet.
+
+## KG-16 — Scenes tab autosave and Undo lack Windows hand checks
+
+**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132); updated 2026-11-09 (ships in 0.8.0; Lex's eight plain hand-check steps on his Windows laptop, "1-8 ok", reported as a whole, so Inconclusive: `verification/runs/2026-11-09-v0.8.0-go.md`; the written rows below stay open).
+**Evidence:** Automated: unit tests (`followLiveLook`, `createSceneEdits`, `restoreScene`, `undoSceneChange`, `scenePreviews`, the Scenes tab model, the schema-15 load fixtures) and a real-Electron run on Linux with Chromium's synthetic camera (`docs/verification/runs/2026-11-09-scenes-tab.md`): open the tab, apply, autosave a shape change, Undo, rename, Save look, delete and Ctrl+Z, Alt+arrow, list/grid, Escape, the Prompter link status and a cue by name, and the saved file. Browser screenshots of both views from `kit shots`.
+
+Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.md`):
+
+- A real drag of the Overlay and a real corner resize saving into the active Scene (the smoke changes the look through the bridge and the toolbar; native pointer polling cannot be faked).
+- Whether the tiles match the real screen on Lex's displays: the tile is a 16:9 screen, so on a display of another shape the camera's place is right as a share of the display but the screen around it is drawn 16:9.
+- Dragging Scenes into a new order in the transparent, always-on-top Overlay window.
+- That updating a PC where Start at login was on stops CamFrame starting at sign-in (the one-time unregister runs only in a packaged build).
+- Screen reader names for the tiles, the saved state and the delete announcement (NVDA or Narrator).
+- A hand change can no longer be tried "outside" the active Scene: it is saved into it. Undo (10 s) or switching to another Scene first are the only ways back.
+
+## KG-17 — The self-healing Overlay position lacks Windows hand checks
+
+**Status:** Open, 2026-11-09 (ADR 0038, Orbit TOOLS-156); updated 2026-11-09 (ships in 0.8.0; on Lex's laptop the window now shows by itself, "this is greaat": `verification/runs/2026-11-09-v0.8.0-go.md`; docking and undocking stay open).
+**Evidence:** Automated: unit tests (`visibleShare`, `isOnScreen`, `onScreenBase`, `keepOnWorkArea`; the geometry on one and two displays, a display removed, a lower resolution and the Full screen exit; an exact Scene saved off screen; an old Preferences file with an off-screen place) and a real-Electron run on Linux through X11 (`docs/verification/runs/2026-11-09-overlay-on-screen.md`). The cause was confirmed on Lex's Windows laptop before the fix (a saved place off every display); the fix itself was seen on that laptop with manual build run 42617228120 (the window shows by itself, `verification/runs/2026-11-09-v0.8.0-go.md`); docking and undocking not yet.
+
+Not yet seen by hand on Windows (row W-37): unplugging or undocking a display while CamFrame runs and before it starts, resolution and scale changes, mixed scaling, and a main display that is not the leftmost. Whether Windows sends `display-metrics-changed` before or after it moves windows itself on undock is unknown; either way the check runs on every such event.

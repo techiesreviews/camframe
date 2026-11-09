@@ -20,6 +20,7 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
   const sceneContext = (overlay) => ({
     workArea: overlay.currentWorkArea(),
     workAreaAt: (point) => overlay.workAreaAt(point),
+    workAreas: overlay.workAreas?.(),
   })
 
   function view() {

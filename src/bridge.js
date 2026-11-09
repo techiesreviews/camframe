@@ -22,9 +22,14 @@ const RENDERER_SETTING_KEYS = new Set(
   ),
 )
 
-const settingsPatch = (patch) => {
+// `options.demo`: an onboarding demo step, applied and stored but never saved into the active Scene
+// (ADR 0037); without it the patch is a hand change.
+const settingsPatch = (patch, options) => {
   if (!isPlainObject(patch)) return undefined
-  return [Object.fromEntries(Object.entries(patch).filter(([key]) => RENDERER_SETTING_KEYS.has(key)))]
+  return [
+    Object.fromEntries(Object.entries(patch).filter(([key]) => RENDERER_SETTING_KEYS.has(key))),
+    { demo: Boolean(options?.demo) },
+  ]
 }
 const optionalString = (value) => (value === undefined || value === null ? '' : String(value))
 const noArguments = () => []
@@ -49,6 +54,15 @@ export const BRIDGE_CONTRACT = Object.freeze([
     check: (name, id) => [optionalString(name), optionalString(id)],
   },
   { method: 'applyPreset', channel: 'preset:apply', kind: 'send', check: (id) => [optionalString(id)] },
+  {
+    method: 'renamePreset',
+    channel: 'preset:rename',
+    kind: 'send',
+    check: (id, name) => [optionalString(id), optionalString(name)],
+  },
+  // Undo the hand changes saved into the active Scene, or the last delete (main checks both windows).
+  { method: 'undoPresetChange', channel: 'preset:undo-change', kind: 'send', check: noArguments },
+  { method: 'undoPresetDelete', channel: 'preset:undo-delete', kind: 'send', check: noArguments },
   { method: 'deletePreset', channel: 'preset:delete', kind: 'send', check: (id) => [optionalString(id)] },
   {
     method: 'reorderPreset',

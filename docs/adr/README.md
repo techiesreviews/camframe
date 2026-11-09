@@ -37,6 +37,8 @@ ADRs explain what CamFrame has committed to. They are not experiment diaries. Pu
 - [`0034-hold-a-version-tag-until-its-run-says-go.md`](0034-hold-a-version-tag-until-its-run-says-go.md)
 - [`0035-prompter-link-exact-layouts-and-layout-scenes.md`](0035-prompter-link-exact-layouts-and-layout-scenes.md)
 - [`0036-draw-no-scene-name-on-the-camera.md`](0036-draw-no-scene-name-on-the-camera.md)
+- [`0037-scenes-tab-with-autosave-and-undo.md`](0037-scenes-tab-with-autosave-and-undo.md)
+- [`0038-keep-absolute-positions-and-heal-a-lost-overlay.md`](0038-keep-absolute-positions-and-heal-a-lost-overlay.md)
 - [`0013-establish-overlay-accessibility-contract.md`](0013-establish-overlay-accessibility-contract.md)
 - [`0014-add-scoped-custom-frame-effects.md`](0014-add-scoped-custom-frame-effects.md)
 - [`0015-sign-releases-before-enabling-updates.md`](0015-sign-releases-before-enabling-updates.md)

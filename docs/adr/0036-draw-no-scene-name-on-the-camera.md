@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-11-06 (Lex).
+Accepted — 2026-11-06 (Lex). Superseded in part by ADR 0037 (no notice for a deleted, imported or exported Scene either; 2026-11-09).
 
 ## Context
 

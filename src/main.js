@@ -16,6 +16,7 @@ import {
 import {
   DEFAULT_SETTINGS,
   SCENE_LIMIT,
+  legacyLaunchAtLogin,
   preferencesFromDocument,
   sanitizeSettings,
   settingsAfterHandResize,
@@ -29,6 +30,7 @@ import {
   compactBaseBounds,
   createOverlayGeometry,
   isFullscreenExitInput,
+  onScreenBase,
 } from './overlay-geometry.js'
 import { createPrompterLink } from './prompter-link.js'
 import { createPrompterControl } from './prompter-control.js'
@@ -50,6 +52,8 @@ let tray
 let saveTimer
 let settings = { ...DEFAULT_SETTINGS }
 let activeSceneId = ''
+// The Scenes tab's Undo offers: a change saved into the active Scene, and the last delete.
+const sceneEdits = sceneLibrary.createSceneEdits()
 let prompterLink
 let prompterLinkStatus = { state: 'off', port: 0, message: '' }
 
@@ -61,6 +65,8 @@ function loadSettings() {
     documentText = undefined
   }
   settings = preferencesFromDocument(documentText)
+  // Start at login is gone (ADR 0037): a packaged build that registered it turns it off once.
+  if (app.isPackaged && legacyLaunchAtLogin(documentText)) app.setLoginItemSettings({ openAtLogin: false })
 }
 
 function saveSettings() {
@@ -70,9 +76,28 @@ function saveSettings() {
   }, 120)
 }
 
-// Runtime-only fields ride along with Preferences: the active Scene and the Prompter link state.
+// Where each Scene's camera sits on its display, for the Scenes tab tiles (ADR 0037).
+function previewContext() {
+  if (!overlayGeometry) return undefined
+  return {
+    workArea: overlayGeometry.currentWorkArea(),
+    workAreaAt: (point) => overlayGeometry.workAreaAt(point),
+    displayAt: (point) => screen.getDisplayNearestPoint(point).bounds,
+    liveBounds: overlayGeometry.isFullscreen() ? undefined : overlayGeometry.targetBounds(),
+  }
+}
+
+// Runtime-only fields ride along with Preferences: the active Scene, the Scenes tab's Undo offers
+// and tile previews, and the Prompter link state.
 function overlayState() {
-  return { ...settings, activePresetId: activeSceneId, prompterLinkStatus }
+  const context = previewContext()
+  return {
+    ...settings,
+    activePresetId: activeSceneId,
+    ...sceneEdits.view(activeSceneId),
+    scenePreviews: context ? sceneLibrary.scenePreviews(settings, context) : null,
+    prompterLinkStatus,
+  }
 }
 
 function emitState() {
@@ -92,24 +117,21 @@ function announceScene(name) {
   sendBridgeEvent(overlayWindow?.webContents, 'onSceneAnnouncement', String(name).slice(0, 80))
 }
 
-function applyLaunchAtLoginSetting() {
-  if (!app.isPackaged) return
-  app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
-}
-
 function toggleFullscreen() {
   overlayGeometry?.setFullscreen(!overlayGeometry.isFullscreen())
 }
 
-function updateSettings(patch) {
+// A change from the Overlay (Inline settings, the toolbar). A hand change of the look is saved into
+// the active Scene, which stays active (ADR 0037).
+// An onboarding demo step (`demo`) is stored but never saved into the active Scene.
+function updateSettings(patch, { demo = false } = {}) {
   const updateBounds = settingsPatchChangesOverlayGeometry(patch)
-  ;({ settings, activeSceneId } = sceneLibrary.patchSettings(sceneState(), patch))
-  if (Object.hasOwn(patch, 'launchAtLogin')) applyLaunchAtLoginSetting()
+  const next = sanitizeSettings({ ...settings, ...patch })
+  commitState(
+    demo ? { settings: next, activeSceneId } : sceneLibrary.followLiveLook(sceneState(), next, { keys: Object.keys(patch) }),
+  )
   if (Object.hasOwn(patch, 'prompterLink')) prompterLink?.setEnabled(settings.prompterLink)
   overlayGeometry?.apply({ updateBounds })
-  emitState()
-  setTrayMenu()
-  saveSettings()
 }
 
 function sceneState() {
@@ -117,13 +139,15 @@ function sceneState() {
 }
 
 // Stores a Scene library result, broadcasts it and saves it; window effects are the caller's.
-function commitState(result) {
+// `tray: false` skips rebuilding the tray menu (a corner drag reports a size every frame).
+function commitState(result, { tray = true } = {}) {
   if (!result) return
   if (result.settings) {
+    sceneEdits.track(sceneState(), result)
     settings = result.settings
     activeSceneId = result.activeSceneId
     emitState()
-    setTrayMenu()
+    if (tray) setTrayMenu()
     saveSettings()
   }
   if (result.notice) showPresentationNotice(result.notice)
@@ -135,10 +159,15 @@ function commitScenes(result) {
   if (result?.appliedScene) overlayGeometry?.showScene()
 }
 
-// A layout Scene fits the display the Overlay is on now, or the display its saved point is on.
+// A layout Scene fits the display the Overlay is on now, or the display its saved point is on; an
+// exact Scene saved off screen opens on the display nearest its place.
 function sceneContext() {
   if (!overlayGeometry) return {}
-  return { workArea: overlayGeometry.currentWorkArea(), workAreaAt: (point) => overlayGeometry?.workAreaAt(point) }
+  return {
+    workArea: overlayGeometry.currentWorkArea(),
+    workAreaAt: (point) => overlayGeometry?.workAreaAt(point),
+    workAreas: overlayGeometry.workAreas(),
+  }
 }
 
 function applySceneById(id) {
@@ -165,7 +194,6 @@ async function exportPresets() {
   if (result.canceled || !result.filePath) return { canceled: true }
   const payload = sceneLibrary.sceneExport(sceneState())
   writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf8')
-  showPresentationNotice('Scenes exported')
   return { canceled: false, count: payload.scenes.length }
 }
 
@@ -231,11 +259,19 @@ function completeOnboarding() {
 }
 
 function createOverlayWindow() {
-  const bounds = compactBaseBounds({
-    settings,
-    workArea: screen.getPrimaryDisplay().workArea,
-    keepCenter: false,
+  const workArea = screen.getPrimaryDisplay().workArea
+  const saved = compactBaseBounds({ settings, workArea, keepCenter: false })
+  // A saved place off every connected display (another monitor, docking, a new resolution) would
+  // run CamFrame out of sight (TOOLS-156): it opens at the bottom right of the main display instead.
+  const bounds = onScreenBase(saved, {
+    workAreas: screen.getAllDisplays().map((display) => display.workArea),
+    primaryWorkArea: workArea,
+    margin: settings.prompterMargin,
   })
+  if (bounds !== saved) {
+    settings.position = { x: bounds.x, y: bounds.y }
+    saveSettings()
+  }
   overlayWindow = new BrowserWindow({
     ...bounds,
     show: false,
@@ -263,25 +299,35 @@ function createOverlayWindow() {
     screen,
     settings: () => settings,
     alwaysOnTopLevel: alwaysOnTopLevelFor(process.platform),
-    // Resizing by hand also sets the size a Prompter link "small" cue restores.
+    // Resizing by hand also sets the size a Prompter link "small" cue restores, and is saved into
+    // the active Scene.
     onResize(patch) {
-      settings = settingsAfterHandResize(settings, patch)
+      commitState(
+        sceneLibrary.followLiveLook(sceneState(), settingsAfterHandResize(settings, patch), { keys: ['size', 'position'] }),
+        { tray: false },
+      )
       overlayGeometry.apply({ keepCenter: false })
-      emitState()
-      saveSettings()
     },
     onCompactPositionChanged(position) {
       settings.position = position
       saveSettings()
     },
     onFullscreenChanged: emitFullscreen,
+    // A move-drag that moved the camera is a hand change of the place: saved into the active Scene.
+    onDragEnd(position) {
+      const next = sanitizeSettings({ ...settings, position })
+      commitState(sceneLibrary.followLiveLook(sceneState(), next, { keys: ['position'] }))
+    },
   })
   overlayWindow.loadFile(join(currentDirectory, 'overlay.html'))
 
   overlayWindow.once('ready-to-show', () => {
     emitState()
     emitFullscreen()
-    if (settings.overlayVisible) overlayWindow.showInactive()
+    if (settings.overlayVisible) {
+      overlayGeometry?.ensureOnScreen()
+      overlayWindow.showInactive()
+    }
   })
 
   overlayWindow.on('blur', () => {
@@ -358,6 +404,16 @@ function registerIpc() {
       },
       savePreset,
       applyPreset: (id) => applySceneById(id),
+      renamePreset: (id, name) => {
+        const renamed = sceneLibrary.renameScene(sceneState(), id, name)
+        if (!renamed?.error) commitState(renamed)
+      },
+      undoPresetChange: () => {
+        commitScenes(sceneLibrary.undoSceneChange(sceneState(), sceneEdits.takeChange(activeSceneId), sceneContext()))
+      },
+      undoPresetDelete: () => {
+        commitScenes(sceneLibrary.restoreScene(sceneState(), sceneEdits.takeDelete(), sceneContext()))
+      },
       deletePreset: (id) => commitScenes(sceneLibrary.deleteScene(sceneState(), id)),
       reorderPreset: (id, direction) => {
         commitScenes(sceneLibrary.reorderScene(sceneState(), id, direction))
@@ -387,7 +443,6 @@ function registerIpc() {
 app.whenReady().then(() => {
   app.dock?.hide()
   loadSettings()
-  applyLaunchAtLoginSetting()
   registerIpc()
 
   session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
@@ -399,6 +454,10 @@ app.whenReady().then(() => {
 
   createOverlayWindow()
   createTray()
+  // A screen added or removed, a new resolution or scale, or docking: a lost Overlay comes back.
+  for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
+    screen.on(event, () => overlayGeometry?.ensureOnScreen())
+  }
 
   const prompterControl = createPrompterControl({
     geometry: () => overlayGeometry,
