@@ -2,13 +2,13 @@
 
 ## Preferences schema
 
-Preferences are the only durable application state. `sanitizeSettings()` always starts from defaults, selectively accepts known values, deep-copies nested objects, and drops unknown keys. The current schema version is 13.
+Preferences are the only durable application state. `sanitizeSettings()` always starts from defaults, selectively accepts known values, deep-copies nested objects, and drops unknown keys. The current schema version is 15.
 
 The executable form of this section is `test/fixtures/preferences/`: `sanitize.json`, `load.json`, and `scene-import.json` hold input/expected cases that any implementation of Preferences must pass (ADR 0030). Their `README.md` describes the format. Strings are measured in UTF-16 code units and numbers round half away from zero. When this section and the fixtures disagree, the fixtures and source are the current behavior.
 
 | Field | Default | Accepted/sanitized value | Persisted | In Scene |
 | --- | --- | --- | --- | --- |
-| `schemaVersion` | `14` | Always current default; input is not copied | Yes | No |
+| `schemaVersion` | `15` | Always current default; input is not copied | Yes | No |
 | `cameraId` | `""` | String, first 512 characters | Yes | Yes |
 | `cameraLabel` | `"Default camera"` | String, first 120 characters | Yes | Yes |
 | `shape` | `"circle"` | `circle`, `rounded`, `portrait`, `landscape` | Yes | Yes |
@@ -27,7 +27,7 @@ The executable form of this section is `test/fixtures/preferences/`: `sanitize.j
 | `cameraPosition` | `{x:50,y:50}` | Each finite coordinate rounded to 0.1 and clamped 0?100 | Yes | Yes |
 | `alwaysOnTop` | `true` | Boolean; forced `true` at every startup | Yes | No |
 | `overlayVisible` | `true` | Boolean; forced `true` at every startup | Yes | No |
-| `launchAtLogin` | `false` | Boolean | Yes | No |
+| `sceneView` | `"grid"` | `grid` or `list`: how the Scenes tab shows Scenes (ADR 0037) | Yes | No |
 | `completedOnboardingVersion` | `0` | Finite number rounded/clamped 0?1 | Yes | No |
 | `position` | `null` | `null` or integer `{x,y}` in screen coordinates | Yes | Yes |
 | `prompterLink` | `false` | Boolean; the Prompter link listens only while `true` | Yes | No |
@@ -35,7 +35,7 @@ The executable form of this section is `test/fixtures/preferences/`: `sanitize.j
 | `prompterFaceSmall` | `"previous"` | `previous`, a place (`top-left`, `top-right`, `bottom-left`, `bottom-right`, `left`, `right`, `center`), or `scene:<Scene id>` | Yes | No |
 | `prompterMargin` | `32` | Finite number rounded/clamped 0–160 (px from the camera surface to the work-area edge) | Yes | No |
 | `prompterSmallSize` | `size` | Finite number rounded/clamped 180–640; missing or not a number means the sanitized `size`. The camera size a Prompter link `"small"` cue restores. Set by resizing the Overlay by hand (a held corner reports no resize until the pointer moves) and by `POST /camframe/small-size`; Scenes and Prompter cues never change it. Renderer patches may not set it. | Yes | No |
-| `presets` | `[]` | Up to six valid Scene records | Yes | No (no nesting) |
+| `presets` | `[]` (a loaded file: see the starters below) | Up to six valid Scene records | Yes | No (no nesting) |
 
 Colors retain input case in persisted state when accepted. The live hex text editors send lowercase; the UI renders uppercase text. Numbers are sanitized even when the corresponding control is not currently visible.
 
@@ -50,6 +50,8 @@ The integration harness is the only exception to the normal user-data path: in a
 Before sanitization, a loaded document with `schemaVersion < 3` receives `borderWidth = 0` and `size = 288`. A successfully loaded Preferences document without `completedOnboardingVersion` receives the current onboarding version so existing users are not interrupted. A missing or invalid Preferences document retains the default version 0. Explicit saved version 0 remains incomplete across restart. Legacy `fullscreenResolution` values are ignored; `overlayResolution` becomes the one retained Camera quality. Other fields continue to rely on defaults and sanitization for forward compatibility.
 
 Schema 13 added the four `prompter*` fields. Older documents load with their defaults, so the link stays off until the user turns it on.
+
+Schema 15 (ADR 0037) removed `launchAtLogin` (an old file still loads; the field is ignored and dropped at the next save, and a packaged build turns the old login item off once when it was `true`, `legacyLaunchAtLogin()`), added `sceneView`, and gives a new installation and a document below schema 15 without valid Scenes the two starter layout Scenes (`STARTER_SCENES`): `starter-small-bottom` "Small bottom" `{size: 288, position: "bottom-right"}` and `starter-big-right` "Big right" `{size: 540, position: "right"}`. A document with Scenes keeps exactly those; from schema 15 on an empty `presets` stays empty. The Prompter link fields keep their values and defaults although their controls are gone.
 
 Schema 14 added `prompterSmallSize` and the optional Scene `layout`. A document without `prompterSmallSize` loads with its own `size`, so an upgrade keeps the user's compact size as the small size. An older CamFrame build does not read either field, so a layout Scene opens there as an ordinary Scene with its saved size and position; and the first time that build saves its Preferences it drops both fields, because its sanitizer rebuilds each Scene as `{ id, name, settings }` and knows no `prompterSmallSize`. Opened in API 2 again, those layout Scenes stay ordinary (snapshot) Scenes and the small size starts again from `size` (KG-14).
 
@@ -96,8 +98,11 @@ A **layout Scene** (saved through the Prompter link, ADR 0035) also has `layout`
 - Name: trimmed, non-empty string truncated to 40 characters.
 - Settings: the exact ordered key list exported by `PRESET_SETTING_KEYS`; nested position objects are copied.
 - Invalid records are dropped. Sanitization considers only the first six input records before filtering invalid ones, so invalid early records can reduce the resulting count.
-- Reorder moves one slot according to the sign of `direction`; invalid/boundary moves are no-ops.
-- Save/update matches requested ID first, then case-insensitive name. A seventh new save drops the oldest Scene and keeps the newest six.
+- Reorder moves a Scene `direction` slots (truncated to an integer, kept inside the list); a zero, non-numeric or boundary move is a no-op.
+- Save/update matches requested ID first, then case-insensitive name. A seventh new save drops the oldest Scene and keeps the newest six (the Scenes tab shows "Full" at six, so it never sends one).
+- Rename (`renameScene`) changes only the name; an empty name, the same name or a missing Scene is a no-op, and a name another Scene has (case-insensitive) is refused with `{error: "name-taken"}`.
+- **Autosave** (`followLiveLook`, ADR 0037): a hand change from the Overlay (`updateState`, a corner resize, the end of a move-drag) writes the keys of `FOLLOWED_SETTING_KEYS` that changed (every Scene key except `cameraId`, `cameraLabel` and `overlayResolution`) into the active Scene, which stays active; a layout Scene becomes a snapshot of the live settings. Prompter cues use `patchSettings`, which clears the active Scene.
+- Delete returns `deleted: {scene, index, wasActive}`; `restoreScene` puts it back at that index (on camera again if it was and no other Scene is) unless the library is full or its id or name is taken. `undoSceneChange` puts a Scene back from `createSceneEdits().takeChange()` (`{scene, look}`; a layout Scene also gets the live look back) and applies it.
 
 ## Scene export/import document
 
@@ -157,21 +162,24 @@ Renderers receive only `window.camFrame`. Sends are fire-and-forget; `getState`,
 
 | Bridge method/event | Main channel | Direction | Payload/result |
 | --- | --- | --- | --- |
-| `getState()` | `state:get` | invoke ? handle | Full Preferences plus runtime `activePresetId` and `prompterLinkStatus` `{state,port,message}` (`state`: `off`, `starting`, `on` or `error`) |
+| `getState()` | `state:get` | invoke ? handle | Full Preferences plus runtime `activePresetId`, `prompterLinkStatus` `{state,port,message}` (`state`: `off`, `starting`, `on` or `error`), and the Scenes tab's `sceneUndo` (`{id, endsAt}` or `null`: Undo for the active Scene's changes, 10 s), `sceneDeleted` (`{id, name, index, endsAt}` or `null`: Undo for the last delete, 6 s), `sceneSaved` (`{id, at}` or `null`: the last Scene saved, for its check) and `scenePreviews` (`{live, scenes: {id: rect}}`, each rect the camera surface as shares 0–1 of its display's bounds; `null` before the window exists). Times are `Date.now()` milliseconds (ADR 0037) |
 | `updateState(patch)` | `state:update` | send ? on | Partial untrusted settings patch |
 | `reportAccessibilityPreferences(preferences)` | `accessibility:preferences` | send ? on | Live `{reducedMotion,highContrast}` booleans; main retains reduced motion only; not persisted |
 | `onStateChanged(cb)` | `state:changed` | main ? renderer | Full state snapshot, the same shape as `getState()` (with `activePresetId` and `prompterLinkStatus`) |
 | `savePreset(name,id)` | `preset:save` | send ? on | Name and optional Scene ID |
 | `applyPreset(id)` | `preset:apply` | send ? on | Scene ID |
 | `deletePreset(id)` | `preset:delete` | send ? on | Scene ID |
-| `reorderPreset(id,direction)` | `preset:reorder` | send ? on | Scene ID and numeric direction |
-| `exportPresets()` | `preset:export` | invoke ? handle | `{canceled}` or `{canceled:false,count}` |
+| `reorderPreset(id,direction)` | `preset:reorder` | send ? on | Scene ID and the number of slots to move (negative is up) |
+| `renamePreset(id,name)` | `preset:rename` | send ? on | Scene ID and new name; keeps the look |
+| `undoPresetChange()` | `preset:undo-change` | send ? on | No payload; main checks the active Scene's 10 s window |
+| `undoPresetDelete()` | `preset:undo-delete` | send ? on | No payload; main checks the last delete's 6 s window |
+| `exportPresets()` | `preset:export` | invoke ? handle | `{canceled}` or `{canceled:false,count}`; the Export button shows the result, no notice |
 | `importPresets()` | `preset:import` | invoke ? handle | `{canceled}`, count, or error string |
 | `setOverlayInteractive(bool)` | `overlay:interactive` | send ? on | Whole-window mouse acceptance |
 | `setOverlaySettingsOpen(bool)` | `overlay:settings-open` | send ? on | `true` forces interactivity; `false` has no main-side action |
 | `setOverlayOnboardingOpen(bool)` | `overlay:onboarding-open` | synchronous send ? on | Opens/closes the transient native top reserve; returns applied reserve px (`220` or `0`). The reserve opens only in settled Compact mode and closes in every mode. `true` also shows/focuses the Overlay and forces interactivity |
 | `completeOnboarding()` | `onboarding:complete` | send ? on | Persists the current onboarding version without clearing the active Scene |
-| `startOverlayDrag()` / `stopOverlayDrag()` | `overlay:drag-start/stop` | send ? on | No payload |
+| `startOverlayDrag()` / `stopOverlayDrag()` | `overlay:drag-start/stop` | send ? on | No payload; stopping a drag that ran saves the new place into the active Scene |
 | `startOverlayResize(handle)` / `stopOverlayResize()` | `overlay:resize-start/stop` | send ? on | One of four corner tokens |
 | `toggleFullscreen()` / `exitFullscreen()` | `overlay:fullscreen-toggle/exit` | send ? on | No payload |
 | `onFullscreenChanged(cb)` | `fullscreen:changed` | main ? renderer | Boolean |

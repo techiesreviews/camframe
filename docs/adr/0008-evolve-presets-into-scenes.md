@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Superseded in part by ADR 0037 (the Scenes tab: autosave and Undo instead of Update, no "Manage scenes" disclosure, the settings stay open; 2026-11-09).
 
 ## Context
 

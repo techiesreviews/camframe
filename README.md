@@ -14,7 +14,7 @@ For an implementation-level product specification, architecture map, data contra
 - Animated fullscreen mode with `Esc` to restore the previous size and position.
 - Adjustable frame width, camera quality, and mirroring.
 - Optional always-on-top behavior, including above the Windows taskbar.
-- Hover toolbar with Inline settings for Camera, Style, and Scenes.
+- Hover toolbar with Inline settings for Camera, Style, and Scenes. Scenes show as a list or a grid of small screens; the Scene on camera saves your changes by itself, with Undo for 10 seconds. New installs start with "Small bottom" and "Big right".
 - Tray controls and `Ctrl+Shift+C` to reveal the inline controls.
 - Four contextual first-run coach marks that reveal camera, placement, framing, and Scene controls, reopenable from tray Help.
 - Remembers the selected camera, crop position, appearance, and screen position.
@@ -26,18 +26,18 @@ CamFrame can follow the camera cues in your prompter script, so you don't have t
 
 **Turn it on**
 
-1. In CamFrame, hover over the camera and click the **Prompter link** button (the scroll icon, next to the sliders). It gets a white ring and a green dot when it is ready. You can also switch it on in the controls (the sliders button) under **Scenes** → **Prompter link**; the line under it then says "On. Waiting for prompter cues on port 47833". An orange dot means something is wrong, for example another app uses the port: the line under the switch says what happened.
+1. In CamFrame, hover over the camera and click the **Prompter link** button (the scroll icon, next to the sliders). It gets a white ring and a green dot when it is ready. An orange dot means something is wrong, for example another app uses the port: hover the button to read what happened.
 2. In the prompter (https://prompter.techies.tools), open **Settings** and tick **CamFrame link**. It should say "Connected to CamFrame" and list your Scenes.
 3. The first time, Chrome may ask whether the prompter may reach apps on this device. Allow it.
 
-Click the scroll button again, or turn either switch off, to stop. With the link off, CamFrame listens for nothing.
+Click the scroll button again to stop. With the link off, CamFrame listens for nothing.
 
 **Cue cheat-sheet** (write these as reminder lines in your script, in square brackets; capitals don't matter)
 
 | In your script | CamFrame does |
 | --- | --- |
-| `[Face full]` | Full screen (or the Scene you chose for "Face full") |
-| `[Face small]` | The stored small size, where the camera was (or the place or Scene you chose for "Face small"). The small size is the size you last set by resizing CamFrame by hand; a larger layout never changes it |
+| `[Face full]` | Full screen (or the Scene chosen for "Face full" in an older version) |
+| `[Face small]` | The stored small size, where the camera was (or the place or Scene chosen for "Face small" in an older version). The small size is the size you last set by resizing CamFrame by hand; a larger layout never changes it |
 | `[Face small, bottom right]` | Small camera in that corner of the screen it is on. Places: top left, top right, bottom left, bottom right, left, right, center |
 | `[Face: Demo]` | Your saved Scene called "Demo" (its size and place; a Scene saved in CamFrame also brings back its look, a layout Scene saved by the prompter keeps the camera's current look) |
 
@@ -45,7 +45,7 @@ For the two livestream layouts (a larger camera on the right, and the small came
 
 You can put a cue after other words, like `[Share screen. Face small.]` or `[Stop share. Face full.]`. The cue fires once when that line reaches the prompter's reading line, and again if you scroll back above it and read it again.
 
-**Settings** (under the Prompter link switch, shown while it is on): **Face full** (Full screen or a Scene), **Face small** (Same place: the stored small size where the camera was; one of the seven places; or a Scene) and **Corner margin** (how far the camera stays from the screen edges, 32 px by default). At the top places the camera sits a little lower, so its toolbar stays on screen.
+**Defaults**: `[Face full]` goes Full screen, `[Face small]` uses the stored small size where the camera was, and places keep the camera 32 px from the screen edges. These have no controls any more; a choice made in an older version is kept. At the top places the camera sits a little lower, so its toolbar stays on screen.
 
 **Good to know**
 

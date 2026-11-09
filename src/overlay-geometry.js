@@ -309,9 +309,12 @@ export function createOverlayGeometry({
     frame()
   }
 
+  // True when a move-drag was running (main then saves the new place into the active Scene).
   function stopDrag() {
+    const wasDragging = Boolean(drag)
     if (drag) timers.clearInterval(drag.timer)
     drag = undefined
+    return wasDragging
   }
 
   function stopResize() {

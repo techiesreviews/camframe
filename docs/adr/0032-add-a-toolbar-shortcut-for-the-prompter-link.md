@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-10-30 (Lex).
+Accepted — 2026-10-30 (Lex). Superseded in part by ADR 0037 (the Scenes tab's Prompter link group is removed; the toolbar button is the only control, 2026-11-09).
 
 ## Context
 
