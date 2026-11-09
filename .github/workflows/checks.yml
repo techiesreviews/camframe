@@ -1,0 +1,28 @@
+# The unit tests on every pull request and on every push to dev (`kit unit` and `npm test` run the same files locally).
+# Not run here: the real-Electron smoke test (`npm run test:electron`), which needs a display.
+# No secrets, no build, no publish; build-desktop.yml stays the only workflow that builds or releases.
+name: checks
+on:
+  push:
+    branches: [dev]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      # The unit tests never start Electron, so its large binary is not downloaded.
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
