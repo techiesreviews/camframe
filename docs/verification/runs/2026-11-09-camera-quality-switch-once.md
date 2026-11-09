@@ -1,11 +1,11 @@
 # Verification run: camera quality switches once — 2026-11-09
 
-- **Commit:** base `ebf0056` (`dev`); the change is the PR below
+- **Commit:** built on `dev` at `ebf00568ead24e3b770cb92f896b80adfda5d06b`; the final hash is the PR's merge commit on `dev`
 - **Version:** 0.7.0 (unchanged; no release)
 - **Observer:** Claude Opus 5.5 (builder agent)
 - **Environment:** Linux 7.0 (Wayland, display :0), Node 24.22.2, development checkout
 - **Cameras:** none physical; fake `mediaDevices` in unit tests, Chromium's synthetic 60 fps camera in the Electron smoke test
-- **Related change/PR:** TOOLS-22, GitHub issue 5, KG-03
+- **Related change/PR:** the PR that carries this file (Orbit cards TOOLS-22 and TOOLS-131, GitHub issue 5, KG-03)
 
 ## What was found
 
@@ -14,15 +14,15 @@ The reported trigger (Full screen calling `applyConstraints()` on the live track
 1. Every queued Camera quality change re-applied the latest quality. A burst of changes (Inline settings, or Scene applies with different qualities) switched the camera mode once per change, and a burst that ended on the quality already running still switched it.
 2. A Camera quality chosen while the camera was starting was dropped (there was no track yet), so the camera opened and stayed at the old quality.
 
-Each switch of capture mode on a live track is the step that showed stale, black or another camera's frames on Windows. The session now remembers the quality the track runs at, skips a switch to that same quality, and applies a quality chosen during start to the new track before it is attached to the video.
+Each switch of capture mode on a live track is the step that showed stale, black or another camera's frames on Windows. The session now remembers the quality the track runs at, skips a switch to that same quality, and applies a quality chosen during start to the new track before it reaches the camera or halo video. That late switch goes straight to the new track, so a stalled switch on the old camera's driver cannot hold the new camera back, and a newer camera start stops the waiting stream at once.
 
 ## Automated checks
 
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | |
-| `scripts/agents/kit unit --affected` | Pass | 19/19, 1 file | `.scratch/unit/` |
-| `scripts/agents/kit unit` (= `node --test`) | Pass | 269 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
+| `scripts/agents/kit unit --affected` | Pass | 21/21, 1 file | `.scratch/unit/` |
+| `scripts/agents/kit unit` (= `node --test`) | Pass | 271 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
 | `npm run test:electron` | Pass | 3/3 | Full screen keeps the synthetic track's device and size |
 | Syntax checks | Pass | `node --check src/camera-session.js` | |
 | `git diff --check` | Pass | | |
@@ -33,7 +33,11 @@ New unit tests (`test/camera-session.test.js`); the first four failed on `ebf005
 - Camera quality changes that end on the running quality never switch the camera mode
 - a Camera quality change while the camera starts is applied before the camera is shown
 - an unsupported Camera quality leaves the camera running, and going back to the running quality switches nothing
-- a camera replaced while its late Camera quality is applied is stopped and never shown (guards the new step)
+- a camera replaced while its late Camera quality is applied is stopped at once and never shown
+- a stalled Camera quality change on the old camera never holds back the next camera
+- the blur halo never shows a starting camera while its late Camera quality is applied
+
+The last three cover review notes on the first version of this change; each failed on that version before its fix.
 
 ## Manual checks
 

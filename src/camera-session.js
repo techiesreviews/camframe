@@ -57,6 +57,8 @@ export function createCameraSession({
   let activeCameraId
   // The Camera quality the active track runs at: the one it opened with, or the last one applied.
   let activeResolution
+  // A started stream that is still getting its late Camera quality, not yet shown.
+  let startingStream
   let startRequest = 0
   let deviceRequest = 0
   let qualityUpdates = Promise.resolve()
@@ -140,6 +142,8 @@ export function createCameraSession({
 
     const request = ++startRequest
     onStatus(STARTING_CAMERA_MESSAGE)
+    stopTracks(startingStream)
+    startingStream = undefined
     if (activeStream) {
       stopTracks(activeStream)
       activeStream = undefined
@@ -149,21 +153,36 @@ export function createCameraSession({
     }
 
     try {
-      const { resolution } = current
+      let { resolution } = current
       const stream = await getStream(cameraId, resolution)
       if (request !== startRequest) {
         stopTracks(stream)
         return
       }
+      const [track] = stream.getVideoTracks()
+      // A Camera quality chosen while the camera was starting was skipped then. It is applied to
+      // the new track here, before the stream reaches either video, so the change of mode is never
+      // seen; and directly, not through the quality chain, which may still wait on the old camera.
+      let rejected
+      startingStream = stream
+      while (track?.applyConstraints && ![resolution, rejected].includes(current.resolution)) {
+        const wanted = current.resolution
+        try {
+          await track.applyConstraints(cameraTrackConstraintsFor({ resolution: wanted }))
+          resolution = wanted
+        } catch {
+          rejected = wanted
+        }
+        if (request !== startRequest) {
+          stopTracks(stream)
+          return
+        }
+      }
+      startingStream = undefined
       activeStream = stream
       activeCameraId = cameraId
       activeResolution = resolution
-      // A Camera quality chosen while the camera was starting was skipped then; apply it now,
-      // before anything is shown, so the change of mode is never seen.
-      if (current.resolution !== resolution) await queueQualityUpdate()
-      if (request !== startRequest) return
       video.srcObject = stream
-      const [track] = stream.getVideoTracks()
       if (track && 'contentHint' in track) track.contentHint = 'motion'
       await video.play()
       await syncEffectVideo()
@@ -197,6 +216,7 @@ export function createCameraSession({
     refreshDevices,
     stop() {
       effectVideo.srcObject = null
+      stopTracks(startingStream)
       stopTracks(activeStream)
     },
   }
