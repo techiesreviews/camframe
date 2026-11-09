@@ -103,6 +103,7 @@ async function harness(
   const screen = {
     getCursorScreenPoint: () => ({ x: 0, y: 0 }),
     getPrimaryDisplay: () => displays[0],
+    getAllDisplays: () => [...displays],
     // The display holding the bounds' centre, as Electron's getDisplayMatching picks by overlap.
     getDisplayMatching: (bounds) =>
       displays.find((candidate) =>
@@ -420,6 +421,7 @@ test('in Full screen, a bare "small" after a tray apply of a Scene from another 
   const applied = sceneLibrary.applyScene({ ...live.state }, 'preset-side', {
     workArea: live.geometry.currentWorkArea(),
     workAreaAt: (point) => live.geometry.workAreaAt(point),
+    workAreas: live.geometry.workAreas(),
   })
   live.state.settings = applied.settings
   live.state.activeSceneId = applied.activeSceneId
@@ -782,4 +784,22 @@ test('a layout Scene applied while the camera is still moving to another display
   const { view } = await live.status()
   assert.deepEqual(view.workArea, second.workArea)
   assert.equal(view.camera.x + view.camera.width, 1920 + 1280 - 32)
+})
+
+test('a Scene cue for an exact Scene saved off screen opens it on the nearest display; the Scene keeps its place (TOOLS-156)', async (t) => {
+  const live = await harness(t)
+  live.state.settings = sanitizeSettings({
+    ...live.state.settings,
+    presets: [
+      ...live.state.settings.presets,
+      { id: 'preset-desk', name: 'Desk', settings: { size: 288, shape: 'circle', position: { x: 30000, y: 400 } } },
+    ],
+  })
+  const answer = await live.cue({ scene: 'Desk' })
+  assert.equal(answer.status, 200)
+  live.settle()
+  const area = { x: 0, y: 0, width: 1920, height: 1040 }
+  assert.equal(live.window.bounds.x + live.window.bounds.width, area.x + area.width)
+  assert.equal(live.window.bounds.y, 400)
+  assert.deepEqual(live.state.settings.presets.find((scene) => scene.id === 'preset-desk').settings.position, { x: 30000, y: 400 })
 })
