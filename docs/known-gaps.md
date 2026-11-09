@@ -29,6 +29,8 @@ Dynamic `applyConstraints()` switching was reported to show stale, black, or wro
 
 The unreleased implementation now has one Camera quality and never applies track constraints because Full screen state changed. This removes the observed renegotiation trigger, but Windows multiple-device/Elgato verification is still required before closing issue 5.
 
+The 2026-11-09 review (TOOLS-22) found two remaining paths that switched the live camera mode needlessly or late, both fixed: every queued Camera quality change re-applied the latest quality, so a burst of changes (Inline settings or Scene applies) switched the camera mode once per change, even when it ended on the quality already running; and a Camera quality chosen while the camera was starting was dropped, so the camera stayed at the old quality. Applying a Scene saved with a different Camera quality still switches the live camera mode once, which is the hardware-risky step this gap tracks. See `verification/runs/2026-11-09-camera-quality-switch-once.md`.
+
 See `experiments/2026-08-12-fullscreen-capture-renegotiation.md`.
 
 ## KG-04 — Platform-specific permission copy lacks manual macOS evidence
