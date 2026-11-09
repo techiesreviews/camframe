@@ -312,14 +312,53 @@ test('a stalled Camera quality change on the old camera never holds back the nex
   session.update(camera('new', '2160p'))
   const stream = fakeStream('new')
   opening.resolve(stream)
-  const outcome = await Promise.race([
-    starting.then(() => 'shown'),
-    new Promise((resolve) => setTimeout(() => resolve('stuck'), 50)),
-  ])
+  const settled = (work) =>
+    Promise.race([work.then(() => 'done'), new Promise((resolve) => setImmediate(() => resolve('stuck')))])
 
-  assert.equal(outcome, 'shown')
+  assert.equal(await settled(starting), 'done')
   assert.equal(video.srcObject, stream)
   assert.deepEqual(stream.track.applied, [cameraTrackConstraintsFor({ resolution: '2160p' })])
+
+  // Later Camera quality changes reach the new camera too.
+  assert.equal(await settled(session.update(camera('new', '1080p'))), 'done')
+  assert.deepEqual(stream.track.applied.at(-1), cameraTrackConstraintsFor({ resolution: '1080p' }))
+})
+
+test('a Camera quality the camera rejects while starting is tried once and the camera still shows', async () => {
+  const opening = deferred()
+  const { session, video, events } = harness({ respond: () => opening.promise })
+  const starting = session.update(camera('cam', '720p'))
+  session.update(camera('cam', '2160p'))
+  const stream = fakeStream('cam')
+  stream.track.rejectConstraints = true
+  opening.resolve(stream)
+  await starting
+
+  assert.equal(video.srcObject, stream)
+  assert.equal(events.settled, 1)
+  assert.deepEqual(stream.track.applied, [cameraTrackConstraintsFor({ resolution: '2160p' })])
+
+  // The camera never left 720p, so going back to it switches nothing.
+  await session.update(camera('cam', '720p'))
+  assert.equal(stream.track.applied.length, 1)
+})
+
+test('stopping while a starting camera gets its late Camera quality never shows it', async () => {
+  const opening = deferred()
+  const applying = deferred()
+  const { session, video } = harness({ respond: () => opening.promise })
+  const starting = session.update(camera('cam', '720p'))
+  session.update(camera('cam', '2160p'))
+  const stream = fakeStream('cam')
+  stream.track.applyConstraints = () => applying.promise
+  opening.resolve(stream)
+  await new Promise((resolve) => setImmediate(resolve))
+  session.stop()
+  applying.resolve()
+  await starting
+
+  assert.equal(stream.track.stopped, true)
+  assert.equal(video.srcObject, null)
 })
 
 test('the blur halo never shows a starting camera while its late Camera quality is applied', async () => {
