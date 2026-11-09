@@ -11,7 +11,7 @@
 
 The reported trigger (Full screen calling `applyConstraints()` on the live track) was removed by ADR 0026 and stays removed: `applyFullscreen()` in the Overlay changes only geometry and chrome, and the Electron smoke test still checks that the track's device, width and height are unchanged across Full screen. Two paths still switched the live camera mode more than needed:
 
-1. Every queued Camera quality change re-applied the latest quality. A burst of changes (Inline settings, or Scene applies with different qualities) switched the camera mode once per change, and a burst that ended on the quality already running still switched it.
+1. Every queued Camera quality change re-applied the latest quality. Changes made in one go (Inline settings, or Scene applies with different qualities) switched the camera mode once per change, and changes that ended on the quality already running still switched it.
 2. A Camera quality chosen while the camera was starting was dropped (there was no track yet), so the camera opened and stayed at the old quality.
 
 Each switch of capture mode on a live track is the step that showed stale, black or another camera's frames on Windows. The session now remembers the quality the track runs at, skips a switch to that same quality, and applies a quality chosen during start to the new track before it reaches the camera or halo video. That late switch goes straight to the new track, and each camera start begins a fresh quality chain (operations left on the old one do nothing), so a stalled switch on the old camera's driver cannot hold the new camera back, then or later. A newer camera start, or quitting, stops the waiting stream at once.
@@ -21,8 +21,9 @@ Each switch of capture mode on a live track is the step that showed stale, black
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | |
-| `scripts/agents/kit unit --affected` | Pass | 24/24, 1 file | `.scratch/unit/` |
-| `scripts/agents/kit unit` (= `node --test`) | Pass | 274 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
+| `scripts/agents/kit doctor` | Pass | 12/12 checks | |
+| `scripts/agents/kit unit --affected` | Pass | 28/28, 1 file | `.scratch/unit/` |
+| `scripts/agents/kit unit` (= `node --test`) | Pass | 278 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
 | `npm run test:electron` | Pass | 3/3 | Full screen keeps the synthetic track's device and size |
 | Syntax checks | Pass | `node --check src/camera-session.js` | |
 | `git diff --check` | Pass | | |
@@ -38,9 +39,19 @@ New unit tests (`test/camera-session.test.js`); the first four failed on `ebf005
 - the blur halo never shows a starting camera while its late Camera quality is applied
 - stopping while a starting camera gets its late Camera quality never shows it
 - Camera quality changes queued behind a stalled old camera never reach the next camera
+- choosing the running device by id with a new Camera quality keeps the stream and applies the quality
+- each Camera quality a starting camera rejects is tried only once
 - a Camera quality the camera rejects while starting is tried once and the camera still shows
+- Camera quality changes made during a switch collapse into one switch to the latest choice
+- an old camera switch that ends after the next camera is live never changes what that camera runs at
 
-The last six cover review notes on this change. Each of the first five failed on the version before its fix (the stall test also checks that a later Camera quality change reaches the new camera); the last one covers a branch that was already right.
+The last ten cover review notes on this change. Each of the first seven failed on the version before its fix (the stall test also checks that a later Camera quality change reaches the new camera); the last three cover behaviour that was already right (the final one fails if the session forgets to check that a finished switch belongs to the running camera).
+
+## Build and artifact checks
+
+| Target/check | Result | Artifact/hash/notes |
+| --- | --- | --- |
+| Windows and macOS packages | Not applicable | No release; lands on `dev` only |
 
 ## Manual checks
 
