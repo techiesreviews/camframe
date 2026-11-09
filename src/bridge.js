@@ -22,9 +22,14 @@ const RENDERER_SETTING_KEYS = new Set(
   ),
 )
 
-const settingsPatch = (patch) => {
+// `options.demo`: an onboarding demo step, applied and stored but never saved into the active Scene
+// (ADR 0037); without it the patch is a hand change.
+const settingsPatch = (patch, options) => {
   if (!isPlainObject(patch)) return undefined
-  return [Object.fromEntries(Object.entries(patch).filter(([key]) => RENDERER_SETTING_KEYS.has(key)))]
+  return [
+    Object.fromEntries(Object.entries(patch).filter(([key]) => RENDERER_SETTING_KEYS.has(key))),
+    { demo: Boolean(options?.demo) },
+  ]
 }
 const optionalString = (value) => (value === undefined || value === null ? '' : String(value))
 const noArguments = () => []
