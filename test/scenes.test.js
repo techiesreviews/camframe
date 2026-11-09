@@ -476,6 +476,16 @@ test('the edit windows: Undo lives 10 seconds after a change, a delete 6 seconds
   assert.equal(edits.takeDelete(), undefined)
 })
 
+test('on a 1024x768 display (the Windows CI runner) Big right starts at 44% of its tile', () => {
+  const display = { x: 0, y: 0, width: 1024, height: 768 }
+  const right = { id: 'big', name: 'Big right', settings: settingsForPreset({}), layout: { size: 540, position: 'right' } }
+  const settings = sanitizeSettings({ presets: [right] })
+  const big = scenePreviews(settings, { workArea: display, workAreaAt: () => display, displayAt: () => display }).scenes.big
+  // 540 px fits (768 - 2 x 84 = 600 px of centred height), 32 px from the right edge.
+  assert.equal(big.x, (1024 - 32 - 540) / 1024)
+  assert.equal(big.width, 540 / 1024)
+})
+
 test('Scene tiles draw the camera where it really is on its display', () => {
   const display = { x: 0, y: 0, width: 1920, height: 1080 }
   const workArea = { x: 0, y: 0, width: 1920, height: 1040 }

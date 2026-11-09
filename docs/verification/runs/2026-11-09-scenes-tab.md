@@ -87,6 +87,10 @@ Hand checks for Lex, in plain steps (Windows, with a build that has this change)
 - A Prompter link cue that moves the camera still clears the active Scene, so autosave stops until a Scene is put on camera again (as designed: cues are not hand changes).
 - The high-contrast screenshots show the selected settings tab's text drawn as a white block in emulated forced colors; this rule is older than this change and was not touched.
 
+## Follow-up: Windows CI smoke (same day)
+
+The manual build of `dev` at `84ba412` (run https://github.com/techiesreviews/camframe/actions/runs/42597673947) failed its Windows smoke at "Big right sits right on its tile (44.14%)". The Windows runner's display is 1024x768 (its Full screen screenshot is 1024x768): Big right at 540 px, 32 px from the right edge, starts at (1024 - 32 - 540) / 1024 = 44.14% of the display, so the tile was right and the smoke's fixed "more than 60%" assumed a wide display. The smoke now compares the tile with the window's real place on its display; a unit test pins the 1024x768 numbers. Not reproduced in a real 1024x768 Electron session here (no virtual display on this machine); the next Windows CI run checks it.
+
 ## Release decision
 
 - **Decision:** Documentation baseline only (no release; lands on `dev`)
