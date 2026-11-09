@@ -632,10 +632,28 @@ test('real Electron: a saved place off every screen opens on screen, and a lost 
     })
     await until('the Overlay did not come back after a display change')
 
-    // The Desk Scene, saved on a display that is gone, opens clamped onto the screen.
+    // The Desk Scene, saved on a display that is gone, opens clamped onto the display nearest it,
+    // against its right edge at its saved height (not moved to the bottom right corner).
     await page.evaluate(() => window.camFrame.applyPreset('preset-desk'))
     await page.waitForTimeout(500)
-    await until('the Desk Scene opened off screen')
+    const desk = await until('the Desk Scene opened off screen')
+    const nearest = await application.evaluate(({ screen }) => screen.getDisplayNearestPoint({ x: 30018, y: 484 }).workArea)
+    assert.deepEqual(
+      { x: desk.bounds.x, y: desk.bounds.y },
+      { x: nearest.x + nearest.width - desk.bounds.width, y: Math.min(400, nearest.y + nearest.height - desk.bounds.height) },
+    )
+
+    // Bringing the window back stores the place in Preferences only: the active Scene keeps its spot.
+    await application.evaluate(({ BrowserWindow, screen }) => {
+      const overlay = BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'CamFrame overlay')
+      overlay.setPosition(30000, -20000)
+      screen.emit('display-removed', {}, screen.getPrimaryDisplay())
+    })
+    const back = await until('the Overlay did not come back with Desk on camera')
+    const after = await page.evaluate(() => window.camFrame.getState())
+    assert.equal(after.activePresetId, 'preset-desk')
+    assert.deepEqual(after.position, { x: back.bounds.x, y: back.bounds.y })
+    assert.deepEqual(after.presets[0].settings.position, { x: 30000, y: 400 })
   } finally {
     await application?.close().catch(() => {})
     const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`

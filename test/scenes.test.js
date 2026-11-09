@@ -554,6 +554,7 @@ test('an exact Scene saved off this screen is shown clamped onto the display nea
   const seen = []
   const result = applyScene(state, 'desk', {
     workArea: laptop,
+    workAreas: [laptop],
     workAreaAt: (point) => {
       seen.push(point)
       return laptop
@@ -563,7 +564,17 @@ test('an exact Scene saved off this screen is shown clamped onto the display nea
   assert.deepEqual(seen, [{ x: 3000 + OVERLAY_CHROME.left, y: 400 + OVERLAY_CHROME.top }], 'asks for the display nearest its camera')
   assert.deepEqual(result.settings.position, { x: laptop.width - window.width, y: 400 })
   assert.deepEqual(result.settings.presets[0].settings.position, { x: 3000, y: 400 }, 'the Scene itself keeps its saved spot')
-  // A spot that is on screen is applied exactly as saved.
-  const onScreen = applyScene(library([scene('desk', 'Desk', { position: { x: 5, y: 6 } })]), 'desk', { workArea: laptop, workAreaAt: () => laptop })
-  assert.deepEqual(onScreen.settings.position, { x: 5, y: 6 })
+  // A spot that is on screen is applied exactly as saved, also with the camera at the top edge (its
+  // see-through chrome above the screen) or spanning two connected displays.
+  const desk2 = { x: 1920, y: 0, width: 2560, height: 1400 }
+  for (const position of [{ x: 5, y: 6 }, { x: 400, y: -60 }, { x: 1800, y: 300 }]) {
+    const kept = applyScene(library([scene('desk', 'Desk', { position })]), 'desk', {
+      workArea: laptop,
+      workAreas: [laptop, desk2],
+      workAreaAt: () => laptop,
+    })
+    assert.deepEqual(kept.settings.position, position)
+  }
+  // Without the display list (no window yet) the saved spot is used as before.
+  assert.deepEqual(applyScene(state, 'desk', { workArea: laptop, workAreaAt: () => laptop }).settings.position, { x: 3000, y: 400 })
 })

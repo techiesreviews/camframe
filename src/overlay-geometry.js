@@ -261,6 +261,8 @@ export function createOverlayGeometry({
   let animation
   let drag
   let resize
+  // An on-screen check skipped while the window was moving runs when the move ends.
+  let recheck = false
 
   const alive = () => !window.isDestroyed()
 
@@ -312,11 +314,17 @@ export function createOverlayGeometry({
 
   // Brings a lost Overlay back (TOOLS-156): a Compact window not substantially on a connected
   // display goes to the bottom right of the main display at its size; a Full screen window on a
-  // display that is gone covers the nearest one. A drag, a corner drag or a move in progress is left
-  // alone (the move's target is planned on a display).
+  // display that is gone covers the nearest one. A drag or a corner drag in progress is left alone;
+  // a move in progress is checked when it ends.
   function ensureOnScreen() {
     const areas = workAreas()
-    if (!alive() || !areas || animation || drag || resize) return
+    if (!alive() || !areas) return
+    if (animation) {
+      recheck = true
+      return
+    }
+    recheck = false
+    if (drag || resize) return
     const bounds = window.getBounds()
     if (fullscreen) {
       if (visibleShare(bounds, areas) < 0.5) window.setBounds({ ...screen.getDisplayMatching(bounds).bounds })
@@ -353,6 +361,7 @@ export function createOverlayGeometry({
     if (!finished || !alive()) return
     window.setBounds(finished.target)
     finished.onComplete?.()
+    if (recheck && !animation) ensureOnScreen()
   }
 
   function animateTo(target, onComplete) {
@@ -608,6 +617,8 @@ export function createOverlayGeometry({
 
     // Called when the window is shown and whenever a display is added, removed or changed.
     ensureOnScreen,
+    // The work areas of every connected display (undefined when the screen cannot list them).
+    workAreas,
 
     // Live Compact bounds without the reserve, or undefined in Full screen.
     compactBounds() {
@@ -703,6 +714,7 @@ export function createOverlayGeometry({
       reserveOpen = false
       compactBase = undefined
       positionFromScene = false
+      recheck = false
     },
   }
 }

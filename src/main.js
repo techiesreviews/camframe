@@ -159,10 +159,15 @@ function commitScenes(result) {
   if (result?.appliedScene) overlayGeometry?.showScene()
 }
 
-// A layout Scene fits the display the Overlay is on now, or the display its saved point is on.
+// A layout Scene fits the display the Overlay is on now, or the display its saved point is on; an
+// exact Scene saved off screen opens on the display nearest its place.
 function sceneContext() {
   if (!overlayGeometry) return {}
-  return { workArea: overlayGeometry.currentWorkArea(), workAreaAt: (point) => overlayGeometry?.workAreaAt(point) }
+  return {
+    workArea: overlayGeometry.currentWorkArea(),
+    workAreaAt: (point) => overlayGeometry?.workAreaAt(point),
+    workAreas: overlayGeometry.workAreas(),
+  }
 }
 
 function applySceneById(id) {
