@@ -182,22 +182,26 @@ export function createCameraSession({
       const pending = () => current.resolution !== resolution && !refused.has(current.resolution)
       while (track?.applyConstraints && pending()) {
         const wanted = current.resolution
+        let failure
         try {
           await track.applyConstraints(cameraTrackConstraintsFor({ resolution: wanted }))
           resolution = wanted
         } catch (error) {
-          if (error?.name === 'OverconstrainedError') refused.add(wanted)
-          else break
+          failure = error ?? new Error('applyConstraints failed')
         }
         if (request !== startRequest) {
           stopTracks(stream)
           return
         }
+        if (failure?.name === 'OverconstrainedError') refused.add(wanted)
+        else if (failure) break
       }
       startingStream = undefined
       activeStream = stream
       activeCameraId = cameraId
       activeResolution = resolution
+      // A late quality that failed for another reason gets one more try on the shown camera.
+      if (pending()) queueQualityUpdate()
       video.srcObject = stream
       if (track && 'contentHint' in track) track.contentHint = 'motion'
       await video.play()

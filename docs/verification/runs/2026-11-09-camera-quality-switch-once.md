@@ -22,13 +22,13 @@ Each switch of capture mode on a live track is the step that showed stale, black
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | |
 | `scripts/agents/kit doctor` | Pass | 12/12 checks | |
-| `scripts/agents/kit unit --affected` | Pass | 28/28, 1 file | `.scratch/unit/` |
-| `scripts/agents/kit unit` (= `node --test`) | Pass | 278 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
+| `scripts/agents/kit unit --affected` | Pass | 32/32, 1 file | `.scratch/unit/` |
+| `scripts/agents/kit unit` (= `node --test`) | Pass | 282 pass, 1 skipped (tag-build check, not a tag build) | `.scratch/unit/` |
 | `npm run test:electron` | Pass | 3/3 | Full screen keeps the synthetic track's device and size |
 | Syntax checks | Pass | `node --check src/camera-session.js` | |
 | `git diff --check` | Pass | | |
 
-New unit tests (`test/camera-session.test.js`); the first four failed on `ebf0056` before the change:
+New or materially extended unit tests (`test/camera-session.test.js`); the first four failed on `ebf0056` before the change:
 
 - rapid Camera quality changes switch the running track once, to the final quality
 - Camera quality changes that end on the running quality never switch the camera mode
@@ -41,11 +41,15 @@ New unit tests (`test/camera-session.test.js`); the first four failed on `ebf005
 - Camera quality changes queued behind a stalled old camera never reach the next camera
 - choosing the running device by id with a new Camera quality keeps the stream and applies the quality
 - each Camera quality a starting camera rejects is tried only once
+- a camera replaced while its late Camera quality fails with another error is never shown
+- a late Camera quality that fails for another reason is tried again once the camera shows
 - a Camera quality the camera rejects while starting is tried once and the camera still shows
 - Camera quality changes made during a switch collapse into one switch to the latest choice
 - an old camera switch that ends after the next camera is live never changes what that camera runs at
+- Camera quality changes during start that end on the opening quality never switch the camera
+- a Camera quality a camera refused is tried again after the camera restarts
 
-The last ten cover review notes on this change. Each of the first seven failed on the version before its fix (the stall test also checks that a later Camera quality change reaches the new camera); the last three cover behaviour that was already right (the final one fails if the session forgets to check that a finished switch belongs to the running camera).
+The last fourteen cover review notes on this change. Each of the first nine failed on the version before its fix (the stall test also checks that a later Camera quality change reaches the new camera); the last five cover behaviour that was already right (the old-camera one fails if the session forgets to check that a finished switch belongs to the running camera).
 
 ## Build and artifact checks
 
@@ -59,6 +63,7 @@ The last ten cover review notes on this change. Each of the first seven failed o
 | --- | --- | --- |
 | W-14 | Not run | Needs Windows hardware |
 | W-17 | Not run | Needs Windows with several cameras including an Elgato device; steps are in the PR |
+| W-18 | Not run | Needs Windows hardware, including a camera without 2160p |
 
 ## Regressions and surprises
 
