@@ -943,6 +943,11 @@ video {
   text-align: left;
 }
 
+/* The row clips its overflow (the Undo line), so the focus ring goes inside the button. */
+.scene-list .scene-main:focus-visible {
+  outline-offset: -2px;
+}
+
 .scene-actions {
   position: absolute;
   top: 50%;
@@ -1808,6 +1813,10 @@ button.scene-add-tile:hover {
 .overlay.overlay[data-high-contrast='true'] :is(button, input, select, summary):focus-visible {
   outline: 3px solid CanvasText;
   outline-offset: 2px;
+}
+
+.overlay.overlay[data-high-contrast='true'] .scene-list .scene-main:focus-visible {
+  outline-offset: -3px;
 }
 
 .overlay[data-high-contrast='true'] :is(
