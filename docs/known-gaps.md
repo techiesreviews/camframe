@@ -22,7 +22,7 @@ The dormant renderer, BrowserWindow lifecycle, privileged relays/actions, and Co
 
 ## KG-03 — Fullscreen camera continuity needs hardware confirmation
 
-**Status:** Source trigger removed by ADR 0026; manual acceptance remains open in GitHub issue 5.
+**Status:** Source trigger removed by ADR 0026; manual acceptance remains open in GitHub issue 5. Updated 2026-11-09: Lex ran the ten-step Elgato check on Windows (TOOLS-22) and answered "Pass"; the build he ran is not recorded (`verification/runs/2026-11-09-v0.8.0-go.md`).
 **Evidence:** Historical issue, current source inspection, and automated stable-profile contracts.
 
 Dynamic `applyConstraints()` switching was reported to show stale, black, or wrong camera frames on Windows with multiple devices including Elgato hardware. A local canvas-held-frame workaround passed an automated race test but still failed manual testing and was never committed.
@@ -127,7 +127,7 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 
 ## KG-16 — Scenes tab autosave and Undo lack Windows hand checks
 
-**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132).
+**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132); updated 2026-11-09 (ships in 0.8.0; Lex's eight plain hand-check steps on his Windows laptop, "1-8 ok", reported as a whole, so Inconclusive: `verification/runs/2026-11-09-v0.8.0-go.md`; the written rows below stay open).
 **Evidence:** Automated: unit tests (`followLiveLook`, `createSceneEdits`, `restoreScene`, `undoSceneChange`, `scenePreviews`, the Scenes tab model, the schema-15 load fixtures) and a real-Electron run on Linux with Chromium's synthetic camera (`docs/verification/runs/2026-11-09-scenes-tab.md`): open the tab, apply, autosave a shape change, Undo, rename, Save look, delete and Ctrl+Z, Alt+arrow, list/grid, Escape, the Prompter link status and a cue by name, and the saved file. Browser screenshots of both views from `kit shots`.
 
 Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.md`):
@@ -141,7 +141,7 @@ Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.
 
 ## KG-17 — The self-healing Overlay position lacks Windows hand checks
 
-**Status:** Open, 2026-11-09 (ADR 0038, Orbit TOOLS-156).
+**Status:** Open, 2026-11-09 (ADR 0038, Orbit TOOLS-156); updated 2026-11-09 (ships in 0.8.0; on Lex's laptop the window now shows by itself, "this is greaat": `verification/runs/2026-11-09-v0.8.0-go.md`; docking and undocking stay open).
 **Evidence:** Automated: unit tests (`visibleShare`, `isOnScreen`, `onScreenBase`, `keepOnWorkArea`; the geometry on one and two displays, a display removed, a lower resolution and the Full screen exit; an exact Scene saved off screen; an old Preferences file with an off-screen place) and a real-Electron run on Linux through X11 (`docs/verification/runs/2026-11-09-overlay-on-screen.md`). The cause was confirmed on Lex's Windows laptop before the fix (a saved place off every display), not yet the fix itself.
 
 Not yet seen by hand on Windows (row W-37): unplugging or undocking a display while CamFrame runs and before it starts, resolution and scale changes, mixed scaling, and a main display that is not the leftmost. Whether Windows sends `display-metrics-changed` before or after it moves windows itself on undock is unknown; either way the check runs on every such event.
