@@ -454,9 +454,25 @@ test('real Electron: the Scenes tab applies, autosaves, undoes, deletes, renames
     assert.equal(await page.locator('#inline-settings').isVisible(), true)
     const bigBounds = await overlayBounds(application)
     assert.equal(bigBounds.width, 540 + 36)
-    // The tile draws the camera at the right of its display.
-    const camera = await page.locator('.scene-tile.active .scene-screen-camera').evaluate((item) => item.style.left)
-    assert.ok(Number.parseFloat(camera) > 60, `Big right sits right on its tile (${camera})`)
+    // The tile draws the camera where the window really put it, as a share of its display (the
+    // Windows CI runner's display is 1024x768, so a fixed share would not hold).
+    const display = await application.evaluate(
+      ({ screen }, bounds) => screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }).bounds,
+      bigBounds,
+    )
+    const drawn = await page.locator('.scene-tile.active .scene-screen-camera').evaluate((item) => ({
+      left: Number.parseFloat(item.style.left),
+      width: Number.parseFloat(item.style.width),
+    }))
+    const expected = {
+      left: ((bigBounds.x + 18 - display.x) / display.width) * 100,
+      width: (540 / display.width) * 100,
+    }
+    assert.ok(
+      Math.abs(drawn.left - expected.left) < 0.5 && Math.abs(drawn.width - expected.width) < 0.5,
+      `Big right's tile matches its place on a ${display.width}x${display.height} display (drawn ${JSON.stringify(drawn)}, real ${JSON.stringify(expected)})`,
+    )
+    assert.ok(drawn.left + drawn.width > 90, `Big right's tile camera reaches the right edge (${drawn.left + drawn.width}%)`)
     await captureOverlay(application, '10-scenes-grid.png')
 
     // Autosave: a hand change of the look is saved into the active Scene; its number shows a check
