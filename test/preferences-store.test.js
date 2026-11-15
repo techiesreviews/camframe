@@ -136,7 +136,7 @@ for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
       },
     }
 
-    createPreferencesStore(path, blocked).write(document('After'))
+    createPreferencesStore(path, blocked, 'win32').write(document('After'))
     assert.equal(readFileSync(path, 'utf8'), document('After'))
     assert.equal(readFileSync(lastGood, 'utf8'), document('Before'))
     assert.deepEqual(temporaryFiles(directory), [])
@@ -344,7 +344,7 @@ test('a temporary file that cannot be removed never hides what the save did', ()
       return fs.renameSync(from, to)
     },
   })
-  createPreferencesStore(path, blocked).write(document('After'))
+  createPreferencesStore(path, blocked, 'win32').write(document('After'))
   assert.equal(readFileSync(path, 'utf8'), document('After'))
 
   assert.throws(
@@ -377,8 +377,43 @@ test('a blocked rename of the last good copy keeps the old copy whole and still 
     },
   }
 
-  createPreferencesStore(path, blocked).write(document('Three'))
+  createPreferencesStore(path, blocked, 'win32').write(document('Three'))
   assert.equal(readFileSync(path, 'utf8'), document('Three'))
   assert.equal(readFileSync(lastGood, 'utf8'), document('One'))
   assert.deepEqual(temporaryFiles(directory), [])
+})
+
+for (const platform of ['linux', 'darwin']) {
+  test(`on ${platform} a refused rename is reported and never written in place`, () => {
+    const directory = folder()
+    const path = join(directory, 'preferences.json')
+    createPreferencesStore(path).write(document('Before'))
+    const direct = []
+    const blocked = {
+      ...fs,
+      renameSync: (from, to) => {
+        if (to === path) throw Object.assign(new Error('resource busy'), { code: 'EBUSY' })
+        return fs.renameSync(from, to)
+      },
+      writeFileSync: (where, ...rest) => {
+        if (where === path) direct.push(where)
+        return fs.writeFileSync(where, ...rest)
+      },
+    }
+
+    assert.throws(() => createPreferencesStore(path, blocked, platform).write(document('After')), /resource busy/)
+    assert.deepEqual(direct, [])
+    assert.equal(readFileSync(path, 'utf8'), document('Before'))
+    assert.deepEqual(temporaryFiles(directory), [])
+  })
+}
+
+test('when both files are broken, loading starts from defaults', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  writeFileSync(path, '{"schemaVersion": 15, "pre', 'utf8')
+  writeFileSync(join(directory, 'preferences.last-good.json'), '{"schemaVersion": 1', 'utf8')
+  const text = createPreferencesStore(path).read()
+  assert.equal(text, '{"schemaVersion": 15, "pre')
+  assert.deepEqual(preferencesFromDocument(text), preferencesFromDocument(undefined))
 })

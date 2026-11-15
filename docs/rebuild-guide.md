@@ -42,8 +42,8 @@ The CI release path is authoritative for cross-platform artifacts: tag `v<versio
 ## Greenfield reconstruction order
 
 1. **Pure domain contracts** — implement `settings.js`, `scenes.js`, `cameras.js`, and `camera-framing.js` first, and make them pass `test/fixtures/preferences/`. Reproduce defaults, clamps, loading migrations, Scene save/merge/order/limit, constraints, and framing math. Port their tests before adding Electron.
-2. **Deep modules with fakes** — implement `overlay-geometry.js` (280 ms bounds animation, reduced motion, onboarding reserve, drag/resize), `bridge.js`, `camera-session.js`, `overlay-interaction.js`, and the tour in `onboarding.js` against fake windows, clocks, media devices, and ports, as their tests do (ADR 0030).
-3. **Main-process shell** — wire Preferences file I/O, Overlay BrowserWindow, media permissions, tray, shortcuts, dialogs, and bridge handlers to those modules. Keep native privileges out of renderers.
+2. **Deep modules with fakes** — implement `overlay-geometry.js` (280 ms bounds animation, reduced motion, onboarding reserve, drag/resize), `preferences-store.js` (one-step saves and the last good copy, injected `fs` and platform, ADR 0039), `bridge.js`, `camera-session.js`, `overlay-interaction.js`, and the tour in `onboarding.js` against fake windows, clocks, media devices, and ports, as their tests do (ADR 0030).
+3. **Main-process shell** — wire the Preferences store, Overlay BrowserWindow, media permissions, tray, shortcuts, dialogs, and bridge handlers to those modules. Keep native privileges out of renderers.
 4. **Camera surface** — create one autoplay/muted/playsinline video with cover cropping. Implement stale-request cancellation, exact-device fallback, slower-profile retry, motion hint, and enumeration after permission.
 5. **Overlay geometry** — reproduce the fixed chrome reserve (18/84/18/18), shape ratios, CSS clipping, inner frame, and direct native drag/resize polling.
 6. **Hover/interactivity state machine** — default to click-through with forwarded movement; reveal the six-button toolbar and handles; preserve 220 ms compact hide and 200 ms Full screen hide behavior.
@@ -60,6 +60,7 @@ The CI release path is authoritative for cross-platform artifacts: tag `v<versio
 - One camera MediaStream per Overlay; no canvas frame-copy pipeline.
 - Compact and Full screen share one Camera quality; Full screen and Scene changes reuse the stream. Full screen never applies constraints; a Scene applies them only when its Camera quality differs from the running one.
 - Preferences are sanitized in main after every patch, and every implementation passes the Preferences fixtures.
+- Preferences are saved in one step (a temporary file renamed into place) and a broken `preferences.json` loads the last good copy (ADR 0039); never write the file in place except when Windows blocks the rename.
 - Every bridge channel accepts only the Overlay renderer and checks its arguments.
 - Startup always reveals and raises the camera.
 - Full screen and active Scene are transient.

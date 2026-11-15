@@ -11,9 +11,9 @@
 
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
-| `npm test` (`kit unit`) | Pass | 355 pass, 1 skipped, 0 fail | 17 new tests: the 16 above, now also checking that a failed save (twice in a row, a failed copy refresh, an `ENOSPC` rename) leaves no temporary file, plus a folder that refuses to be flushed does not fail a completed save and its handle is closed |
+| `npm test` (`kit unit`) | Pass | 355 pass, 1 skipped, 0 fail | 17 new tests: the 16 listed in `2026-11-15-atomic-preferences-save-second-look-fixes.md`, now also checking that a failed save (twice in a row, a failed copy refresh, an `ENOSPC` rename) leaves no temporary file, plus a folder that refuses to be flushed does not fail a completed save and its handle is closed |
 | `npm run test:electron` | Pass | 5/5 | |
-| Syntax checks | Pass | | as above |
+| Syntax checks | Pass | | `for f in src/*.js scripts/*.mjs; do node --check "$f"; done; node --check src/preload.cjs` |
 | `git diff --check` | Pass | | |
 
 ## Release decision
