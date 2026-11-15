@@ -15,7 +15,7 @@ Every execution gets a dated file under `runs/`; never overwrite the last known 
 
 ## Current automated suite
 
-Commands: `npm test` for 361 module and static contracts (behavioral through module interfaces with fakes, plus static markup/CSS/wiring and release-version checks) and `npm run test:electron` for six real Electron integration smokes (Windows CI; they also run on a Linux X11/XWayland desktop).
+Commands: `npm test` for 362 module and static contracts (behavioral through module interfaces with fakes, plus static markup/CSS/wiring and release-version checks) and `npm run test:electron` for six real Electron integration smokes (Windows CI; they also run on a Linux X11/XWayland desktop).
 
 | Coverage area | Tests demonstrate | Important limitation |
 | --- | --- | --- |
@@ -29,6 +29,7 @@ Commands: `npm test` for 361 module and static contracts (behavioral through mod
 | Overlay interaction | Chrome/hide timing, activities holding interactivity, Full screen hotspot and delay, change-only messages | Real pointer forwarding is manual (W-08) |
 | Onboarding | Versioning/migration, step copy, offer once, reveal timing, shape and framing demos, hand-over, Back/Next restore, Escape order, reduced motion, completion, timer cleanup (fake Overlay port, view, clock) | No automated BrowserWindow focus, tray click, or visual/layout observation |
 | Camera framing | Pan direction/mirroring, wheel steps, shared CSS rendering | KG-10 is not yet asserted |
+| Toolchain pins | `test/toolchain-pins.test.js`: Electron, Electron Builder, Playwright Core and Vite are exact versions in `package.json`, the same in both places of `package-lock.json`, and named alike in the rebuild guide (ADR 0027) | Does not check that the pinned versions are free of advisories (`npm audit`) |
 | Release version | `test/release-version.test.js`: `package.json`, both version fields of `package-lock.json`, the docs baseline's Product version and the first row of `product-history.md`'s Release timeline agree, and a dated run named `*-v<version>-*.md` exists, names the version on its `**Version:**` line and is linked from that first row (any one such run is enough, whatever order the files are listed in); in a tag build (`GITHUB_REF` starting `refs/tags/`) the tag must be exactly `v<version>` and there must be exactly one dated `docs/verification/runs/<date>-v<version>-go.md` with the lines `- **Decision:** Go` and `- **Version:** <version>` | The tag check runs only for a `refs/tags/` ref; does not check the release page, and reads only the Decision and Version lines of the dated Go file |
 | UI/wiring contracts | Controls/tabs/copy exist; removed controls absent; CSS variables, clip paths, high contrast, reduced motion; shortcut/tray text; a few `overlay.js` wiring lines | Regex over source; presence is not functionality |
 
