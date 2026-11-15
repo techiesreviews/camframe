@@ -101,6 +101,8 @@ test('a crash while writing preferences.json leaves the previous file whole', ()
   createPreferencesStore(path).write(document('Before'))
 
   assert.throws(() => createPreferencesStore(path, failingWriteTo(path)).write(document('After')), /power cut/)
+  assert.throws(() => createPreferencesStore(path, failingWriteTo(path)).write(document('After')), /power cut/)
+  assert.deepEqual(temporaryFiles(directory), [], 'a failed save removes its own temporary file')
   assert.equal(readFileSync(path, 'utf8'), document('Before'))
   assert.equal(readFileSync(lastGood, 'utf8'), document('Before'))
   assert.equal(createPreferencesStore(path).read(), document('Before'))
@@ -117,6 +119,7 @@ test('a failure while refreshing the last good copy still saves preferences.json
   createPreferencesStore(path, failingWriteTo(lastGood)).write(document('Three'))
   assert.equal(readFileSync(path, 'utf8'), document('Three'))
   assert.equal(readFileSync(lastGood, 'utf8'), document('One'), 'the old copy stays whole')
+  assert.deepEqual(temporaryFiles(directory), [])
 })
 
 for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
@@ -154,6 +157,7 @@ test('any other rename failure is not hidden', () => {
 
   assert.throws(() => createPreferencesStore(path, full).write(document('After')), /no space/)
   assert.equal(readFileSync(path, 'utf8'), document('Before'))
+  assert.deepEqual(temporaryFiles(directory), [])
 })
 
 test('an unreadable preferences.json loads the last good copy, and with no copy starts from defaults', () => {
@@ -289,4 +293,31 @@ test('on Windows the folder is not opened to be flushed', () => {
   const recorder = flushRecorder()
   createPreferencesStore(path, recorder.fs, 'win32').write(document('One'))
   assert.deepEqual(recorder.flushed.slice(1), [`rename ${path}`])
+})
+
+test('a folder that refuses to be flushed does not fail a save that is already complete', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const opened = new Map()
+  const closed = []
+  const refusing = {
+    ...fs,
+    openSync: (file, ...rest) => {
+      const descriptor = fs.openSync(file, ...rest)
+      opened.set(descriptor, file)
+      return descriptor
+    },
+    fsyncSync: (descriptor) => {
+      if (opened.get(descriptor) === directory) throw Object.assign(new Error('not supported'), { code: 'EINVAL' })
+      return fs.fsyncSync(descriptor)
+    },
+    closeSync: (descriptor) => {
+      closed.push(opened.get(descriptor))
+      return fs.closeSync(descriptor)
+    },
+  }
+
+  createPreferencesStore(path, refusing, 'linux').write(document('One'))
+  assert.equal(readFileSync(path, 'utf8'), document('One'))
+  assert.equal(closed.includes(directory), true, 'the folder handle is closed')
 })
