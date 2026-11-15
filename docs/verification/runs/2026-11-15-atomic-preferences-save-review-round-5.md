@@ -1,4 +1,4 @@
-# Verification run: tools-295-atomic-prefs review rounds 4 and 5 — 2026-11-15
+# Verification run: tools-295-atomic-prefs review round 5 — 2026-11-15
 
 - **Commit:** 1284e6917c86c4c2b88f2a3eb36d15ae5494f447
 - **Version:** 0.8.0 (unreleased; branch `tools-295-atomic-prefs`, for `dev`)
