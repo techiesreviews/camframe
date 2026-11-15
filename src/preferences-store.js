@@ -1,4 +1,8 @@
 import * as nodeFs from 'node:fs'
+import { dirname } from 'node:path'
+
+// Numbers each temporary file, so two saves never share one (see `replace`).
+let sequence = 0
 
 // Where Preferences live on disk: `preferences.json`, written in one step, plus the last good copy.
 //
@@ -8,7 +12,7 @@ import * as nodeFs from 'node:fs'
 // `preferences.json` then loads that copy quietly instead of starting from defaults (bug B4).
 // A missing `preferences.json` still means "no saved Preferences", so deleting or renaming it on
 // purpose starts fresh even when a last good copy is left.
-export function createPreferencesStore(path, fs = nodeFs) {
+export function createPreferencesStore(path, fs = nodeFs, platform = process.platform) {
   const lastGoodPath = `${path.replace(/\.json$/, '')}.last-good.json`
 
   function load(file) {
@@ -20,7 +24,10 @@ export function createPreferencesStore(path, fs = nodeFs) {
   }
 
   function replace(file, text) {
-    const temporary = `${file}.tmp`
+    // CamFrame can run twice (it has no single-instance lock), so each save gets its own temporary
+    // file, named by process and save; a shared name would let one copy rename the other's half.
+    sequence += 1
+    const temporary = `${file}.${process.pid}-${sequence}.tmp`
     const descriptor = fs.openSync(temporary, 'w')
     try {
       // writeFileSync on a descriptor keeps writing until every byte is down; one writeSync may not.
@@ -38,6 +45,24 @@ export function createPreferencesStore(path, fs = nodeFs) {
       if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
       fs.writeFileSync(file, text, 'utf8')
       fs.rmSync(temporary, { force: true })
+      return
+    }
+    flushFolder(file)
+  }
+
+  // On Linux and macOS a rename reaches the disk only when its folder is flushed too; until then a
+  // power cut can bring back an earlier file. Windows cannot open a folder for this, and NTFS
+  // journals the rename itself. Best effort: the save is already complete in the file system.
+  function flushFolder(file) {
+    if (platform === 'win32') return
+    let descriptor
+    try {
+      descriptor = fs.openSync(dirname(file), 'r')
+      fs.fsyncSync(descriptor)
+    } catch {
+      // Some file systems refuse to flush a folder; the rename stands either way.
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor)
     }
   }
 
