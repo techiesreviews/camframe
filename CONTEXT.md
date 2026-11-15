@@ -14,7 +14,7 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 - **Camera quality**: the single capture-resolution preference used unchanged in Compact mode and Full screen. Its persisted compatibility key is `overlayResolution`.
 - **Onboarding**: the versioned four-step contextual coach-mark tour rendered inside the Overlay and reopenable from tray Help.
 - **Scene**: a named, ordered size and compact position; a **snapshot Scene** also applies its saved camera, appearance and framing (see **Layout Scene**). The persisted field remains `presets` for compatibility.
-- **Preferences**: the sanitized settings document stored as `preferences.json` in Electron's per-user data directory.
+- **Preferences**: the sanitized settings document stored as `preferences.json` in Electron's per-user data directory. Saved in one step; the previous complete file is kept as the **last good copy** (`preferences.last-good.json`), which loads quietly when `preferences.json` is broken (ADR 0039).
 - **Camera framing**: the zoom and crop origin of the video inside the overlay, independent from overlay size and position.
 - **Active Scene**: the Scene most recently applied, or saved from Inline settings (a Prompter link save without `apply` does not make it active), shown in Inline settings and the tray. Runtime only (`activePresetId` on the wire). A hand change of the look keeps it active and is saved into it (**Autosave**); a Prompter link cue that moves the camera clears it.
 - **Autosave**: the active Scene follows hand changes of the live look (Inline settings, Shape, dragging, a corner resize) and saves itself; the camera and its quality are not followed (ADR 0037).
@@ -33,9 +33,10 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 
 `src/main.js` and `src/overlay.js` are composition roots. They wire Electron and the DOM to the modules below (ADR 0030).
 
-- `src/main.js`: Electron lifecycle, Preferences file I/O, tray, global shortcuts, dialogs, and bridge handlers.
+- `src/main.js`: Electron lifecycle, tray, global shortcuts, dialogs, and bridge handlers.
 - `src/overlay.*`: Overlay markup, styles, DOM rendering, and event wiring.
 - `src/preload.cjs`: the sandboxed `window.camFrame` adapter for the bridge contract.
+- `src/preferences-store.js`: the Preferences file on disk: one-step saves and the last good copy (ADR 0039).
 - `src/bridge.js`: the bridge contract between main and the Overlay: channels, transports, argument checks, main registration, and the browser QA fake.
 - `src/prompter-link.js`: the Prompter link server, its origin/host/request checks, what a cue means (`cueAction`), and the status body.
 - `src/prompter-control.js`: what a checked Prompter link request does to the Overlay and the Scenes, against injected geometry and state.
