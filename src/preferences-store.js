@@ -33,8 +33,8 @@ export function createPreferencesStore(path, fs = nodeFs) {
       fs.renameSync(temporary, file)
     } catch (error) {
       // Windows refuses the rename while another program (an antivirus or the search indexer) holds
-      // the file open. The last good copy is already on disk, so write in place rather than lose
-      // the save.
+      // the file open. The last good copy is on disk by now (unless refreshing it just failed), so
+      // write in place rather than lose the save.
       if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
       fs.writeFileSync(file, text, 'utf8')
       fs.rmSync(temporary, { force: true })

@@ -111,24 +111,26 @@ test('a failure while refreshing the last good copy still saves preferences.json
   assert.equal(readFileSync(lastGood, 'utf8'), document('One'), 'the old copy stays whole')
 })
 
-test('when another program blocks the rename, the save writes in place rather than being lost', () => {
-  const directory = folder()
-  const path = join(directory, 'preferences.json')
-  const lastGood = join(directory, 'preferences.last-good.json')
-  createPreferencesStore(path).write(document('Before'))
-  const blocked = {
-    ...fs,
-    renameSync: (from, to) => {
-      if (to === path) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
-      return fs.renameSync(from, to)
-    },
-  }
+for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
+  test(`when another program blocks the rename (${code}), the save writes in place rather than being lost`, () => {
+    const directory = folder()
+    const path = join(directory, 'preferences.json')
+    const lastGood = join(directory, 'preferences.last-good.json')
+    createPreferencesStore(path).write(document('Before'))
+    const blocked = {
+      ...fs,
+      renameSync: (from, to) => {
+        if (to === path) throw Object.assign(new Error('blocked'), { code })
+        return fs.renameSync(from, to)
+      },
+    }
 
-  createPreferencesStore(path, blocked).write(document('After'))
-  assert.equal(readFileSync(path, 'utf8'), document('After'))
-  assert.equal(readFileSync(lastGood, 'utf8'), document('Before'))
-  assert.equal(existsSync(`${path}.tmp`), false)
-})
+    createPreferencesStore(path, blocked).write(document('After'))
+    assert.equal(readFileSync(path, 'utf8'), document('After'))
+    assert.equal(readFileSync(lastGood, 'utf8'), document('Before'))
+    assert.equal(existsSync(`${path}.tmp`), false)
+  })
+}
 
 test('any other rename failure is not hidden', () => {
   const directory = folder()
@@ -162,6 +164,11 @@ test('an unreadable preferences.json loads the last good copy, and with no copy 
 
   store.write(document('Newer'))
   assert.equal(createPreferencesStore(path, locked).read(), document('Kept'))
+
+  // Saving while preferences.json is unreadable leaves the last good copy alone.
+  createPreferencesStore(path, locked).write(document('Third'))
+  assert.equal(readFileSync(join(directory, 'preferences.last-good.json'), 'utf8'), document('Kept'))
+  assert.equal(readFileSync(path, 'utf8'), document('Third'))
 })
 
 test('each save keeps the previous complete file as the last good copy', () => {

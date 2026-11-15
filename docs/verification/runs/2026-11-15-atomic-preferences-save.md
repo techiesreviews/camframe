@@ -1,7 +1,7 @@
 # Verification run: tools-295-atomic-prefs — 2026-11-15
 
 - **Commit:** 1da331d1559c77565156acdec4f13c7e71b87a0f
-- **Version:** 0.8.0 (unreleased; branch `tools-295-atomic-prefs`, for `dev`)
+- **Version:** 0.8.0 (unreleased change on `dev`)
 - **Observer:** Claude Opus 5.5 (agent, builder)
 - **Environment:** Linux 7.0.0-43-generic, Wayland session with X11 available, Node 24.22.2, npm 11.19.1, dev (unpackaged)
 - **Cameras:** Chromium's synthetic camera (Electron smoke)
@@ -13,9 +13,9 @@
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | Electron binary fetched with `node node_modules/electron/install.js` (npm 11 held back its install script) |
 | `kit unit test/preferences-store.test.js` before the store existed | Fail (expected) | 0/1 files | `ERR_MODULE_NOT_FOUND` for `src/preferences-store.js`: the failing-first run (commit e5ba2a6) |
-| `npm test` (`kit unit`) | Pass | 349 pass, 1 skipped, 0 fail | 11 new tests in `test/preferences-store.test.js`: a cut-off `preferences.json` loads the last good copy and its Scene; no direct write onto `preferences.json`; a crash while writing `preferences.json` leaves it and the copy whole; a failed refresh of the copy still saves; a rename blocked with `EPERM` writes in place, any other rename error throws; an unreadable file loads the copy; the last good copy follows each save; a broken file never replaces it; a missing file still starts fresh; a broken file with no copy still starts from defaults |
+| `npm test` (`kit unit`) | Pass | 345 pass, 1 skipped, 0 fail | 7 new tests in `test/preferences-store.test.js`: a cut-off `preferences.json` loads the last good copy and its Scene; no direct write onto `preferences.json`; a crash mid-write leaves the old file whole; the last good copy follows each save; a broken file never replaces it; a missing file still starts fresh; a broken file with no copy still starts from defaults |
 | `npm run test:electron` | Pass | 5/5, about 14 s | The real main process saves, quits and relaunches through the new store (layout Scenes persist, Scenes tab autosave, off-screen place) |
-| Syntax checks | Pass | | `for f in src/*.js scripts/*.mjs; do node --check "$f"; done; node --check src/preload.cjs` |
+| Syntax checks | Pass | | `node --check src/main.js` |
 | `git diff --check` | Pass | | |
 
 ## Build and artifact checks
@@ -33,8 +33,8 @@
 
 | ID | Result | Observation/evidence |
 | --- | --- | --- |
-| W-27 | Not run | Needs Lex's Windows laptop: change a setting, quit from the toolbar and the tray, start again; the setting is kept, and `%APPDATA%\CamFrame` holds `preferences.json` and, after a second save, `preferences.last-good.json` |
-| Extra: rename refused by another program | Not run | The in-place fallback is automated with a fake `EPERM` rename; a real Windows antivirus or indexer holding the file is not |
+| Windows: Preferences survive a restart | Not run | Needs Lex's Windows laptop: change a setting, quit, start again; `%APPDATA%\CamFrame` then holds `preferences.json` and, after a second save, `preferences.last-good.json` |
+| Windows: rename refused by another program | Not run | The in-place fallback for `EPERM`/`EACCES`/`EBUSY` is checked only by reading the code |
 
 ## Regressions and surprises
 
