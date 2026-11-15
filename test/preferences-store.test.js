@@ -321,3 +321,35 @@ test('a folder that refuses to be flushed does not fail a save that is already c
   assert.equal(readFileSync(path, 'utf8'), document('One'))
   assert.equal(closed.includes(directory), true, 'the folder handle is closed')
 })
+
+// An fs that cannot remove temporary files, as when the program that blocked a rename holds them too.
+function stuckTemporaryFiles(base) {
+  return {
+    ...base,
+    rmSync: (file, ...rest) => {
+      if (String(file).endsWith('.tmp')) throw Object.assign(new Error('resource busy'), { code: 'EBUSY' })
+      return fs.rmSync(file, ...rest)
+    },
+  }
+}
+
+test('a temporary file that cannot be removed never hides what the save did', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  createPreferencesStore(path).write(document('Before'))
+  const blocked = stuckTemporaryFiles({
+    ...fs,
+    renameSync: (from, to) => {
+      if (to === path) throw Object.assign(new Error('resource busy'), { code: 'EBUSY' })
+      return fs.renameSync(from, to)
+    },
+  })
+  createPreferencesStore(path, blocked).write(document('After'))
+  assert.equal(readFileSync(path, 'utf8'), document('After'))
+
+  assert.throws(
+    () => createPreferencesStore(path, stuckTemporaryFiles(failingWriteTo(path))).write(document('Later')),
+    /power cut/,
+  )
+  assert.equal(readFileSync(path, 'utf8'), document('After'))
+})
