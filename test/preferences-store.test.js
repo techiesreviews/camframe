@@ -63,6 +63,14 @@ test('a save replaces preferences.json in one step and never writes onto it dire
   assert.deepEqual(readdirSync(directory).sort(), ['preferences.json', 'preferences.last-good.json'])
 })
 
+function isTemporaryFor(target, file) {
+  return typeof file === 'string' && file.startsWith(`${target}.`) && file.endsWith('.tmp')
+}
+
+function temporaryFiles(directory) {
+  return readdirSync(directory).filter((name) => name.endsWith('.tmp'))
+}
+
 // An fs that fails when it writes the temporary file for `target`: half the text lands, then it throws.
 function failingWriteTo(target) {
   let watched
@@ -70,7 +78,7 @@ function failingWriteTo(target) {
     ...fs,
     openSync: (file, ...rest) => {
       const descriptor = fs.openSync(file, ...rest)
-      if (file === `${target}.tmp`) watched = descriptor
+      if (isTemporaryFor(target, file)) watched = descriptor
       return descriptor
     },
     // A closed descriptor's number is handed out again, so stop watching it.
@@ -128,7 +136,7 @@ for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
     createPreferencesStore(path, blocked).write(document('After'))
     assert.equal(readFileSync(path, 'utf8'), document('After'))
     assert.equal(readFileSync(lastGood, 'utf8'), document('Before'))
-    assert.equal(existsSync(`${path}.tmp`), false)
+    assert.deepEqual(temporaryFiles(directory), [])
   })
 }
 
@@ -215,4 +223,70 @@ test('a broken file with no last good copy still starts from defaults, as before
   const text = createPreferencesStore(path).read()
   assert.equal(text, '{"schemaVer')
   assert.deepEqual(preferencesFromDocument(text).presets, preferencesFromDocument(undefined).presets)
+})
+
+test('two saves at once, as from two running copies, never share a temporary file', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  createPreferencesStore(path).write(document('Before'))
+  const second = createPreferencesStore(path)
+  let overlapped = false
+  const first = createPreferencesStore(path, {
+    ...fs,
+    // While the first copy is half way through writing preferences.json, the second saves.
+    writeFileSync: (where, text, ...rest) => {
+      if (!overlapped && typeof where === 'number' && String(text) === document('First')) {
+        overlapped = true
+        fs.writeSync(where, String(text).slice(0, 20))
+        second.write(document('Second'))
+        return fs.writeFileSync(where, String(text).slice(20), ...rest)
+      }
+      return fs.writeFileSync(where, text, ...rest)
+    },
+  })
+
+  first.write(document('First'))
+  assert.equal(overlapped, true)
+  assert.equal(readFileSync(path, 'utf8'), document('First'))
+  assert.deepEqual(temporaryFiles(directory), [])
+})
+
+function flushRecorder() {
+  const flushed = []
+  const opened = new Map()
+  return {
+    flushed,
+    fs: {
+      ...fs,
+      openSync: (file, ...rest) => {
+        const descriptor = fs.openSync(file, ...rest)
+        opened.set(descriptor, file)
+        return descriptor
+      },
+      fsyncSync: (descriptor) => {
+        flushed.push(opened.get(descriptor))
+        return fs.fsyncSync(descriptor)
+      },
+      renameSync: (from, to) => {
+        flushed.push(`rename ${to}`)
+        return fs.renameSync(from, to)
+      },
+    },
+  }
+}
+
+test('on Linux and macOS the folder is flushed after each rename, so a power cut keeps the save', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const recorder = flushRecorder()
+  createPreferencesStore(path, recorder.fs, 'linux').write(document('One'))
+  assert.deepEqual(recorder.flushed.slice(1), [`rename ${path}`, directory])
+})
+
+test('on Windows the folder is not opened to be flushed', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const recorder = flushRecorder()
+  createPreferencesStore(path, recorder.fs, 'win32').write(document('One'))
+  assert.deepEqual(recorder.flushed.slice(1), [`rename ${path}`])
 })

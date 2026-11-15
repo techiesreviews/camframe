@@ -35,7 +35,7 @@ global shortcuts / tray
 | `src/prompter-link.js` | The opt-in Prompter link: the `127.0.0.1:47833` HTTP server's lifecycle and state, origin/host/body checks, cue parsing, and what a cue means (`cueAction`) | Main, `src/prompter-control.js` (`cueAction`, `linkStatusBody`, `sceneDetail`); injected `createServer` |
 | `src/prompter-control.js` | What a checked Prompter link request does: cues (`cueAction` then geometry), layout Scene saves, the small size, and the status `view` (ADR 0035) | Main; injected geometry, Scene state and commit |
 | `src/prompter-link-view.js` | What the Overlay shows for the Prompter link (on, off/starting/on/error, status text, button title) from `prompterLink` and `prompterLinkStatus`; the toolbar button and its hidden description render it | Overlay, tests |
-| `src/preferences-store.js` | The Preferences file on disk: one-step saves (temporary file, flush, rename), the last good copy, and which text to load (ADR 0039) | Main; injected `fs` |
+| `src/preferences-store.js` | The Preferences file on disk: one-step saves (temporary file, flush, rename), the last good copy, and which text to load (ADR 0039) | Main; injected `fs` and platform |
 | `src/settings.js` | Preferences schema, sanitization, loading/migration (`preferencesFromDocument`), Scene snapshots, camera/window dimensions | Main, Scene library, geometry, Overlay, tests |
 | `src/overlay.js` | DOM rendering and event wiring for the Overlay, Inline settings and the onboarding view; mounts the Scenes tab; in the browser QA preview, a bridge fake that runs the real Scene library | `overlay.html` |
 | `src/overlay-interaction.js` | Whether the chrome shows and whether the window is interactive; compact and Full screen hide delays; the toolbar hotspot | Overlay |
