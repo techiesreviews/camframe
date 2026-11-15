@@ -17,6 +17,15 @@
 | Syntax checks | Pass | | `for f in src/*.js scripts/*.mjs; do node --check "$f"; done; node --check src/preload.cjs` |
 | `git diff --check` | Pass | | |
 
+## Rerun after review round 4 at a0f48e54bd8e21752025b0d54adf7fd907330811
+
+| Command | Result | Counts/duration | Evidence/notes |
+| --- | --- | --- | --- |
+| `npm test` (`kit unit`) | Pass | 355 pass, 1 skipped, 0 fail | 17 new tests: the 16 above, now also checking that a failed save (twice in a row, a failed copy refresh, an `ENOSPC` rename) leaves no temporary file, plus a folder that refuses to be flushed does not fail a completed save and its handle is closed |
+| `npm run test:electron` | Pass | 5/5 | |
+| Syntax checks | Pass | | as above |
+| `git diff --check` | Pass | | |
+
 ## Build and artifact checks
 
 | Target/check | Result | Artifact/hash/notes |
