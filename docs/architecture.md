@@ -26,7 +26,7 @@ global shortcuts / tray
 
 | Module | Owns | Direct callers / consumers |
 | --- | --- | --- |
-| `src/main.js` | App lifecycle, Preferences file I/O, BrowserWindow creation, tray/Help, global shortcuts, file dialogs, bridge handlers | Electron entry point from `package.json` |
+| `src/main.js` | App lifecycle, BrowserWindow creation, tray/Help, global shortcuts, file dialogs, bridge handlers | Electron entry point from `package.json` |
 | `src/bridge.js` | The bridge contract: every channel, its transport (`invoke`, `send`, `sendSync`, `event`), argument checks, Overlay-only sender checks, event sending, and the browser QA fake | Main (registration, events), Overlay (QA fake), tests |
 | `src/preload.cjs` | Sandboxed `window.camFrame` adapter. It cannot import `bridge.js`, so `test/bridge.test.js` checks it against the contract | Loaded by the Overlay BrowserWindow |
 | `src/overlay-geometry.js` | Overlay window geometry: Compact placement, Full screen, the onboarding reserve, drag/resize polling, bounds animation with reduced motion, z-order, mouse pass-through | Main, `src/scenes.js` (`keepInside`, `planCompactLayout`), `src/prompter-control.js`; injected `window`, `screen`, `timers` |
@@ -35,6 +35,7 @@ global shortcuts / tray
 | `src/prompter-link.js` | The opt-in Prompter link: the `127.0.0.1:47833` HTTP server's lifecycle and state, origin/host/body checks, cue parsing, and what a cue means (`cueAction`) | Main, `src/prompter-control.js` (`cueAction`, `linkStatusBody`, `sceneDetail`); injected `createServer` |
 | `src/prompter-control.js` | What a checked Prompter link request does: cues (`cueAction` then geometry), layout Scene saves, the small size, and the status `view` (ADR 0035) | Main; injected geometry, Scene state and commit |
 | `src/prompter-link-view.js` | What the Overlay shows for the Prompter link (on, off/starting/on/error, status text, button title) from `prompterLink` and `prompterLinkStatus`; the toolbar button and its hidden description render it | Overlay, tests |
+| `src/preferences-store.js` | The Preferences file on disk: one-step saves (temporary file, flush, rename), the last good copy, and which text to load (ADR 0039) | Main; injected `fs` |
 | `src/settings.js` | Preferences schema, sanitization, loading/migration (`preferencesFromDocument`), Scene snapshots, camera/window dimensions | Main, Scene library, geometry, Overlay, tests |
 | `src/overlay.js` | DOM rendering and event wiring for the Overlay, Inline settings and the onboarding view; mounts the Scenes tab; in the browser QA preview, a bridge fake that runs the real Scene library | `overlay.html` |
 | `src/overlay-interaction.js` | Whether the chrome shows and whether the window is interactive; compact and Full screen hide delays; the toolbar hotspot | Overlay |
@@ -76,7 +77,7 @@ The active Scene (`activeSceneId` in main, `activePresetId` on the wire) is runt
 ## Startup sequence
 
 1. Electron becomes ready and hides the macOS Dock icon when available.
-2. Main reads `preferences.json` and passes its text to `preferencesFromDocument()`, which applies the legacy migrations, sanitizes, then forces startup visibility and topmost to `true`.
+2. Main reads `preferences.json` through the Preferences store (the last good copy when the file is broken, ADR 0039) and passes its text to `preferencesFromDocument()`, which applies the legacy migrations, sanitizes, then forces startup visibility and topmost to `true`.
 3. A packaged build whose loaded Preferences had the retired Start at login on turns the login item off once (ADR 0037).
 4. Bridge handlers (one per contract entry, Overlay renderer only) and Overlay-only media permission handlers are registered.
 5. Main creates the transparent Overlay and tray.

@@ -34,6 +34,7 @@ import {
 } from './overlay-geometry.js'
 import { createPrompterLink } from './prompter-link.js'
 import { createPrompterControl } from './prompter-control.js'
+import { createPreferencesStore } from './preferences-store.js'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const integrationUserDataDirectory = process.env.CAMFRAME_E2E_USER_DATA_DIR
@@ -44,7 +45,7 @@ if (!app.isPackaged && process.env.CAMFRAME_E2E === '1' && isAbsolute(integratio
   }
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream')
 }
-const preferencesPath = () => join(app.getPath('userData'), 'preferences.json')
+const preferencesStore = () => createPreferencesStore(join(app.getPath('userData'), 'preferences.json'))
 
 let overlayWindow
 let overlayGeometry
@@ -58,12 +59,7 @@ let prompterLink
 let prompterLinkStatus = { state: 'off', port: 0, message: '' }
 
 function loadSettings() {
-  let documentText
-  try {
-    documentText = readFileSync(preferencesPath(), 'utf8')
-  } catch {
-    documentText = undefined
-  }
+  const documentText = preferencesStore().read()
   settings = preferencesFromDocument(documentText)
   // Start at login is gone (ADR 0037): a packaged build that registered it turns it off once.
   if (app.isPackaged && legacyLaunchAtLogin(documentText)) app.setLoginItemSettings({ openAtLogin: false })
@@ -72,7 +68,7 @@ function loadSettings() {
 function saveSettings() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    writeFileSync(preferencesPath(), JSON.stringify(settings, null, 2), 'utf8')
+    preferencesStore().write(JSON.stringify(settings, null, 2))
   }, 120)
 }
 
@@ -498,7 +494,7 @@ app.on('before-quit', () => {
   overlayGeometry?.stopDrag()
   overlayGeometry?.stopResize()
   clearTimeout(saveTimer)
-  writeFileSync(preferencesPath(), JSON.stringify(settings, null, 2), 'utf8')
+  preferencesStore().write(JSON.stringify(settings, null, 2))
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())
