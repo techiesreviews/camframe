@@ -23,7 +23,10 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
     }
   }
 
-  function replace(file, text) {
+  // `inPlaceWhenBlocked`: when Windows blocks the rename, write straight onto `file` instead. Only
+  // for `preferences.json`, whose save must not be lost; the last good copy is never written in
+  // place, because a cut-off write would destroy the one complete copy left.
+  function replace(file, text, { inPlaceWhenBlocked = false } = {}) {
     // CamFrame can run twice (it has no single-instance lock), so each save gets its own temporary
     // file, named by process and save; a shared name would let one copy rename the other's half.
     sequence += 1
@@ -45,7 +48,7 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
         // Windows refuses the rename while another program (an antivirus or the search indexer)
         // holds the file open. The last good copy is on disk by now (unless refreshing it just
         // failed), so write in place rather than lose the save.
-        if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
+        if (!inPlaceWhenBlocked || !['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
         fs.writeFileSync(file, text, 'utf8')
       }
     } finally {
@@ -99,7 +102,7 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
           // The copy is a spare: failing to refresh it must not cost the save itself.
         }
       }
-      replace(path, text)
+      replace(path, text, { inPlaceWhenBlocked: true })
     },
   }
 }

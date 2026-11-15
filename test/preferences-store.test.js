@@ -353,3 +353,32 @@ test('a temporary file that cannot be removed never hides what the save did', ()
   )
   assert.equal(readFileSync(path, 'utf8'), document('After'))
 })
+
+test('a blocked rename of the last good copy keeps the old copy whole and still saves', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const lastGood = join(directory, 'preferences.last-good.json')
+  const store = createPreferencesStore(path)
+  store.write(document('One'))
+  store.write(document('Two'))
+  const blocked = {
+    ...fs,
+    renameSync: (from, to) => {
+      if (to === lastGood) throw Object.assign(new Error('resource busy'), { code: 'EBUSY' })
+      return fs.renameSync(from, to)
+    },
+    // A write straight onto the copy would be cut off part way.
+    writeFileSync: (where, text, ...rest) => {
+      if (where === lastGood) {
+        fs.writeFileSync(where, String(text).slice(0, 20), ...rest)
+        throw new Error('power cut')
+      }
+      return fs.writeFileSync(where, text, ...rest)
+    },
+  }
+
+  createPreferencesStore(path, blocked).write(document('Three'))
+  assert.equal(readFileSync(path, 'utf8'), document('Three'))
+  assert.equal(readFileSync(lastGood, 'utf8'), document('One'))
+  assert.deepEqual(temporaryFiles(directory), [])
+})
