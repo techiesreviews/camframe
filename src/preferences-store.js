@@ -28,26 +28,31 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
     // file, named by process and save; a shared name would let one copy rename the other's half.
     sequence += 1
     const temporary = `${file}.${process.pid}-${sequence}.tmp`
-    const descriptor = fs.openSync(temporary, 'w')
+    let renamed = false
     try {
-      // writeFileSync on a descriptor keeps writing until every byte is down; one writeSync may not.
-      fs.writeFileSync(descriptor, text, 'utf8')
-      fs.fsyncSync(descriptor)
+      const descriptor = fs.openSync(temporary, 'w')
+      try {
+        // writeFileSync on a descriptor keeps writing until every byte is down; one writeSync may not.
+        fs.writeFileSync(descriptor, text, 'utf8')
+        fs.fsyncSync(descriptor)
+      } finally {
+        fs.closeSync(descriptor)
+      }
+      try {
+        fs.renameSync(temporary, file)
+        renamed = true
+      } catch (error) {
+        // Windows refuses the rename while another program (an antivirus or the search indexer)
+        // holds the file open. The last good copy is on disk by now (unless refreshing it just
+        // failed), so write in place rather than lose the save.
+        if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
+        fs.writeFileSync(file, text, 'utf8')
+      }
     } finally {
-      fs.closeSync(descriptor)
+      // A failed save tidies up its own temporary file; only a crash leaves one behind.
+      if (!renamed) fs.rmSync(temporary, { force: true })
     }
-    try {
-      fs.renameSync(temporary, file)
-    } catch (error) {
-      // Windows refuses the rename while another program (an antivirus or the search indexer) holds
-      // the file open. The last good copy is on disk by now (unless refreshing it just failed), so
-      // write in place rather than lose the save.
-      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
-      fs.writeFileSync(file, text, 'utf8')
-      fs.rmSync(temporary, { force: true })
-      return
-    }
-    flushFolder(file)
+    if (renamed) flushFolder(file)
   }
 
   // On Linux and macOS a rename reaches the disk only when its folder is flushed too; until then a

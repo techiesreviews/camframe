@@ -23,7 +23,7 @@ The Preferences fixtures (ADR 0030 rule 1) are unchanged: they describe the docu
 ## Consequences
 
 - A cut-off `preferences.json` loads the previous save; at most the last change is lost, not the whole document. In the rare case where refreshing the copy failed, Windows then blocked the rename and the in-place write was cut off, the copy is older (or absent on the second save ever) and the changes since it are lost.
-- A failed write or a crash mid-save can leave a `.tmp` file next to `preferences.json`. Nothing reads it, and nothing removes it yet.
+- A save that fails removes its own temporary file. Only a crash mid-save can leave a `.tmp` file next to `preferences.json`; nothing reads it, and nothing removes it yet.
 - On Windows a power cut right after a save can bring back an earlier complete file (the rename may not have reached the disk); the document is still whole.
 - One extra small file sits in the user-data folder, and each save writes up to two small files instead of one.
-- Automated: `test/preferences-store.test.js` on a real folder (a broken or unreadable file, a crash mid-write, a failed copy refresh, a blocked rename, the last good copy, a missing file). A real Windows antivirus or indexer holding the file is not exercised until a Windows run covers it.
+- Automated: `test/preferences-store.test.js` on a real folder (a broken or unreadable file, a crash mid-write, a failed copy refresh, a blocked rename, the last good copy, a missing file, two overlapping saves, the folder flush on Linux and macOS but not on Windows, a refused folder flush, no temporary file left by a failed save). A real Windows antivirus or indexer holding the file is not exercised until a Windows run covers it.
