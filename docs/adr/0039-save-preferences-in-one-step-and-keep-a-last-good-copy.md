@@ -16,12 +16,13 @@ Main wrote `preferences.json` in place with `writeFileSync`, both after the 120 
 - Before each save, the current `preferences.json`, when it is complete (JSON that parses to an object) and differs from the new text, becomes `preferences.last-good.json` the same way. A broken file never replaces the last good copy. Refreshing the copy is best effort: when it fails, the save itself still goes ahead.
 - Loading reads `preferences.json` when it is complete; when it exists but is broken or unreadable, the last good copy is loaded instead, quietly (no notice, no new UI). With no complete copy either, loading falls back to defaults as before.
 - A missing `preferences.json` still means "no saved Preferences", even when a last good copy is left, so deleting or renaming the file on purpose still starts fresh.
-- When Windows refuses the rename because another program holds the file (`EPERM`, `EACCES`, `EBUSY`), the save writes in place instead of being lost; the last good copy is already on disk by then.
+- When Windows refuses the rename because another program holds the file (`EPERM`, `EACCES`, `EBUSY`), the save writes in place instead of being lost; the last good copy is on disk by then, unless refreshing it just failed.
 
 The Preferences fixtures (ADR 0030 rule 1) are unchanged: they describe the document, not the file.
 
 ## Consequences
 
-- A cut-off `preferences.json` loads the previous save; at most the last change is lost, not the whole document.
+- A cut-off `preferences.json` loads the previous save; at most the last change is lost, not the whole document. In the rare case where refreshing the copy failed, Windows then blocked the rename and the in-place write was cut off, the copy is older (or absent on the second save ever) and the changes since it are lost.
+- A failed write can leave a `.tmp` file next to `preferences.json`; the next save empties and reuses it.
 - One extra small file sits in the user-data folder, and each save writes up to two small files instead of one.
 - Automated: `test/preferences-store.test.js` on a real folder (a broken or unreadable file, a crash mid-write, a failed copy refresh, a blocked rename, the last good copy, a missing file). A real Windows antivirus or indexer holding the file is not exercised until a Windows run covers it.
