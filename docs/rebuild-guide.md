@@ -8,6 +8,7 @@ This guide is for reconstructing the current source behavior based on v0.4.3 plu
 - Working-tree extension: contextual onboarding, accessibility preferences, removal of the unreachable Controller, and one stable Camera quality from ADR 0012 and ADR 0016–0026; Preferences schema 12
 - Node used by the 2026-08-28 audit: `v24.15.0`
 - npm used: `11.14.1`
+- Node and npm that rewrote the lockfile for the 2026-11-16 toolchain bump: `v24.22.2`, `11.19.1`
 - Exactly pinned top-level tools: Electron `44.11.3`, Electron Builder `26.18.1`, Playwright Core `1.63.0`, Vite `8.3.8` (ADR 0027, 2026-11-16 update)
 - Runtime code: browser-native JavaScript modules plus one CommonJS preload; no framework and no transpilation step for packaged source.
 
