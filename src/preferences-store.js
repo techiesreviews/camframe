@@ -49,8 +49,16 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
         fs.writeFileSync(file, text, 'utf8')
       }
     } finally {
-      // A failed save tidies up its own temporary file; only a crash leaves one behind.
-      if (!renamed) fs.rmSync(temporary, { force: true })
+      // A failed save tidies up its own temporary file when it can. The program that blocked the
+      // rename may hold this file too; a leftover is harmless (nothing reads it), so a refused
+      // removal never hides the save's own result.
+      if (!renamed) {
+        try {
+          fs.rmSync(temporary, { force: true })
+        } catch {
+          // Left for a later tidy-up.
+        }
+      }
     }
     if (renamed) flushFolder(file)
   }
