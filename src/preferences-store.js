@@ -23,7 +23,8 @@ export function createPreferencesStore(path, fs = nodeFs) {
     const temporary = `${file}.tmp`
     const descriptor = fs.openSync(temporary, 'w')
     try {
-      fs.writeSync(descriptor, text)
+      // writeFileSync on a descriptor keeps writing until every byte is down; one writeSync may not.
+      fs.writeFileSync(descriptor, text, 'utf8')
       fs.fsyncSync(descriptor)
     } finally {
       fs.closeSync(descriptor)
@@ -53,7 +54,13 @@ export function createPreferencesStore(path, fs = nodeFs) {
     },
     write(text) {
       const current = load(path)
-      if (isDocument(current.text) && current.text !== text) replace(lastGoodPath, current.text)
+      if (isDocument(current.text) && current.text !== text) {
+        try {
+          replace(lastGoodPath, current.text)
+        } catch {
+          // The copy is a spare: failing to refresh it must not cost the save itself.
+        }
+      }
       replace(path, text)
     },
   }

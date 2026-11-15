@@ -45,7 +45,7 @@ if (!app.isPackaged && process.env.CAMFRAME_E2E === '1' && isAbsolute(integratio
   }
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream')
 }
-const preferencesStore = () => createPreferencesStore(join(app.getPath('userData'), 'preferences.json'))
+const openPreferencesStore = () => createPreferencesStore(join(app.getPath('userData'), 'preferences.json'))
 
 let overlayWindow
 let overlayGeometry
@@ -59,7 +59,7 @@ let prompterLink
 let prompterLinkStatus = { state: 'off', port: 0, message: '' }
 
 function loadSettings() {
-  const documentText = preferencesStore().read()
+  const documentText = openPreferencesStore().read()
   settings = preferencesFromDocument(documentText)
   // Start at login is gone (ADR 0037): a packaged build that registered it turns it off once.
   if (app.isPackaged && legacyLaunchAtLogin(documentText)) app.setLoginItemSettings({ openAtLogin: false })
@@ -68,7 +68,7 @@ function loadSettings() {
 function saveSettings() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    preferencesStore().write(JSON.stringify(settings, null, 2))
+    openPreferencesStore().write(JSON.stringify(settings, null, 2))
   }, 120)
 }
 
@@ -494,7 +494,7 @@ app.on('before-quit', () => {
   overlayGeometry?.stopDrag()
   overlayGeometry?.stopResize()
   clearTimeout(saveTimer)
-  preferencesStore().write(JSON.stringify(settings, null, 2))
+  openPreferencesStore().write(JSON.stringify(settings, null, 2))
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())

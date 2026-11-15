@@ -63,21 +63,105 @@ test('a save replaces preferences.json in one step and never writes onto it dire
   assert.deepEqual(readdirSync(directory).sort(), ['preferences.json', 'preferences.last-good.json'])
 })
 
-test('a crash while writing leaves the previous preferences.json whole', () => {
-  const directory = folder()
-  const path = join(directory, 'preferences.json')
-  createPreferencesStore(path).write(document('Before'))
-  const crashing = {
+// An fs that fails when it writes the temporary file for `target`: half the text lands, then it throws.
+function failingWriteTo(target) {
+  let watched
+  return {
     ...fs,
-    writeSync: (descriptor, text) => {
-      fs.writeSync(descriptor, String(text).slice(0, 20))
+    openSync: (file, ...rest) => {
+      const descriptor = fs.openSync(file, ...rest)
+      if (file === `${target}.tmp`) watched = descriptor
+      return descriptor
+    },
+    // A closed descriptor's number is handed out again, so stop watching it.
+    closeSync: (descriptor) => {
+      if (descriptor === watched) watched = undefined
+      return fs.closeSync(descriptor)
+    },
+    writeFileSync: (where, text, ...rest) => {
+      if (where !== watched) return fs.writeFileSync(where, text, ...rest)
+      fs.writeSync(where, String(text).slice(0, 20))
       throw new Error('power cut')
     },
   }
+}
 
-  assert.throws(() => createPreferencesStore(path, crashing).write(document('After')), /power cut/)
+test('a crash while writing preferences.json leaves the previous file whole', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const lastGood = join(directory, 'preferences.last-good.json')
+  createPreferencesStore(path).write(document('Before'))
+
+  assert.throws(() => createPreferencesStore(path, failingWriteTo(path)).write(document('After')), /power cut/)
   assert.equal(readFileSync(path, 'utf8'), document('Before'))
+  assert.equal(readFileSync(lastGood, 'utf8'), document('Before'))
   assert.equal(createPreferencesStore(path).read(), document('Before'))
+})
+
+test('a failure while refreshing the last good copy still saves preferences.json', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const lastGood = join(directory, 'preferences.last-good.json')
+  const store = createPreferencesStore(path)
+  store.write(document('One'))
+  store.write(document('Two'))
+
+  createPreferencesStore(path, failingWriteTo(lastGood)).write(document('Three'))
+  assert.equal(readFileSync(path, 'utf8'), document('Three'))
+  assert.equal(readFileSync(lastGood, 'utf8'), document('One'), 'the old copy stays whole')
+})
+
+test('when another program blocks the rename, the save writes in place rather than being lost', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const lastGood = join(directory, 'preferences.last-good.json')
+  createPreferencesStore(path).write(document('Before'))
+  const blocked = {
+    ...fs,
+    renameSync: (from, to) => {
+      if (to === path) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+      return fs.renameSync(from, to)
+    },
+  }
+
+  createPreferencesStore(path, blocked).write(document('After'))
+  assert.equal(readFileSync(path, 'utf8'), document('After'))
+  assert.equal(readFileSync(lastGood, 'utf8'), document('Before'))
+  assert.equal(existsSync(`${path}.tmp`), false)
+})
+
+test('any other rename failure is not hidden', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  createPreferencesStore(path).write(document('Before'))
+  const full = {
+    ...fs,
+    renameSync: (from, to) => {
+      if (to === path) throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' })
+      return fs.renameSync(from, to)
+    },
+  }
+
+  assert.throws(() => createPreferencesStore(path, full).write(document('After')), /no space/)
+  assert.equal(readFileSync(path, 'utf8'), document('Before'))
+})
+
+test('an unreadable preferences.json loads the last good copy, and with no copy starts from defaults', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const store = createPreferencesStore(path)
+  store.write(document('Kept'))
+  const locked = {
+    ...fs,
+    readFileSync: (file, ...rest) => {
+      if (file === path) throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      return fs.readFileSync(file, ...rest)
+    },
+  }
+  assert.equal(createPreferencesStore(path, locked).read(), undefined, 'no last good copy yet')
+
+  store.write(document('Newer'))
+  assert.equal(createPreferencesStore(path, locked).read(), document('Kept'))
 })
 
 test('each save keeps the previous complete file as the last good copy', () => {
