@@ -11,10 +11,11 @@
 
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
+| `npm ci` | Pass | | from an empty `node_modules` after the review (lockfile of 24f23f8, unchanged since): `npm ls` gives electron 44.11.3, electron-builder 26.18.1, playwright-core 1.63.0, vite 8.3.8; `node_modules/electron/dist/version` 44.11.3 (binary fetched with `node node_modules/electron/install.js`, npm 11 holds back its install script); `npm audit` 0 high, 6 moderate |
 | `npm audit` before (origin/dev, 3fee479) | 4 high, 7 moderate | | high: electron 44.7.0 (eMudhra certificates, fixed in 44.9.1), vite 8.3.1 (launch-editor on Windows), undici, source-map-js; moderate: fast-uri and Electron Builder's `minimatch` tree |
 | `npm install -D -E electron@44.11.3 vite@8.3.8 electron-builder@26.18.1` then `npm audit fix` | Pass | | resolved: electron 44.11.3, vite 8.3.8, electron-builder 26.18.1, undici 6.29.1 and 7.30.2, source-map-js 1.2.2, fast-uri 3.1.9; Playwright Core 1.63.0 unchanged |
 | `npm audit` after | 0 high, 6 moderate | | all 6 from `minimatch` 9.0.9 under `@electron/universal` 2.0.3 (Electron Builder's macOS universal-build path); npm's only offer is Electron Builder 24.13.3, which brings back the Windows `EPERM` rename defect (ADR 0027) |
-| `npm test` | Pass | 338 pass, 1 skipped, 0 fail | same count as before the bump |
+| `npm test` | Pass | 338 pass, 1 skipped, 0 fail | same count as before the bump; after the review, 339 pass with the new `test/toolchain-pins.test.js` (it fails when `package.json` asks for `^44.11.3`) |
 | `npm run test:electron` | Pass | 5/5 | Electron 44.11.3 (`node_modules/electron/dist/version`) |
 | `npx vite` dev server | Pass | | Vite 8.3.8 ready, `/src/overlay.html` answers 200 |
 | Syntax checks | Not run | | no source change |
@@ -36,8 +37,8 @@
 
 | ID | Result | Observation/evidence |
 | --- | --- | --- |
-| Windows installer and portable build | Not run | Needs the next Windows build: install and start CamFrame on Lex's laptop, camera shows, move, Full screen, quit |
-| Electron 44.11 on Windows (camera, transparency, click-through, always on top) | Not run | The real-Electron smoke ran on Linux only; Windows CI runs it on the next tag or manual build |
+| Artifact inspection: Windows NSIS and portable launch results | Not run | Needs the next Windows build: install and start CamFrame on Lex's laptop, camera shows, move, Full screen, quit |
+| W-01, W-08, W-09, W-14, W-23 | Not run | Electron 44.11 on Windows: camera permission and start, hover chrome, click-through, Full screen, Always on top. The real-Electron smoke ran on Linux only; Windows CI runs it on the next tag or manual build |
 
 ## Regressions and surprises
 
