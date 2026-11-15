@@ -33,7 +33,7 @@
 | ID | Result | Observation/evidence |
 | --- | --- | --- |
 | W-27 | Not run | Needs Lex's Windows laptop: change a setting, quit from the toolbar and the tray, start again; the setting is kept, and `%APPDATA%\CamFrame` holds `preferences.json` and, after a second save, `preferences.last-good.json` |
-| Extra: rename refused by another program | Not run | The in-place fallback is automated with a fake `EPERM` rename; a real Windows antivirus or indexer holding the file is not |
+| Extra: rename refused by another program | Not run | The in-place fallback is automated with a fake `EPERM`, `EACCES` or `EBUSY` rename; a real Windows antivirus or indexer holding the file is not |
 
 ## Regressions and surprises
 
