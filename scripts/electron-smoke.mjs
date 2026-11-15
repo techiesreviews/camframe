@@ -714,3 +714,36 @@ test('real Electron: a saved place off every screen opens on screen, and a lost 
     }
   }
 })
+
+test('real Electron: a cut-off preferences.json opens with the last good copy, and the next save repairs it', async () => {
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
+  const good = JSON.stringify({
+    schemaVersion: 15,
+    completedOnboardingVersion: 1,
+    presets: [{ id: 'preset-interview', name: 'Interview', settings: { size: 288 } }],
+  })
+  // What an in-place write cut short by a crash or power cut leaves behind (bug B4, ADR 0039).
+  await writeFile(join(userDataDirectory, 'preferences.json'), good.slice(0, 60))
+  await writeFile(join(userDataDirectory, 'preferences.last-good.json'), good)
+  let application
+  try {
+    application = await launchCamFrame(userDataDirectory)
+    const page = await application.firstWindow()
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    const state = await page.evaluate(() => window.camFrame.getState())
+    assert.deepEqual(state.presets.map((scene) => scene.name), ['Interview'], 'the Scenes come back from the last good copy')
+    assert.equal(state.completedOnboardingVersion, 1, 'no onboarding, as for a returning user')
+
+    await application.close()
+    application = undefined
+    const saved = JSON.parse(await readFile(join(userDataDirectory, 'preferences.json'), 'utf8'))
+    assert.deepEqual(saved.presets.map((scene) => scene.name), ['Interview'], 'the quit save writes a whole file again')
+    assert.equal(await readFile(join(userDataDirectory, 'preferences.last-good.json'), 'utf8'), good, 'the broken file never became the copy')
+  } finally {
+    await application?.close().catch(() => {})
+    const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`
+    if (resolve(userDataDirectory).startsWith(expectedPrefix)) {
+      await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+    }
+  }
+})

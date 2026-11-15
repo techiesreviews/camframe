@@ -48,7 +48,8 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
         // Windows refuses the rename while another program (an antivirus or the search indexer)
         // holds the file open. The last good copy is on disk by now (unless refreshing it just
         // failed), so write in place rather than lose the save.
-        if (!inPlaceWhenBlocked || !['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
+        const blocked = platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)
+        if (!inPlaceWhenBlocked || !blocked) throw error
         fs.writeFileSync(file, text, 'utf8')
       }
     } finally {
@@ -66,8 +67,9 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
     if (renamed) flushFolder(file)
   }
 
-  // On Linux and macOS a rename reaches the disk only when its folder is flushed too; until then a
-  // power cut can bring back an earlier file. Windows cannot open a folder for this, and NTFS
+  // On Linux a rename reaches the disk only when its folder is flushed too; until then a power cut
+  // can bring back an earlier file. macOS takes the same flush but only into the drive's cache (a
+  // full flush needs F_FULLFSYNC, which Node lacks). Windows cannot open a folder for this, and NTFS
   // journals the rename itself. Best effort: the save is already complete in the file system.
   function flushFolder(file) {
     if (platform === 'win32') return
