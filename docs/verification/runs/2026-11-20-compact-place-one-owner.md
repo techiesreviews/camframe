@@ -1,6 +1,6 @@
 # Verification run: tools-295-b1 compact place, one owner — 2026-11-20
 
-- **Commit:** branch `build/tools-295-b1-compact-place` on `dev` at d0cb9dbd45413a426c804761e1c1e47c62ac1cba (the PR's head commit holds this file)
+- **Commit:** the change on branch `build/tools-295-b1-compact-place`, on top of `dev` at d0cb9dbd45413a426c804761e1c1e47c62ac1cba (the PR's head commit holds this file)
 - **Version:** 0.8.0 (unreleased)
 - **Observer:** Claude Opus 5.5 (agent, builder)
 - **Environment:** Linux 7.0.0-43-generic, Wayland session with X11 available, Node 24.22.2, npm 11.19.1, dev (unpackaged)
@@ -12,10 +12,10 @@
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | through `kit go` in the worktree |
-| `npm test` | Pass | 392 tests: 391 pass, 1 skipped, 0 fail | |
-| `kit unit --affected` | Pass | 200/200 in 6 files | |
+| `npm test` | Pass | 395 tests: 394 pass, 1 skipped, 0 fail | |
+| `kit unit --affected` | Pass | 203/203 in 6 files | |
 | `npm run test:electron` | Pass | 6/6, 13 s | includes the startup heal smoke ("a saved place off every screen opens on screen"), which runs main's new `openingCompactBounds` path |
-| New tests on the old code | Fail as expected | 3 Scene session tests fail; `test/overlay-geometry.test.js` fails to import (`openingCompactBounds` does not exist yet) | old `src/` taken from `origin/dev` with `git archive`; the fourth new Scene session test is a guard that passes on both |
+| New tests on the old code | Fail as expected | the Scene session tests for the B1 place fail; `test/overlay-geometry.test.js` fails to import (`openingCompactBounds` does not exist yet) | old `src/` taken from `origin/dev` with `git archive`; two new Scene session tests are guards that pass on both (a place the window does not move to, a change that changes nothing) |
 | `git diff --check` | Pass | | |
 
 ## Reproduction of B1 on the old code

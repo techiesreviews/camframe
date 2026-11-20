@@ -23,7 +23,7 @@ Lex asked whether CamFrame could position the camera relative to a screen corner
   - at startup, before the window is created (`openingCompactBounds`; main stores the new place);
   - whenever the window is shown or its Compact bounds are applied (`apply`, `showScene`, leaving Full screen and the place Full screen returns to);
   - when a display is added or removed or its metrics change (resolution, scale, work area, docking): `screen` `display-added`, `display-removed` and `display-metrics-changed` call `ensureOnScreen()`. A Full screen window on a display that is gone covers the nearest display instead.
-  A drag or a corner drag in progress is left alone; a move animation in progress is checked when it ends. The new place is stored in Preferences only; no Scene is changed by it (a place the window was moved to by itself is not a hand change, ADR 0037).
+  A drag or a corner drag in progress is left alone; a move animation in progress is checked when it ends. The new place is stored in Preferences only; no Scene is changed by it (a place the window was moved to by itself is not a hand change, ADR 0037). A Shape or size change by hand that lands on a healed place is still a hand change, so that place is saved into the Active Scene with it.
 - **Scenes open on screen.** An exact (snapshot) Scene whose saved place is not on screen by the same rule is kept wholly on the display nearest its camera when applied (`keepOnWorkArea`, the rule a layout Scene without a place already follows); a saved place that is on screen is applied exactly. The Scene itself keeps its saved place, so it opens where it was saved once that display is back.
 
 ## Consequences

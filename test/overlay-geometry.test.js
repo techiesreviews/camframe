@@ -1148,6 +1148,32 @@ test('compactPlaceAfter: a Shape change keeps the centre, and the window lands e
   assert.deepEqual(view.events.positions, [], 'nothing is reported late')
 })
 
+test('compactPlaceAfter: with the onboarding reserve open, the place is the camera, never the reserve (ADR 0019)', () => {
+  const view = overlay({ settings: { shape: 'circle', size: 288 } })
+  const before = view.window.getBounds()
+  view.geometry.setOnboardingReserve(true)
+  const next = sanitizeSettings({ ...view.settings(), shape: 'landscape' })
+
+  const place = view.geometry.compactPlaceAfter(next)
+
+  const size = overlayDimensionsFor(next)
+  assert.deepEqual(place, {
+    x: Math.round(before.x + (before.width - size.width) / 2),
+    y: Math.round(before.y + (before.height - size.height) / 2),
+  })
+  view.patch({ shape: 'landscape', position: place })
+  view.geometry.apply({ keepCenter: false })
+  assert.deepEqual(view.window.bounds, {
+    ...place,
+    ...size,
+    y: place.y - ONBOARDING_TOP_RESERVE,
+    height: size.height + ONBOARDING_TOP_RESERVE,
+  })
+  view.geometry.setOnboardingReserve(false)
+  assert.deepEqual(view.window.bounds, { ...place, ...size })
+  assert.deepEqual(view.settings().position, place, 'the stored place never holds the reserve')
+})
+
 test('compactPlaceAfter: no place in Full screen or while a move is running', () => {
   const view = overlay()
   view.geometry.setFullscreen(true)
