@@ -18,6 +18,7 @@ Organize behavior into deep modules whose interface is small, whose platform dep
 | --- | --- | --- |
 | `settings.js` | Preferences schema, sanitizing, loading (`preferencesFromDocument`), dimensions | — |
 | `scenes.js` | Scene library: save/apply/cycle/delete/reorder/import/export, ids, the Scene limit, the active Scene | — (returns the next state and a notice) |
+| `scene-session.js` | Scene session: the live Preferences, the Active Scene and the Undo windows held together; Autosave of hand changes and the onboarding demo rule | a geometry port (`sceneContext`, `compactPlace`), `onChange`, `now` |
 | `overlay-geometry.js` | Overlay window geometry: Compact placement, Full screen, onboarding reserve, drag/resize, bounds animation, z-order, mouse pass-through | `window`, `screen`, `timers` |
 | `bridge.js` | Bridge contract: every main↔Overlay channel, its transport, and its argument check | `ipcMain`; the preload is a hand-written adapter checked against the table |
 | `camera-session.js` | Camera session: the one MediaStream, reuse, stale results, Camera quality, the halo video, device scans | `mediaDevices`, video elements |
