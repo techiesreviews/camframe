@@ -113,6 +113,35 @@ for (const entry of openings) {
   })
 }
 
+test('a Scene saved on a display left of the main one opens there, then on screen once it is unplugged, keeping its own place', () => {
+  const left = { bounds: { x: -1920, y: -400, width: 1920, height: 1080 }, workArea: { x: -1920, y: -400, width: 1920, height: 1040 } }
+  const holds = (display, point) => point.x >= display.bounds.x && point.x < display.bounds.x + display.bounds.width
+  const both = {
+    workArea: desktop.workArea,
+    workAreaAt: (point) => (holds(left, point) ? left : desktop).workArea,
+    workAreas: [left.workArea, desktop.workArea],
+    displayAt: (point) => (holds(left, point) ? left : desktop).bounds,
+  }
+  const scene = exact('left', { size: 288, shape: 'circle', position: { x: -1500, y: -200 } })
+  const settings = sanitizeSettings({ size: 300, shape: 'circle', presets: [scene] })
+  const tileOn = (context) => scenePreviews(settings, context).scenes.left
+
+  // Plugged in: the tile sits on the left display at the saved place.
+  assert.deepEqual(sceneOpening(scene, settings, both).position, { x: -1500, y: -200 })
+  assert.equal(tileOn(both).x, (-1500 + OVERLAY_CHROME.left + 1920) / 1920)
+  assert.equal(tileOn(both).y, (-200 + OVERLAY_CHROME.top + 400) / 1080)
+
+  // Unplugged: the tile and applying both open at the top-left of the display that is left.
+  const opening = sceneOpening(scene, settings, displaysOf(desktop))
+  assert.deepEqual(opening.position, { x: 0, y: 0 })
+  const applied = applyScene({ settings, activeSceneId: '' }, 'left', displaysOf(desktop))
+  assert.deepEqual(applied.settings.position, opening.position)
+  assert.equal(tileOn(displaysOf(desktop)).x, OVERLAY_CHROME.left / 1920)
+  assert.equal(tileOn(displaysOf(desktop)).y, OVERLAY_CHROME.top / 1080)
+  // The Scene keeps its own place, so it opens on the left display again once that is back.
+  assert.deepEqual(applied.settings.presets[0].settings.position, { x: -1500, y: -200 })
+})
+
 const live = sanitizeSettings({ size: 350, prompterSmallSize: 200, prompterMargin: 32 })
 const requests = [
   { name: '"small" is the small size', request: { size: 'small' }, expected: { size: 200, margin: 0 } },
