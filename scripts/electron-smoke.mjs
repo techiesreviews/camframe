@@ -769,7 +769,8 @@ test('real Electron: a Shape change saves the place the window lands on, and the
 
     // Another Scene, then Desk again: Desk opens exactly where it was left.
     await page.evaluate(() => window.camFrame.applyPreset('preset-talk'))
-    await until(({ state }) => state.activePresetId === 'preset-talk', 'Talk on camera')
+    // Wait for the window to reach Talk's place, so Desk's check below sees a real move back.
+    await until(({ bounds, state }) => state.activePresetId === 'preset-talk' && at(bounds, { x: 120, y: 140 }), 'Talk on camera')
     await page.evaluate(() => window.camFrame.applyPreset('preset-desk'))
     await until(({ bounds, state }) => state.activePresetId === 'preset-desk' && at(bounds, saved), 'Desk back where it was left')
   } finally {

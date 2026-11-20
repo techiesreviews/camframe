@@ -402,6 +402,26 @@ test('a Shape change on a Scene shown away from its saved place keeps its own pl
   })
 })
 
+test('after a larger Desk is imported over the Active Scene, a Shape change keeps its centre at its own size (ADR 0038)', () => {
+  const { session } = sessionWith({
+    scenes: [desk],
+    settings: desk.settings,
+    activeSceneId: 'desk',
+    placeAfter: () => ({ x: 100, y: 100 }),
+  })
+  const bigger = scene('desk', 'Desk', { shape: 'circle', size: 540, position: { x: 1000, y: 200 } })
+  session.importScenes(JSON.stringify({ scenes: [bigger] }))
+  assert.equal(session.view().activePresetId, 'desk', 'the import keeps Desk active and the live look as it was')
+
+  // Circle and Square have the same size, so Desk's own place stays.
+  session.handChange({ shape: 'rounded' })
+
+  const saved = session.state().settings.presets[0].settings
+  assert.equal(saved.shape, 'rounded')
+  assert.equal(saved.size, 540)
+  assert.deepEqual(saved.position, { x: 1000, y: 200 })
+})
+
 test('a Shape change on a Scene without a place saves no place into it', () => {
   const free = scene('free', 'Free', { shape: 'circle', size: 300 })
   assert.equal(free.settings.position, null)

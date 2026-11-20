@@ -1275,7 +1275,7 @@ test('B1: wired like main, a Shape change saves the place the camera really land
 test('B1 after the onboarding Shape demo: a Shape click saves the place the camera lands on', () => {
   const { session, shape, place, deskPlace } = oneDisplayRig()
 
-  // The demo's three clicks move the window but leave Desk alone.
+  // The demo's three steps move the window but leave Desk alone.
   for (const name of ['rounded', 'portrait', 'landscape']) shape(name, { demo: true })
   assert.notDeepEqual(place(), { x: 400, y: 500 })
   assert.deepEqual(deskPlace(), { x: 400, y: 500 })
@@ -1288,6 +1288,19 @@ test('B1 after the onboarding Shape demo: a Shape click saves the place the came
   session.applyScene('talk')
   session.applyScene('desk')
   assert.deepEqual(place(), { x: 400, y: 500 }, 'Desk opens where the camera was left')
+})
+
+test('B1 after the onboarding Shape demo: a click to another Shape saves the place the camera lands on', () => {
+  const { session, shape, place, deskPlace } = oneDisplayRig()
+  for (const name of ['rounded', 'portrait', 'landscape']) shape(name, { demo: true })
+
+  shape('portrait')
+  const landed = place()
+  assert.deepEqual(deskPlace(), landed)
+
+  session.applyScene('talk')
+  session.applyScene('desk')
+  assert.deepEqual(place(), landed, 'Desk opens where the camera was left')
 })
 
 // Laptop and desk displays, wired like main: Desk (circle, on the desk display) is the Active Scene unless
@@ -1394,7 +1407,7 @@ test('B1 after a startup heal: Desk applied on the laptop keeps its own place th
   let healed
   const { session, setDisplays, shape, place, deskPlace, onLaptop, centreShift } = twoDisplayRig({
     displays: [LAPTOP],
-    activeSceneId: null,
+    activeSceneId: '',
     windowBounds: ({ start, screen }) => {
       const opening = openingCompactBounds({ settings: start, screen })
       healed = opening.healed
