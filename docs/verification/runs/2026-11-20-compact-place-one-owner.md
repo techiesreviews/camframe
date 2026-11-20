@@ -12,11 +12,11 @@
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | through `kit go` in the worktree |
-| `npm test` | Pass | 395 tests: 394 pass, 1 skipped, 0 fail | |
-| `kit unit --affected` | Pass | 203/203 in 6 files | |
+| `npm test` | Pass | 398 tests: 397 pass, 1 skipped, 0 fail | |
+| `kit unit --affected` | Pass | 206/206 in 6 files | |
 | `npm run test:electron` | Pass | 7/7, 14 s | includes the startup heal smoke ("a saved place off every screen opens on screen"), which runs main's new `openingCompactBounds` path, and the new B1 smoke (a circle Scene changed to Wide saves the native window's place and opens there again) |
 | New B1 smoke on the old code | Fails as expected | 1/1 fails at "Desk saved the place the window landed on" | whole `origin/dev` tree from `git archive`, with this branch's `scripts/electron-smoke.mjs` |
-| New tests on the old code | Fail as expected | the Scene session tests for the B1 place fail; `test/overlay-geometry.test.js` fails to import (`openingCompactBounds` does not exist yet) | old `src/` taken from `origin/dev` with `git archive`; two new Scene session tests are guards that pass on both (a place the window does not move to, a change that changes nothing) |
+| New tests on the old code | Fail as expected | the Scene session tests for the B1 place fail; `test/overlay-geometry.test.js` fails to import (`openingCompactBounds` does not exist yet) | old `src/` taken from `origin/dev` with `git archive`; two new Scene session tests are guards that pass on both (a place the window does not move to, a change that changes nothing). The three tests for a Scene shown away from its saved place (a display gone) and a Scene without a place were added in review round 3 and fail on the round-2 commit 005b29f, which saved the live laptop place into such a Scene |
 | `git diff --check` | Pass | | |
 
 ## Reproduction of B1 on the old code
@@ -36,10 +36,11 @@ A probe wired like main (Scene session, geometry, a fake window and screen): a 2
 
 - Older behaviour, not changed here: a Shape or size change made while a Scene's move animation runs (about 0.3 s after the Scene goes on camera) is stored, but the window keeps its old bounds until the next placement; the new smoke waits for the move to end. Recorded as KG-18 in `docs/known-gaps.md`.
 - A Shape or size change that lands on a healed (off-screen) place saves the healed place into the Active Scene, since the change is a hand change; a heal on its own still goes to Preferences only (ADR 0038).
+- A Shape or size change on a Scene shown away from its saved place (its display gone) keeps the Scene's own place, moved by the same centring offset, so the Scene opens on its own display again when it comes back; a Scene saved without a place keeps none (review round 3).
 
 ## Release decision
 
 - **Decision:** Documentation baseline only
 - **Reason:** lands on `dev`; no CamFrame release in this change.
 - **Known exceptions accepted by:** none
-- **Follow-ups:** none
+- **Follow-ups:** KG-18 (a Shape or size change during a Scene's move animation)

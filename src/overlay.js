@@ -114,6 +114,7 @@ const qaScenes = {
     this.session = createSceneSession({
       settings: applied?.settings ?? settings,
       activeSceneId: first,
+      // No window here, so no `compactPlaceAfter`: a Shape or size change keeps the stored place.
       geometry: { sceneContext: () => this.context, compactPlace: () => ({}) },
       onChange: (result) => {
         if (result.settings) applyState({ ...this.state(), prompterLinkStatus: state.prompterLinkStatus })
