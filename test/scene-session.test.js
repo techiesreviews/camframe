@@ -14,7 +14,8 @@ const scene = (id, name, settings = {}, layout) => ({
 
 // A Scene session on a pretend 1920x1040 work area with a fake clock. `changes` records what the
 // session told its adapter after each stored result.
-function sessionWith({ scenes = [], settings = {}, activeSceneId = '', place = {} } = {}) {
+// `placeAfter(next)` stands in for the geometry's answer to where the window lands after a change.
+function sessionWith({ scenes = [], settings = {}, activeSceneId = '', place = {}, placeAfter } = {}) {
   let time = 1_000
   const clock = { now: () => time, advance: (ms) => (time += ms) }
   const changes = []
@@ -25,6 +26,7 @@ function sessionWith({ scenes = [], settings = {}, activeSceneId = '', place = {
     geometry: {
       sceneContext: () => ({ workArea: WORK_AREA, workAreaAt: () => WORK_AREA, workAreas: [WORK_AREA] }),
       compactPlace: () => place,
+      ...(placeAfter ? { compactPlaceAfter: placeAfter } : {}),
     },
     onChange: (result, options) => changes.push({ result, options }),
   })
@@ -286,4 +288,77 @@ test('a Prompter link cue committed through the session ends the Active Scene an
   assert.deepEqual(changes[2].options, { resizing: false, placedByCaller: true }, 'commit options reach the adapter')
   session.commit(undefined)
   assert.equal(changes.length, 3, 'nothing to commit tells the adapter nothing')
+})
+
+test('a Shape change by hand saves the place the window lands on into the Active Scene, in the same step (B1)', () => {
+  const asked = []
+  const { session, changes } = sessionWith({
+    scenes: [desk],
+    settings: desk.settings,
+    activeSceneId: 'desk',
+    placeAfter: (next) => {
+      asked.push(next.shape)
+      return { x: 100, y: 184 }
+    },
+  })
+
+  session.handChange({ shape: 'landscape' })
+
+  assert.deepEqual(asked, ['landscape'], 'the geometry is asked once, with the new look')
+  assert.deepEqual(session.state().settings.position, { x: 100, y: 184 })
+  assert.equal(session.state().settings.presets[0].settings.shape, 'landscape')
+  assert.deepEqual(session.state().settings.presets[0].settings.position, { x: 100, y: 184 })
+  assert.equal(changes.length, 1, 'one stored result, not a late second write')
+  session.undoChange()
+  assert.deepEqual(session.state().settings.presets[0], desk, 'Undo puts back the shape and the place together')
+})
+
+test('a size change by hand also saves the place it lands on; a look change that moves nothing asks no place', () => {
+  const asked = []
+  const { session } = sessionWith({
+    scenes: [desk],
+    settings: desk.settings,
+    activeSceneId: 'desk',
+    placeAfter: (next) => {
+      asked.push(next.size)
+      return { x: 50, y: 50 }
+    },
+  })
+
+  session.handChange({ borderWidth: 9 })
+  assert.deepEqual(asked, [])
+  assert.deepEqual(session.state().settings.presets[0].settings.position, { x: 100, y: 100 })
+
+  session.handChange({ size: 400 })
+  assert.deepEqual(asked, [400])
+  assert.deepEqual(session.state().settings.presets[0].settings.position, { x: 50, y: 50 })
+})
+
+test('a demo Shape step stores the place it lands on live, never in the Active Scene', () => {
+  const { session } = sessionWith({
+    scenes: [desk],
+    settings: desk.settings,
+    activeSceneId: 'desk',
+    placeAfter: () => ({ x: 100, y: 184 }),
+  })
+
+  session.handChange({ shape: 'landscape' }, { demo: true })
+
+  assert.deepEqual(session.state().settings.position, { x: 100, y: 184 })
+  assert.deepEqual(session.state().settings.presets[0], desk)
+})
+
+test('when the window does not move now (Full screen, a move running), the stored place stays', () => {
+  const { session } = sessionWith({
+    scenes: [desk],
+    settings: desk.settings,
+    activeSceneId: 'desk',
+    placeAfter: () => undefined,
+  })
+
+  session.handChange({ shape: 'landscape' })
+
+  assert.deepEqual(session.state().settings.position, { x: 100, y: 100 })
+  assert.deepEqual(session.state().settings.presets[0].settings.position, { x: 100, y: 100 })
+  assert.equal(session.state().settings.presets[0].settings.shape, 'landscape')
 })

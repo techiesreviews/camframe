@@ -26,10 +26,9 @@ import { registerBridgeHandlers, sendBridgeEvent } from './bridge.js'
 import { CURRENT_ONBOARDING_VERSION } from './onboarding.js'
 import {
   alwaysOnTopLevelFor,
-  compactBaseBounds,
   createOverlayGeometry,
   isFullscreenExitInput,
-  onScreenBase,
+  openingCompactBounds,
 } from './overlay-geometry.js'
 import { createPrompterLink } from './prompter-link.js'
 import { createPrompterControl } from './prompter-control.js'
@@ -62,6 +61,7 @@ function sceneSessionWith(startSettings) {
     geometry: {
       sceneContext,
       compactPlace: () => ({ bounds: overlayGeometry?.compactBounds(), fullscreen: overlayGeometry?.isFullscreen() }),
+      compactPlaceAfter: (next) => overlayGeometry?.compactPlaceAfter(next),
     },
     onChange: sceneSessionChanged,
   })
@@ -126,12 +126,20 @@ function toggleFullscreen() {
 }
 
 // A change from the Overlay (Inline settings, the toolbar): a hand change, or an onboarding demo
-// step (`demo`), see the Scene session.
+// step (`demo`), see the Scene session. A Shape or size change already stored the place the
+// geometry gave for it, so the window lands exactly there.
 function updateSettings(patch, { demo = false } = {}) {
   const updateBounds = settingsPatchChangesOverlayGeometry(patch)
   sceneSession.handChange(patch, { demo })
   if (Object.hasOwn(patch, 'prompterLink')) prompterLink?.setEnabled(settings().prompterLink)
-  overlayGeometry?.apply({ updateBounds })
+  overlayGeometry?.apply({ updateBounds, keepCenter: false })
+}
+
+// A place the window reached by itself (a heal, the end of the onboarding reserve, a native move):
+// stored in Preferences only, no Scene changes (ADR 0038).
+function compactPlaceReached(position) {
+  sceneSession.record({ position })
+  saveSettings()
 }
 
 // Broadcasts and saves what the Scene session stored. A resize skips rebuilding the tray menu (a
@@ -229,19 +237,9 @@ function completeOnboarding() {
 }
 
 function createOverlayWindow() {
-  const workArea = screen.getPrimaryDisplay().workArea
-  const saved = compactBaseBounds({ settings: settings(), workArea, keepCenter: false })
-  // A saved place off every connected display (another monitor, docking, a new resolution) would
-  // run CamFrame out of sight (TOOLS-156): it opens at the bottom right of the main display instead.
-  const bounds = onScreenBase(saved, {
-    workAreas: screen.getAllDisplays().map((display) => display.workArea),
-    primaryWorkArea: workArea,
-    margin: settings().prompterMargin,
-  })
-  if (bounds !== saved) {
-    sceneSession.record({ position: { x: bounds.x, y: bounds.y } })
-    saveSettings()
-  }
+  // A saved place off every connected display opens at the bottom right of the main display.
+  const { bounds, healed } = openingCompactBounds({ settings: settings(), screen })
+  if (healed) compactPlaceReached(healed)
   overlayWindow = new BrowserWindow({
     ...bounds,
     show: false,
@@ -275,10 +273,7 @@ function createOverlayWindow() {
       sceneSession.handResize(patch)
       overlayGeometry.apply({ keepCenter: false })
     },
-    onCompactPositionChanged(position) {
-      sceneSession.record({ position })
-      saveSettings()
-    },
+    onCompactPositionChanged: compactPlaceReached,
     onFullscreenChanged: emitFullscreen,
     // A move-drag that moved the camera is a hand change of the place: saved into the active Scene.
     onDragEnd: (position) => sceneSession.dragEnd(position),
