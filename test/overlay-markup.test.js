@@ -240,6 +240,9 @@ test('the Prompter link is opt-in through the toolbar button and closes with the
   assert.match(mainSource, /onResize\(patch\) \{\s*sceneSession\.handResize\(patch\)/)
   // A Prompter link cue places the window itself, so main does not move it to the Scene again.
   assert.match(mainSource, /commit: \(result\) => sceneSession\.commit\(result, \{ placedByCaller: true \}\)/)
+  // Every other Scene put on camera moves the window; a corner resize does not rebuild the tray.
+  assert.match(mainSource, /if \(result\.appliedScene && !placedByCaller\) overlayGeometry\?\.showScene\(\)/)
+  assert.match(mainSource, /if \(!resizing\) setTrayMenu\(\)/)
   assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\(\)\.prompterLink\)/)
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
 })
