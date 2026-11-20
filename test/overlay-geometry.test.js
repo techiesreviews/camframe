@@ -1214,9 +1214,11 @@ test('openingCompactBounds: the saved place when it is on screen, else the botto
   assert.deepEqual(openingCompactBounds({ settings: first, screen }).bounds, compactBaseBounds({ settings: first, workArea: LAPTOP, keepCenter: false }))
 })
 
-test('B1: wired like main, a Shape change saves the place the camera really lands on, so the Scene opens there again', () => {
+// One display, wired like main: Desk, a 288 px circle at (400, 500), is the Active Scene.
+function oneDisplayRig() {
   const desk = { id: 'desk', name: 'Desk', settings: settingsForPreset({ shape: 'circle', size: 288, position: { x: 400, y: 500 } }) }
-  const start = sanitizeSettings({ ...desk.settings, presets: [desk] })
+  const talk = { id: 'talk', name: 'Talk', settings: settingsForPreset({ shape: 'rounded', size: 240, position: { x: 100, y: 100 } }) }
+  const start = sanitizeSettings({ ...desk.settings, presets: [desk, talk] })
   const window = fakeWindow(compactBaseBounds({ settings: start, workArea: WORK_AREA, keepCenter: false }))
   const screen = {
     getCursorScreenPoint: () => ({ x: 0, y: 0 }),
@@ -1245,25 +1247,55 @@ test('B1: wired like main, a Shape change saves the place the camera really land
       if (result.appliedScene) geometry.showScene()
     },
   })
+  return {
+    session,
+    // The toolbar's Shape button, as main's updateSettings handles it; `demo` as onboarding's Shape demo sends it.
+    shape: (name, options) => {
+      session.handChange({ shape: name }, options)
+      geometry.apply({ keepCenter: false })
+    },
+    place: () => ({ x: window.bounds.x, y: window.bounds.y }),
+    deskPlace: () => session.settings().presets[0].settings.position,
+  }
+}
 
-  // The toolbar's Shape button, as main's updateSettings handles it.
-  session.handChange({ shape: 'landscape' })
-  geometry.apply({ keepCenter: false })
+test('B1: wired like main, a Shape change saves the place the camera really lands on, so the Scene opens there again', () => {
+  const { session, shape, place, deskPlace } = oneDisplayRig()
+  shape('landscape')
 
-  const landed = { x: window.bounds.x, y: window.bounds.y }
+  const landed = place()
   assert.notDeepEqual(landed, { x: 400, y: 500 }, 'the window kept its centre, so its top-left moved')
   assert.deepEqual(session.settings().position, landed)
-  assert.deepEqual(session.settings().presets[0].settings.position, landed)
+  assert.deepEqual(deskPlace(), landed)
 
   session.applyScene('desk')
-  assert.deepEqual({ x: window.bounds.x, y: window.bounds.y }, landed, 'the Scene opens where it was left')
+  assert.deepEqual(place(), landed, 'the Scene opens where it was left')
 })
 
-// Laptop and desk displays, wired like main: Desk (circle, on the desk display) is the Active Scene, Talk is on the laptop.
-function twoDisplayRig({ displays: connected = [LAPTOP, DESK], start: startFor = (settings) => settings, windowBounds } = {}) {
+test('B1 after the onboarding Shape demo: a Shape click saves the place the camera lands on', () => {
+  const { session, shape, place, deskPlace } = oneDisplayRig()
+
+  // The demo's three clicks move the window but leave Desk alone.
+  for (const name of ['rounded', 'portrait', 'landscape']) shape(name, { demo: true })
+  assert.notDeepEqual(place(), { x: 400, y: 500 })
+  assert.deepEqual(deskPlace(), { x: 400, y: 500 })
+
+  // The person clicks back to Circle: the camera is back on Desk's place, and Desk keeps it.
+  shape('circle')
+  assert.deepEqual(place(), { x: 400, y: 500 })
+  assert.deepEqual(deskPlace(), { x: 400, y: 500 })
+
+  session.applyScene('talk')
+  session.applyScene('desk')
+  assert.deepEqual(place(), { x: 400, y: 500 }, 'Desk opens where the camera was left')
+})
+
+// Laptop and desk displays, wired like main: Desk (circle, on the desk display) is the Active Scene unless
+// `activeSceneId` says otherwise, Talk is on the laptop.
+function twoDisplayRig({ displays: connected = [LAPTOP, DESK], activeSceneId = 'desk', windowBounds } = {}) {
   const desk = { id: 'desk', name: 'Desk', settings: settingsForPreset({ shape: 'circle', size: 288, position: { x: 2400, y: 300 } }) }
   const talk = { id: 'talk', name: 'Talk', settings: settingsForPreset({ shape: 'rounded', size: 240, position: { x: 100, y: 100 } }) }
-  const start = startFor(sanitizeSettings({ ...desk.settings, presets: [desk, talk] }))
+  const start = sanitizeSettings({ ...desk.settings, presets: [desk, talk] })
   let displays = connected
   const nearest = (point) => {
     const distance = (a) =>
@@ -1291,7 +1323,7 @@ function twoDisplayRig({ displays: connected = [LAPTOP, DESK], start: startFor =
   geometry.setReducedMotion(true)
   session = createSceneSession({
     settings: start,
-    activeSceneId: 'desk',
+    activeSceneId,
     geometry: {
       sceneContext: () => ({
         workArea: geometry.currentWorkArea(),
@@ -1356,11 +1388,13 @@ test('B1 with a display gone: a Shape change keeps the Scene on its own display,
   assert.deepEqual(place(), { x: 2400, y: 300 }, 'Desk is back where it was saved')
 })
 
-test('B1 after a startup heal: CamFrame opens on the laptop, and a Shape change keeps Desk on its own display (ADR 0038)', () => {
-  // The desk display is not connected when CamFrame opens; main opens the window where openingCompactBounds says.
+test('B1 after a startup heal: Desk applied on the laptop keeps its own place through a Shape change (ADR 0038)', () => {
+  // The desk display is not connected when CamFrame opens; main opens the window where openingCompactBounds says,
+  // with no Active Scene (it is runtime only).
   let healed
   const { session, setDisplays, shape, place, deskPlace, onLaptop, centreShift } = twoDisplayRig({
     displays: [LAPTOP],
+    activeSceneId: null,
     windowBounds: ({ start, screen }) => {
       const opening = openingCompactBounds({ settings: start, screen })
       healed = opening.healed
@@ -1374,6 +1408,14 @@ test('B1 after a startup heal: CamFrame opens on the laptop, and a Shape change 
   session.record({ position: healed })
   assert.deepEqual(deskPlace(), { x: 2400, y: 300 }, 'the heal leaves the Scene alone')
 
+  // With no Active Scene, a Shape change saves into no Scene.
+  shape('landscape')
+  assert.deepEqual(deskPlace(), { x: 2400, y: 300 })
+
+  // Desk applied while its display is still missing opens kept onto the laptop; a Shape change there moves only its own place.
+  session.applyScene('desk')
+  assert.ok(onLaptop())
+  assert.deepEqual(deskPlace(), { x: 2400, y: 300 })
   shape('landscape')
   assert.ok(onLaptop())
   assert.deepEqual(session.settings().position, place(), 'Preferences follow the window on the laptop')
