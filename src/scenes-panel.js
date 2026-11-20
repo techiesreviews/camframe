@@ -1,5 +1,6 @@
 import { SCENE_LIMIT, dimensionsFor } from './settings.js'
 import { sameName } from './scenes.js'
+import { resolveLayoutRequest } from './layout-request.js'
 
 // The Scenes tab of Inline settings (ADR 0037): the saved Scenes as a list or a grid of small
 // screens, a slot that saves the live look, rename, delete with Undo, Undo after a change saved into
@@ -73,8 +74,7 @@ export function tileCamera(look, rect) {
 // first preview it shows the size it asks for, so a "small" Scene follows the Small size.
 function lookFor(scene, live, preview) {
   if (!scene.layout) return scene.settings
-  const asked = scene.layout.size === 'small' ? live.prompterSmallSize : scene.layout.size
-  return { ...live, size: preview?.size ?? asked }
+  return { ...live, size: preview?.size ?? resolveLayoutRequest({ size: scene.layout.size }, live).size }
 }
 
 // Everything the tab draws, from the Overlay state, the tab's own UI state and the time now.
