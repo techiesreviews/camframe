@@ -68,11 +68,11 @@ export function tileCamera(look, rect) {
   }
 }
 
-// What a Scene looks like on camera: a layout Scene keeps the live look at its own size.
-function lookFor(scene, live) {
+// What a Scene looks like on camera: a layout Scene keeps the live look at the size it really opens
+// at (its tile preview's `size`, which can be smaller than it asks for on a small display).
+function lookFor(scene, live, preview) {
   if (!scene.layout) return scene.settings
-  const size = scene.layout.size === 'small' ? live.prompterSmallSize : scene.layout.size
-  return { ...live, size }
+  return { ...live, size: preview?.size ?? scene.settings.size }
 }
 
 // Everything the tab draws, from the Overlay state, the tab's own UI state and the time now.
@@ -82,8 +82,8 @@ export function scenesPanelModel(state, ui, now) {
   const flashOn = ui.flash && now < ui.flash.until ? ui.flash.id : ''
   const undo = state.sceneUndo && now < state.sceneUndo.endsAt ? state.sceneUndo : null
   const items = scenes.map((scene, index) => {
-    const look = lookFor(scene, state)
     const rect = previews.scenes?.[scene.id]
+    const look = lookFor(scene, state, rect)
     const description = sceneDescription(look, rect)
     const active = scene.id === state.activePresetId
     const saved = scene.id === flashOn
