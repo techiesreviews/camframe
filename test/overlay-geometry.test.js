@@ -1259,12 +1259,12 @@ test('B1: wired like main, a Shape change saves the place the camera really land
   assert.deepEqual({ x: window.bounds.x, y: window.bounds.y }, landed, 'the Scene opens where it was left')
 })
 
-test('B1 with a display gone: a Shape change keeps the Scene on its own display, so it opens there again (ADR 0038)', () => {
+// Laptop and desk displays, wired like main: Desk (circle, on the desk display) is the Active Scene, Talk is on the laptop.
+function twoDisplayRig({ displays: connected = [LAPTOP, DESK], start: startFor = (settings) => settings, windowBounds } = {}) {
   const desk = { id: 'desk', name: 'Desk', settings: settingsForPreset({ shape: 'circle', size: 288, position: { x: 2400, y: 300 } }) }
   const talk = { id: 'talk', name: 'Talk', settings: settingsForPreset({ shape: 'rounded', size: 240, position: { x: 100, y: 100 } }) }
-  const start = sanitizeSettings({ ...desk.settings, presets: [desk, talk] })
-  const window = fakeWindow(compactBaseBounds({ settings: start, workArea: LAPTOP, keepCenter: false }))
-  let displays = [LAPTOP, DESK]
+  const start = startFor(sanitizeSettings({ ...desk.settings, presets: [desk, talk] }))
+  let displays = connected
   const nearest = (point) => {
     const distance = (a) =>
       Math.hypot(Math.max(a.x - point.x, 0, point.x - a.x - a.width), Math.max(a.y - point.y, 0, point.y - a.y - a.height))
@@ -1278,6 +1278,7 @@ test('B1 with a display gone: a Shape change keeps the Scene on its own display,
     getDisplayMatching: (bounds) => nearest({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }),
     getDisplayNearestPoint: nearest,
   }
+  const window = fakeWindow(windowBounds?.({ start, screen }) ?? compactBaseBounds({ settings: start, workArea: LAPTOP, keepCenter: false }))
   let session
   const geometry = createOverlayGeometry({
     window,
@@ -1304,17 +1305,28 @@ test('B1 with a display gone: a Shape change keeps the Scene on its own display,
       if (result.appliedScene) geometry.showScene()
     },
   })
-  const shape = (name) => {
-    session.handChange({ shape: name })
-    geometry.apply({ keepCenter: false })
+  return {
+    session,
+    geometry,
+    setDisplays: (next) => {
+      displays = next
+    },
+    shape: (name) => {
+      session.handChange({ shape: name })
+      geometry.apply({ keepCenter: false })
+    },
+    place: () => ({ x: window.bounds.x, y: window.bounds.y }),
+    deskPlace: () => session.settings().presets[0].settings.position,
+    onLaptop: () => window.bounds.x + window.bounds.width <= LAPTOP.x + LAPTOP.width,
+    centreShift: overlayDimensionsFor(desk.settings).height - overlayDimensionsFor({ ...desk.settings, shape: 'landscape' }).height,
   }
-  const place = () => ({ x: window.bounds.x, y: window.bounds.y })
-  const deskPlace = () => session.settings().presets[0].settings.position
-  const onLaptop = () => window.bounds.x + window.bounds.width <= LAPTOP.x + LAPTOP.width
-  const centreShift = overlayDimensionsFor(desk.settings).height - overlayDimensionsFor({ ...desk.settings, shape: 'landscape' }).height
+}
+
+test('B1 with a display gone: a Shape change keeps the Scene on its own display, so it opens there again (ADR 0038)', () => {
+  const { session, geometry, setDisplays, shape, place, deskPlace, onLaptop, centreShift } = twoDisplayRig()
 
   // The desk display is unplugged while Desk is on camera: the window comes back on the laptop.
-  displays = [LAPTOP]
+  setDisplays([LAPTOP])
   geometry.ensureOnScreen()
   assert.ok(onLaptop())
   assert.deepEqual(deskPlace(), { x: 2400, y: 300 }, 'the heal leaves the Scene alone')
@@ -1326,20 +1338,49 @@ test('B1 with a display gone: a Shape change keeps the Scene on its own display,
   assert.deepEqual(deskPlace(), { x: 2400, y: 300 + centreShift / 2 })
 
   // Plugged back in, Desk opens on the desk display where it was left.
-  displays = [LAPTOP, DESK]
+  setDisplays([LAPTOP, DESK])
   session.applyScene('talk')
   session.applyScene('desk')
   assert.deepEqual(place(), { x: 2400, y: 300 + centreShift / 2 })
 
   // Unplugged again, Desk opens kept onto the laptop; a Shape change there still moves only its own place.
-  displays = [LAPTOP]
+  setDisplays([LAPTOP])
   session.applyScene('talk')
   session.applyScene('desk')
   assert.ok(onLaptop())
   shape('circle')
   assert.deepEqual(deskPlace(), { x: 2400, y: 300 })
-  displays = [LAPTOP, DESK]
+  setDisplays([LAPTOP, DESK])
   session.applyScene('talk')
   session.applyScene('desk')
   assert.deepEqual(place(), { x: 2400, y: 300 }, 'Desk is back where it was saved')
+})
+
+test('B1 after a startup heal: CamFrame opens on the laptop, and a Shape change keeps Desk on its own display (ADR 0038)', () => {
+  // The desk display is not connected when CamFrame opens; main opens the window where openingCompactBounds says.
+  let healed
+  const { session, setDisplays, shape, place, deskPlace, onLaptop, centreShift } = twoDisplayRig({
+    displays: [LAPTOP],
+    windowBounds: ({ start, screen }) => {
+      const opening = openingCompactBounds({ settings: start, screen })
+      healed = opening.healed
+      return opening.bounds
+    },
+  })
+  assert.ok(healed, 'the saved place is off every screen, so it is healed')
+  assert.ok(onLaptop())
+
+  // main's compactPlaceReached stores the heal in Preferences only.
+  session.record({ position: healed })
+  assert.deepEqual(deskPlace(), { x: 2400, y: 300 }, 'the heal leaves the Scene alone')
+
+  shape('landscape')
+  assert.ok(onLaptop())
+  assert.deepEqual(session.settings().position, place(), 'Preferences follow the window on the laptop')
+  assert.deepEqual(deskPlace(), { x: 2400, y: 300 + centreShift / 2 }, 'Desk keeps its own place, moved to keep its centre')
+
+  setDisplays([LAPTOP, DESK])
+  session.applyScene('talk')
+  session.applyScene('desk')
+  assert.deepEqual(place(), { x: 2400, y: 300 + centreShift / 2 }, 'Desk opens on the desk display again')
 })
