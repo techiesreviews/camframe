@@ -18,7 +18,8 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 - **Camera framing**: the zoom and crop origin of the video inside the overlay, independent from overlay size and position.
 - **Active Scene**: the Scene most recently applied, or saved from Inline settings (a Prompter link save without `apply` does not make it active), shown in Inline settings and the tray. Runtime only (`activePresetId` on the wire). A hand change of the look keeps it active and is saved into it (**Autosave**); a Prompter link cue that moves the camera clears it.
 - **Autosave**: the active Scene follows hand changes of the live look (Inline settings, Shape, dragging, a corner resize) and saves itself; the camera and its quality are not followed (ADR 0037).
-- **Undo**: in the Scenes tab, for 10 seconds after the active Scene saved itself (its look back to how it was when it went on camera), and for 6 seconds after a delete (the Scene back in its place). Main keeps both windows.
+- **Undo**: in the Scenes tab, for 10 seconds after the active Scene saved itself (its look back to how it was when it went on camera), and for 6 seconds after a delete (the Scene back in its place). The Scene session keeps both windows.
+- **Scene session**: the live Preferences, the Active Scene and the Undo windows, held and changed together (`src/scene-session.js`). Main and the browser QA preview each run one.
 - **Starter Scenes**: "Small bottom" and "Big right", the layout Scenes a new installation (and an older file without Scenes) starts with.
 - **Onboarding reserve**: the temporary 220 px of transparent window added above the compact Overlay while Onboarding is open. It is never persisted. **Compact bounds** are the Overlay window bounds without it.
 - **Chrome**: the toolbar, selection corners, and resize handles shown while the pointer is over the Overlay. The Overlay is **interactive** (accepts the mouse) while the chrome shows or an activity such as Inline settings, Onboarding, framing, resizing, or dragging holds it.
@@ -43,6 +44,7 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/prompter-link-view.js`: what the toolbar's Prompter link button and its hidden status description show, and the one request the button flips.
 - `src/settings.js`: the Preferences schema, sanitizing, loading (`preferencesFromDocument`), and camera/window dimensions.
 - `src/scenes.js`: the Scene library: save, apply, cycle, delete and restore, reorder, rename, autosave, Undo windows, tile previews, import, export, and the active Scene.
+- `src/scene-session.js`: the Scene session: holds the live Preferences, the Active Scene and the Undo windows, and runs every Scene and hand change through the Scene library against an injected geometry port.
 - `src/scenes-panel.js`: the Scenes tab: list and grid, the Save look slot, rename, delete and Undo, keyboard and drag.
 - `src/overlay-geometry.js`: Overlay window geometry in main: Compact placement, Full screen, the onboarding reserve, drag/resize, bounds animation, z-order, and mouse pass-through.
 - `src/overlay-interaction.js`: when the Overlay chrome shows and when the window is interactive.

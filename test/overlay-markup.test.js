@@ -229,14 +229,18 @@ test('high contrast preserves boundaries, selection, focus, and status without e
 })
 
 test('the Prompter link is opt-in through the toolbar button and closes with the app', () => {
-  assert.match(mainSource, /prompterLink\.setEnabled\(settings\.prompterLink\)/)
-  // A layout Scene from the tray, the cycle shortcut or a numbered shortcut plans on the live display.
-  assert.match(mainSource, /sceneLibrary\.applyScene\(sceneState\(\), id, sceneContext\(\)\)/)
-  assert.match(mainSource, /sceneLibrary\.cycleScene\(sceneState\(\), sceneContext\(\)\)/)
-  assert.match(mainSource, /sceneLibrary\.applySceneAt\(sceneState\(\), index, sceneContext\(\)\)/)
+  assert.match(mainSource, /prompterLink\.setEnabled\(settings\(\)\.prompterLink\)/)
+  // A layout Scene from the tray, the cycle shortcut or a numbered shortcut plans on the live display:
+  // the Scene session asks main's geometry port for it (test/scene-session.test.js).
+  assert.match(mainSource, /geometry: \{\s*sceneContext,/)
+  assert.match(mainSource, /click: \(\) => sceneSession\.applyScene\(preset\.id\)/)
+  assert.match(mainSource, /\(\) => sceneSession\.cycleScene\(\)/)
+  assert.match(mainSource, /\(\) => sceneSession\.applySceneAt\(index\)/)
   // Resizing by hand sets the small size (KG-14) and is saved into the active Scene (ADR 0037).
-  assert.match(mainSource, /onResize\(patch\) \{\s*commitState\(\s*sceneLibrary\.followLiveLook\(sceneState\(\), settingsAfterHandResize\(settings, patch\), \{ keys: \['size', 'position'\] \}\),\s*\{ tray: false \},\s*\)/)
-  assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\.prompterLink\)/)
+  assert.match(mainSource, /onResize\(patch\) \{\s*sceneSession\.handResize\(patch\)/)
+  // A Prompter link cue places the window itself, so main does not move it to the Scene again.
+  assert.match(mainSource, /commit: \(result\) => sceneSession\.commit\(result, \{ placedByCaller: true \}\)/)
+  assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\(\)\.prompterLink\)/)
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
 })
 
