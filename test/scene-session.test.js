@@ -131,6 +131,18 @@ test('a quiet change is stored without touching the Active Scene, Undo or the ad
   assert.equal(changes.length, 0)
 })
 
+test('a quiet change while Undo shows keeps the Undo offer', () => {
+  const { session } = sessionWith({ scenes: [desk], settings: desk.settings, activeSceneId: 'desk' })
+  session.handChange({ borderWidth: 9 })
+
+  session.record({ position: { x: 5, y: 5 } })
+
+  assert.equal(session.view().sceneUndo.id, 'desk')
+  session.undoChange()
+  assert.deepEqual(session.state().settings.presets[0], desk)
+  assert.equal(session.state().settings.borderWidth, 2)
+})
+
 test('applying a Scene puts it on camera on screen and ends the Undo window', () => {
   const lost = scene('lost', 'Lost', { size: 300, position: { x: 4000, y: 300 } })
   const { session, changes } = sessionWith({ scenes: [desk, lost], settings: desk.settings, activeSceneId: 'desk' })

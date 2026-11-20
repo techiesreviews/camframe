@@ -66,7 +66,8 @@ export function createSceneSession({
     },
     // A change that is not a look change (showing the camera, finishing onboarding, a place the
     // window reached by itself): stored as is, the Active Scene and the Undo windows untouched, and
-    // the adapter not told, since what to do next differs for each.
+    // the adapter not told, since what to do next differs for each. Patches pass `sanitizeSettings`,
+    // so a position must be whole pixels (window bounds are).
     record(patch) {
       settings = sanitizeSettings({ ...settings, ...patch })
     },
