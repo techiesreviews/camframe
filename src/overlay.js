@@ -97,7 +97,7 @@ const QA_DISPLAY = Object.freeze({ x: 0, y: 0, width: 1920, height: 1080 })
 const QA_WORK_AREA = Object.freeze({ x: 0, y: 0, width: 1920, height: 1040 })
 const qaScenes = {
   session: undefined,
-  context: { workArea: QA_WORK_AREA, workAreaAt: () => QA_WORK_AREA },
+  context: { workArea: QA_WORK_AREA, workAreaAt: () => QA_WORK_AREA, workAreas: [QA_WORK_AREA] },
   // `overrides` are Preferences the preview starts with on top of the picked Scenes.
   start(overrides) {
     const extra = [

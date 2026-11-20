@@ -69,10 +69,12 @@ export function tileCamera(look, rect) {
 }
 
 // What a Scene looks like on camera: a layout Scene keeps the live look at the size it really opens
-// at (its tile preview's `size`, which can be smaller than it asks for on a small display).
+// at (its tile preview's `size`, which can be smaller than it asks for on a small display). Before the
+// first preview it shows the size it asks for, so a "small" Scene follows the Small size.
 function lookFor(scene, live, preview) {
   if (!scene.layout) return scene.settings
-  return { ...live, size: preview?.size ?? scene.settings.size }
+  const asked = scene.layout.size === 'small' ? live.prompterSmallSize : scene.layout.size
+  return { ...live, size: preview?.size ?? asked }
 }
 
 // Everything the tab draws, from the Overlay state, the tab's own UI state and the time now.

@@ -546,6 +546,18 @@ test('a layout Scene keeps the live look, even one changed after the Scene was s
   assert.equal(after.view.size, 432)
 })
 
+test('saving a "small" Scene that has to shrink says the size it asked for and the size it saved', async (t) => {
+  const live = await harness(t, { display: { x: 0, y: 0, width: 1280, height: 720 } })
+  await live.setSmallSize({ size: 640 })
+  const saved = (await live.saveScene({ name: 'Big', size: 'small', position: 'right' })).body.saved
+  assert.equal(saved.requestedSize, 640)
+  assert.equal(saved.clamped, true)
+  assert.ok(saved.size < 640)
+  assert.ok(saved.camera.x + saved.camera.width <= 1280 && saved.camera.y + saved.camera.height <= 680)
+  // The Scene keeps asking for the Small size, not the size it was saved at.
+  assert.equal(live.state.settings.presets.find((scene) => scene.name === 'Big').layout.size, 'small')
+})
+
 test('on a narrow display the large Scene shrinks to fit the right 30%; small is unchanged', async (t) => {
   const live = await harness(t, { display: { x: 0, y: 0, width: 1280, height: 720 } })
   await live.saveScene(SMALL_CORNER)

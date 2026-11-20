@@ -42,7 +42,7 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/bridge.js`: the bridge contract between main and the Overlay: channels, transports, argument checks, main registration, and the browser QA fake.
 - `src/prompter-link.js`: the Prompter link server, its origin/host/request checks, what a cue means (`cueAction`), and the status body.
 - `src/prompter-control.js`: what a checked Prompter link request does to the Overlay and the Scenes, against injected geometry and state.
-- `src/layout-request.js`: what a layout request means (`small`, `current`, the default margin), the plan for it, the layout a Scene saves, and where and how big a Scene really opens (`sceneOpening`), used by applying a Scene, its tile and the Prompter link.
+- `src/layout-request.js`: what a layout Scene's request and a layout Scene save mean (`small`, `current`, the default margin), the plan for a request, the layout a Scene saves, and where and how big a Scene really opens (`sceneOpening`), used by applying a Scene, its tile and the Prompter link. Cues reach it with `"small"` already turned into a size by `cueAction` in `src/prompter-link.js`.
 - `src/prompter-link-view.js`: what the toolbar's Prompter link button and its hidden status description show, and the one request the button flips.
 - `src/settings.js`: the Preferences schema, sanitizing, loading (`preferencesFromDocument`), and camera/window dimensions.
 - `src/scenes.js`: the Scene library: save, apply, cycle, delete and restore, reorder, rename, autosave, Undo windows, tile previews, import, export, and the active Scene.
