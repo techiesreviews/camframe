@@ -21,6 +21,7 @@ import {
   settingsPatchChangesOverlayGeometry,
 } from './settings.js'
 import * as sceneLibrary from './scenes.js'
+import { sceneDisplays } from './layout-request.js'
 import { createSceneSession } from './scene-session.js'
 import { registerBridgeHandlers, sendBridgeEvent } from './bridge.js'
 import { CURRENT_ONBOARDING_VERSION } from './onboarding.js'
@@ -81,12 +82,12 @@ function saveSettings() {
   }, 120)
 }
 
-// Where each Scene's camera sits on its display, for the Scenes tab tiles (ADR 0037).
+// Where each Scene's camera opens on its display, for the Scenes tab tiles (ADR 0037): fitted to the
+// same displays as applying it.
 function previewContext() {
   if (!overlayGeometry) return undefined
   return {
-    workArea: overlayGeometry.currentWorkArea(),
-    workAreaAt: (point) => overlayGeometry.workAreaAt(point),
+    ...sceneDisplays(overlayGeometry),
     displayAt: (point) => screen.getDisplayNearestPoint(point).bounds,
     liveBounds: overlayGeometry.isFullscreen() ? undefined : overlayGeometry.targetBounds(),
   }
@@ -159,12 +160,7 @@ function sceneSessionChanged(result, { resizing, placedByCaller = false }) {
 // A layout Scene fits the display the Overlay is on now, or the display its saved point is on; an
 // exact Scene saved off screen opens on the display nearest its place.
 function sceneContext() {
-  if (!overlayGeometry) return {}
-  return {
-    workArea: overlayGeometry.currentWorkArea(),
-    workAreaAt: (point) => overlayGeometry?.workAreaAt(point),
-    workAreas: overlayGeometry.workAreas(),
-  }
+  return sceneDisplays(overlayGeometry)
 }
 
 async function exportPresets() {

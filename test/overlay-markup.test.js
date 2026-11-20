@@ -247,6 +247,11 @@ test('the Prompter link is opt-in through the toolbar button and closes with the
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
 })
 
+test('Scene tiles are fitted to the same displays as applying a Scene (TOOLS-295 B2)', () => {
+  assert.match(mainSource, /function sceneContext\(\) \{\s*return sceneDisplays\(overlayGeometry\)/)
+  assert.match(mainSource, /function previewContext\(\) \{\s*if \(!overlayGeometry\) return undefined\s*return \{\s*\.\.\.sceneDisplays\(overlayGeometry\),/)
+})
+
 test('the toolbar Prompter link button turns the link on and off', () => {
   const toolbar = overlayHtml.match(/<nav class="hover-toolbar"[\s\S]*?<\/nav>/)?.[0] ?? ''
   const buttons = [...toolbar.matchAll(/<button type="button" id="([a-z-]+)"/g)].map((match) => match[1])

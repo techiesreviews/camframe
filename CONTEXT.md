@@ -26,6 +26,7 @@ CamFrame is an Electron desktop application that displays a movable, always-on-t
 - **Prompter link**: the opt-in HTTP endpoint on `127.0.0.1:47833` through which the Techies prompter switches Full screen, Compact size and position, or a Scene at camera cue lines, and saves layout Scenes (ADR 0031, ADR 0035). Off by default.
 - **Small size**: the camera size a Prompter link `"small"` cue restores (`prompterSmallSize`). Scenes and Prompter cues never change it; resizing the Overlay by hand and `POST /camframe/small-size` do (ADR 0035).
 - **Layout Scene**: a Scene saved through the Prompter link. Applying it changes only the Overlay size and place, planned on the display the Overlay is on or heading to (a place) or the display nearest its saved point (no place), and keeps the live camera, shape, appearance and framing. Its record has a `layout`; any other Scene is a **snapshot Scene** (ADR 0035).
+- **Layout request**: a size and place asked for the Compact Overlay (a Prompter cue, a layout Scene save, or a saved layout Scene), and the **Scene opening** worked out from it: the size and window place a Scene really opens at on the displays there are now, after shrinking to fit or keeping a place whose display is gone on screen. Applying a Scene and its tile both use the same opening (`src/layout-request.js`, ADR 0035, ADR 0038).
 - **Demo hand-over**: the moment the user reaches for the control an Onboarding demo is showing. The demo stops and the user keeps the shape or framing it left.
 
 Retired term: **Compositor mask** (native window regions). The unapplied helpers were removed by ADR 0029.
@@ -41,6 +42,7 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/bridge.js`: the bridge contract between main and the Overlay: channels, transports, argument checks, main registration, and the browser QA fake.
 - `src/prompter-link.js`: the Prompter link server, its origin/host/request checks, what a cue means (`cueAction`), and the status body.
 - `src/prompter-control.js`: what a checked Prompter link request does to the Overlay and the Scenes, against injected geometry and state.
+- `src/layout-request.js`: what a layout request means (`small`, `current`, the default margin), the plan for it, the layout a Scene saves, and where and how big a Scene really opens (`sceneOpening`), used by applying a Scene, its tile and the Prompter link.
 - `src/prompter-link-view.js`: what the toolbar's Prompter link button and its hidden status description show, and the one request the button flips.
 - `src/settings.js`: the Preferences schema, sanitizing, loading (`preferencesFromDocument`), and camera/window dimensions.
 - `src/scenes.js`: the Scene library: save, apply, cycle, delete and restore, reorder, rename, autosave, Undo windows, tile previews, import, export, and the active Scene.
