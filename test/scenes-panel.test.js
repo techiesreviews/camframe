@@ -101,13 +101,25 @@ test('a layout Scene draws the live look; an exact Scene its own', () => {
   const exact = scene('mine', 'Mine', { shape: 'rounded', size: 300, frameEffect: 'glow' })
   const state = stateWith([layout, exact], {
     shape: 'portrait',
-    scenePreviews: { live: rect(0.8, 0.6), scenes: { big: rect(0.7, 0.3, 0.28, 0.5), mine: rect(0.1, 0.1) } },
+    scenePreviews: {
+      live: rect(0.8, 0.6),
+      scenes: { big: { ...rect(0.7, 0.3, 0.28, 0.5), size: 540 }, mine: { ...rect(0.1, 0.1), size: 300 } },
+    },
   })
   const [big, mine] = scenesPanelModel(state, ui(), 0).items
   assert.match(big.description.short, /^Portrait · 540 · Right/)
   assert.match(mine.description.short, /^Rounded · 300 · Top left · Glow/)
   const model = scenesPanelModel(state, ui(), 0)
   assert.match(model.live.description.short, /^Portrait · 288 · Bottom right/)
+})
+
+test('a layout Scene that opens shrunk names the size it really opens at', () => {
+  // Asks for 640 px, but its display only has room for 578 px.
+  const side = { id: 'side', name: 'Side', settings: settingsForPreset({ size: 640 }), layout: { size: 640 } }
+  const state = stateWith([side], { scenePreviews: { live: rect(0.8, 0.6), scenes: { side: { ...rect(0.52, 0), size: 578 } } } })
+  const [item] = scenesPanelModel(state, ui(), 0).items
+  assert.match(item.description.short, /^Circle · 578 · /)
+  assert.match(item.label, /size 578/)
 })
 
 test('the save form says Replace when the name is taken', () => {

@@ -10,7 +10,6 @@ import {
   cycleScene,
   deleteScene,
   importScenes,
-  layoutSceneGeometry,
   patchSettings,
   reorderScene,
   saveScene,
@@ -24,6 +23,7 @@ import {
   scenePreviews,
   undoSceneChange,
 } from '../src/scenes.js'
+import { sceneOpening } from '../src/layout-request.js'
 
 const scene = (id, name, settings = {}) => ({ id, name, settings: settingsForPreset(settings) })
 const library = (scenes = [], settings = {}, activeSceneId = '') => ({
@@ -135,7 +135,7 @@ test('the tray and shortcut paths apply a layout Scene like a cue: planned on th
     position: { x: 50, y: 60 },
   })
   const workArea = { x: 0, y: 0, width: 1280, height: 680 }
-  const expected = layoutSceneGeometry(state.settings.presets[0], state.settings, { workArea })
+  const expected = sceneOpening(state.settings.presets[0], state.settings, { workArea })
   for (const [path, result] of [
     ['cycle', cycleScene(state, { workArea })],
     ['numbered shortcut', applySceneAt(state, 0, { workArea })],
@@ -256,12 +256,12 @@ test('a layout Scene without a place plans on the display nearest its saved poin
   const settings = sanitizeSettings({ size: 288 })
   const current = { x: 0, y: 0, width: 1920, height: 1040 }
   const nearest = { x: 1920, y: 0, width: 800, height: 600 }
-  const planned = layoutSceneGeometry(scene, settings, { workArea: current, workAreaAt: () => nearest })
+  const planned = sceneOpening(scene, settings, { workArea: current, workAreaAt: () => nearest })
   // 600 px would not fit 600 px of height with the chrome, so it shrinks inside `nearest`.
   assert.equal(planned.size, 600 - OVERLAY_CHROME.top - OVERLAY_CHROME.bottom)
   assert.equal(planned.clamped, true)
   assert.ok(planned.position.x >= nearest.x && planned.position.x + planned.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= nearest.x + nearest.width)
-  const fallback = layoutSceneGeometry(scene, settings, { workArea: current })
+  const fallback = sceneOpening(scene, settings, { workArea: current })
   assert.ok(fallback.position.x + fallback.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= current.width, 'without workAreaAt it uses workArea')
 })
 
@@ -276,12 +276,12 @@ test('a layout Scene that cannot be planned keeps its saved place on the screen'
   const settings = sanitizeSettings({ size: 288 })
   // A lone 1024 px display: 20% of it is too narrow for the smallest camera, so planning fails.
   const lone = { x: 0, y: 0, width: 1024, height: 768 }
-  const geometry = layoutSceneGeometry(scene, settings, { workArea: lone })
+  const geometry = sceneOpening(scene, settings, { workArea: lone })
   const window = overlayDimensionsFor({ shape: settings.shape, size: geometry.size })
   assert.ok(geometry.position.x >= lone.x && geometry.position.x + window.width <= lone.x + lone.width, 'inside horizontally')
   assert.ok(geometry.position.y >= lone.y && geometry.position.y + window.height <= lone.y + lone.height, 'inside vertically')
   // With no work area known there is nothing to keep it inside: the saved place stays.
-  assert.deepEqual(layoutSceneGeometry(scene, settings).position, { x: 1518, y: 300 })
+  assert.deepEqual(sceneOpening(scene, settings).position, { x: 1518, y: 300 })
 })
 
 // --- Scenes tab (ADR 0037): autosave, undo, delete with undo, rename, reorder, tile previews ---
@@ -499,6 +499,7 @@ test('Scene tiles draw the camera where it really is on its display', () => {
     y: (200 + OVERLAY_CHROME.top) / 1080,
     width: 288 / 1920,
     height: 288 / 1080,
+    size: 288,
   })
   const big = previews.scenes.big
   assert.equal(Math.round(big.width * 1920), 540)
@@ -513,6 +514,19 @@ test('Scene tiles draw the camera where it really is on its display', () => {
   // The live window's real bounds win over a stored position that may be older.
   const moved = scenePreviews(settings, { workArea, workAreaAt: () => workArea, displayAt: () => display, liveBounds: { x: 0, y: 0, ...overlayDimensionsFor(settings) } })
   assert.equal(moved.live.x, OVERLAY_CHROME.left / 1920)
+})
+
+test('a Scene tile saved on a display that is gone shows where applying really opens it', () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 }
+  const workArea = { x: 0, y: 0, width: 1920, height: 1040 }
+  // Saved on a second display right of this one, which is unplugged now.
+  const gone = scene('gone', 'Gone', { size: 288, shape: 'circle', position: { x: 2500, y: 300 } })
+  const settings = sanitizeSettings({ size: 288, shape: 'circle', presets: [gone] })
+  const context = { workArea, workAreaAt: () => workArea, workAreas: [workArea] }
+  const applied = applyScene({ settings, activeSceneId: '' }, 'gone', context)
+  const tile = scenePreviews(settings, { ...context, displayAt: () => display }).scenes.gone
+  assert.equal(tile.x, (applied.settings.position.x + OVERLAY_CHROME.left) / 1920)
+  assert.ok(tile.x + tile.width <= 1, 'the tile camera is on the screen, not past its edge')
 })
 
 test('Undo after a rename puts the look back and keeps the new name', () => {
