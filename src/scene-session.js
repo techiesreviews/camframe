@@ -53,7 +53,7 @@ export function createSceneSession({
     if (settingsPatchChangesOverlayGeometry(patch) && !Object.hasOwn(patch, 'position')) {
       const position = geometry?.compactPlaceAfter?.(next)
       if (position) {
-        const scenePlace = activeScenePlaceAfter(next)
+        const scenePlace = activeScenePlaceAfter(next, keys)
         next = sanitizeSettings({ ...next, position })
         if (scenePlace !== null) keys.push('position')
         scenePosition = scenePlace ?? undefined
@@ -68,9 +68,9 @@ export function createSceneSession({
   // - null: an exact Scene without a place keeps having none;
   // - a place: the Scene is shown away from its saved place (its display is gone, the window was
   //   brought back on screen, or an onboarding demo moved it), so it keeps its own centre, measured
-  //   with its own saved Shape and size, and still opens where it was saved once that display is
-  //   back (ADR 0038).
-  function activeScenePlaceAfter(next) {
+  //   with its own saved Shape and size before and after the change (only the changed `keys` are
+  //   saved into it), and still opens where it was saved once that display is back (ADR 0038).
+  function activeScenePlaceAfter(next, keys) {
     const active = settings.presets.find((scene) => scene.id === activeSceneId)
     if (!active || active.layout) return undefined
     const saved = active.settings.position
@@ -78,7 +78,7 @@ export function createSceneSession({
     const live = settings.position
     if (live && live.x === saved.x && live.y === saved.y) return undefined
     const before = overlayDimensionsFor(active.settings)
-    const after = overlayDimensionsFor(next)
+    const after = overlayDimensionsFor({ ...active.settings, ...Object.fromEntries(keys.map((key) => [key, next[key]])) })
     return {
       x: Math.round(saved.x + (before.width - after.width) / 2),
       y: Math.round(saved.y + (before.height - after.height) / 2),
