@@ -14,6 +14,7 @@
 | `npm ci` | Pass | | in the worktree, before `kit doctor` |
 | `npm test` | Pass | 424 tests: 423 pass, 1 skipped, 0 fail | |
 | New tests on the old code | Fail as expected | `test/layout-request.test.js` and `test/scenes.test.js` fail to import (`src/layout-request.js` does not exist yet); "a layout Scene that opens shrunk names the size it really opens at" and "Scene tiles are fitted to the same displays as applying a Scene" fail | whole `origin/dev` tree from `git archive`, with this branch's `test/` folder |
+| `kit shots` | Pass | 25 screenshots | the browser QA preview's Scenes tab (grid, list, six Scenes, empty, high contrast) draws every tile; the preview's Scene context now carries `workAreas` like main's, so its tiles and applies use the same displays. Its Scenes all sit on its one display, so the shots look as before |
 | `npm run test:electron` | Not run | | the brief says not to run the Electron smoke on Lex's screen |
 | `git diff --check` | Pass | | |
 

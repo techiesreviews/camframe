@@ -70,11 +70,27 @@ const openings = [
     scene: layoutScene('narrow', { size: 'small', position: 'right', withinRight: 0.2 }, { size: 288, position: { x: 1518, y: 300 } }),
     expected: { size: 288, position: { x: 1024 - 324, y: 300 }, clamped: true },
   },
+  {
+    name: 'a portrait snapshot Scene saved on a display that is gone keeps its own shape in the tile',
+    display: desktop,
+    // The live shape is a circle; the portrait window is 351 px wide and its camera 315 x 420.
+    scene: exact('outro', { size: 420, shape: 'portrait', position: { x: 2500, y: 300 } }),
+    expected: { size: 420, position: { x: 1920 - 351, y: 300 }, clamped: false, camera: { width: 315, height: 420 } },
+  },
+  {
+    name: 'a layout Scene is drawn with the live shape',
+    display: desktop,
+    settings: { shape: 'landscape' },
+    // Saved as a circle, but a layout Scene keeps the live look: a 300 x 169 landscape camera, centred down.
+    scene: layoutScene('wide', { size: 300, position: 'right' }, { size: 300, shape: 'circle', position: { x: 0, y: 0 } }),
+    expected: { size: 300, position: { x: 1920 - 32 - 300 - OVERLAY_CHROME.left, y: 352 }, clamped: false, camera: { width: 300, height: 169 } },
+  },
 ]
 
 for (const entry of openings) {
   test(`Scene opening: ${entry.name}`, () => {
     const settings = sanitizeSettings({ size: 300, shape: 'circle', ...entry.settings, presets: [entry.scene] })
+    const camera = entry.expected.camera ?? { width: entry.expected.size, height: entry.expected.size }
     const context = displaysOf(entry.display)
     const opening = sceneOpening(settings.presets[0], settings, context)
     assert.equal(opening.size, entry.expected.size, 'size')
@@ -92,7 +108,8 @@ for (const entry of openings) {
       assert.equal(tile.x, (opening.position.x + OVERLAY_CHROME.left - display.x) / display.width, 'tile across')
       assert.equal(tile.y, (opening.position.y + OVERLAY_CHROME.top - display.y) / display.height, 'tile down')
     }
-    assert.equal(tile.width, opening.size / entry.display.bounds.width, 'tile width')
+    assert.equal(tile.width, camera.width / entry.display.bounds.width, 'tile width')
+    assert.equal(tile.height, camera.height / entry.display.bounds.height, 'tile height')
   })
 }
 
@@ -103,7 +120,8 @@ const requests = [
   { name: 'a spot gets the Prompter margin', request: { size: 400, spot: 'right' }, expected: { size: 400, spot: 'right', margin: 32 } },
   { name: 'a spot keeps its own margin', request: { size: 400, spot: 'right', margin: 10 }, expected: { size: 400, spot: 'right', margin: 10 } },
   { name: 'a point has no margin', request: { size: 400, point: { x: 5, y: 6 } }, expected: { size: 400, point: { x: 5, y: 6 }, margin: 0 } },
-  { name: 'a point keeps a margin it was given', request: { size: 400, point: { x: 5, y: 6 }, margin: 12 }, expected: { size: 400, point: { x: 5, y: 6 }, margin: 12 } },
+  // The Prompter link and loading refuse a margin with a point; the function itself still passes it on.
+  { name: 'a point keeps a margin given straight to the function', request: { size: 400, point: { x: 5, y: 6 }, margin: 12 }, expected: { size: 400, point: { x: 5, y: 6 }, margin: 12 } },
   { name: 'withinRight passes through', request: { size: 400, spot: 'top-right', withinRight: 0.3 }, expected: { size: 400, spot: 'top-right', margin: 32, withinRight: 0.3 } },
 ]
 

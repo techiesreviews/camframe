@@ -122,6 +122,15 @@ test('a layout Scene that opens shrunk names the size it really opens at', () =>
   assert.match(item.label, /size 578/)
 })
 
+test('before the first tile preview, a "small" layout Scene names the Small size it asks for', () => {
+  const corner = { id: 'corner', name: 'Corner', settings: settingsForPreset({ size: 288 }), layout: { size: 'small', position: 'bottom-right' } }
+  const fixed = { id: 'fixed', name: 'Fixed', settings: settingsForPreset({ size: 288 }), layout: { size: 432 } }
+  const state = stateWith([corner, fixed], { prompterSmallSize: 200, scenePreviews: null })
+  const [small, large] = scenesPanelModel(state, ui(), 0).items
+  assert.match(small.description.short, /^Circle · 200\b/)
+  assert.match(large.description.short, /^Circle · 432\b/)
+})
+
 test('the save form says Replace when the name is taken', () => {
   const state = stateWith([scene('a', 'Intro')])
   assert.equal(scenesPanelModel(state, ui({ saving: true, saveName: 'intro' }), 0).add.replace, 'Intro')
