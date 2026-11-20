@@ -715,6 +715,72 @@ test('real Electron: a saved place off every screen opens on screen, and a lost 
   }
 })
 
+test('real Electron: a Shape change saves the place the window lands on, and the Scene opens there again (B1)', async () => {
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
+  await writeFile(
+    join(userDataDirectory, 'preferences.json'),
+    JSON.stringify({
+      schemaVersion: 15,
+      completedOnboardingVersion: 1,
+      position: { x: 300, y: 200 },
+      presets: [
+        { id: 'preset-desk', name: 'Desk', settings: { shape: 'circle', size: 288, position: { x: 300, y: 200 } } },
+        { id: 'preset-talk', name: 'Talk', settings: { shape: 'rounded', size: 240, position: { x: 120, y: 140 } } },
+      ],
+    }),
+  )
+  let application
+  try {
+    // Wayland reports no window positions, so Linux runs this one through X11 (Xwayland).
+    application = await launchCamFrame(userDataDirectory, { args: process.platform === 'linux' ? ['--ozone-platform=x11'] : [] })
+    const page = await application.firstWindow()
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    await page.waitForFunction(() => window.camFrame && true)
+    const state = () => page.evaluate(() => window.camFrame.getState())
+    // Waits until the window's top-left and the stored state both pass `check`.
+    const until = async (check, what) => {
+      const deadline = Date.now() + 4000
+      for (;;) {
+        const current = { bounds: await overlayBounds(application), state: await state() }
+        if (check(current)) return current
+        assert.ok(Date.now() < deadline, `timed out waiting for ${what}: ${JSON.stringify(current.bounds)}`)
+        await page.waitForTimeout(50)
+      }
+    }
+    const at = (bounds, place) => bounds.x === place.x && bounds.y === place.y
+
+    await page.evaluate(() => window.camFrame.applyPreset('preset-desk'))
+    await until(({ bounds, state }) => state.activePresetId === 'preset-desk' && at(bounds, { x: 300, y: 200 }), 'Desk on camera')
+    // Let the Scene's move animation end; a change during it leaves the window as it is.
+    await page.waitForTimeout(500)
+
+    // A circle to Wide keeps the camera's centre, so the window moves down; the Scene saves where it went.
+    await page.evaluate(() => window.camFrame.updateState({ shape: 'landscape' }))
+    const wide = await until(
+      ({ bounds, state }) => state.presets[0].settings.shape === 'landscape' && bounds.y !== 200,
+      'the Wide shape saved into Desk',
+    )
+    await page.waitForTimeout(300)
+    const landed = await overlayBounds(application)
+    const saved = (await state()).presets[0].settings.position
+    assert.deepEqual(saved, { x: landed.x, y: landed.y }, 'Desk saved the place the window landed on')
+    assert.deepEqual(wide.state.position, saved, 'Preferences hold the same place')
+    assert.equal(wide.state.activePresetId, 'preset-desk')
+
+    // Another Scene, then Desk again: Desk opens exactly where it was left.
+    await page.evaluate(() => window.camFrame.applyPreset('preset-talk'))
+    await until(({ state }) => state.activePresetId === 'preset-talk', 'Talk on camera')
+    await page.evaluate(() => window.camFrame.applyPreset('preset-desk'))
+    await until(({ bounds, state }) => state.activePresetId === 'preset-desk' && at(bounds, saved), 'Desk back where it was left')
+  } finally {
+    await application?.close().catch(() => {})
+    const expectedPrefix = `${resolve(tmpdir())}${sep}camframe-electron-smoke-`
+    if (resolve(userDataDirectory).startsWith(expectedPrefix)) {
+      await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+    }
+  }
+})
+
 test('real Electron: a cut-off preferences.json opens with the last good copy, and the next save repairs it', async () => {
   const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
   const good = JSON.stringify({
