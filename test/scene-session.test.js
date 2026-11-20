@@ -362,3 +362,35 @@ test('when the window does not move now (Full screen, a move running), the store
   assert.deepEqual(session.state().settings.presets[0].settings.position, { x: 100, y: 100 })
   assert.equal(session.state().settings.presets[0].settings.shape, 'landscape')
 })
+
+test('a Shape change on a layout Scene makes it a snapshot with the place the window lands on', () => {
+  const corner = scene('corner', 'Corner', { size: 288 }, { size: 288, position: 'bottom-right' })
+  const { session } = sessionWith({
+    scenes: [corner],
+    settings: corner.settings,
+    activeSceneId: 'corner',
+    placeAfter: () => ({ x: 100, y: 184 }),
+  })
+
+  session.handChange({ shape: 'landscape' })
+
+  const saved = session.state().settings.presets[0]
+  assert.equal(saved.layout, undefined, 'the layout Scene became an exact Scene')
+  assert.equal(saved.settings.shape, 'landscape')
+  assert.deepEqual(saved.settings.position, { x: 100, y: 184 })
+})
+
+test('a size change that moves nothing and changes nothing saves nothing and offers no Undo', () => {
+  const { session, changes } = sessionWith({
+    scenes: [desk],
+    settings: desk.settings,
+    activeSceneId: 'desk',
+    placeAfter: () => ({ ...desk.settings.position }),
+  })
+
+  session.handChange({ size: desk.settings.size })
+
+  assert.equal(changes.at(-1)?.result.savedSceneId, undefined, 'no autosave')
+  assert.equal(session.view().sceneUndo, null, 'no Undo window')
+  assert.deepEqual(session.state().settings.presets[0], desk)
+})
