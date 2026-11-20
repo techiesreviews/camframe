@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { SCENE_LIMIT, sanitizeSettings, settingsForPreset } from '../src/settings.js'
+import { SCENE_LIMIT, overlayDimensionsFor, sanitizeSettings, settingsForPreset } from '../src/settings.js'
 import { NO_SCENES_NOTICE, SCENE_DELETE_UNDO_MS, SCENE_IMPORT_ERROR, SCENE_UNDO_MS, patchSettings } from '../src/scenes.js'
 import { createSceneSession } from '../src/scene-session.js'
 
@@ -378,6 +378,45 @@ test('a Shape change on a layout Scene makes it a snapshot with the place the wi
   assert.equal(saved.layout, undefined, 'the layout Scene became an exact Scene')
   assert.equal(saved.settings.shape, 'landscape')
   assert.deepEqual(saved.settings.position, { x: 100, y: 184 })
+})
+
+test('a Shape change on a Scene shown away from its saved place keeps its own place, moved to keep the centre (ADR 0038)', () => {
+  // Desk was saved at (100, 100); its display is gone, so it is shown at (900, 600) instead.
+  const { session } = sessionWith({
+    scenes: [desk],
+    settings: { ...desk.settings, position: { x: 900, y: 600 } },
+    activeSceneId: 'desk',
+    placeAfter: () => ({ x: 900, y: 666 }),
+  })
+
+  session.handChange({ shape: 'landscape' })
+
+  const before = overlayDimensionsFor(desk.settings)
+  const after = overlayDimensionsFor({ ...desk.settings, shape: 'landscape' })
+  assert.deepEqual(session.state().settings.position, { x: 900, y: 666 }, 'Preferences hold where the window is')
+  const saved = session.state().settings.presets[0].settings
+  assert.equal(saved.shape, 'landscape')
+  assert.deepEqual(saved.position, {
+    x: Math.round(100 + (before.width - after.width) / 2),
+    y: Math.round(100 + (before.height - after.height) / 2),
+  })
+})
+
+test('a Shape change on a Scene without a place saves no place into it', () => {
+  const free = scene('free', 'Free', { shape: 'circle', size: 300 })
+  assert.equal(free.settings.position, null)
+  const { session } = sessionWith({
+    scenes: [free],
+    settings: { ...free.settings, position: { x: 400, y: 400 } },
+    activeSceneId: 'free',
+    placeAfter: () => ({ x: 400, y: 466 }),
+  })
+
+  session.handChange({ shape: 'landscape' })
+
+  assert.deepEqual(session.state().settings.position, { x: 400, y: 466 })
+  assert.equal(session.state().settings.presets[0].settings.shape, 'landscape')
+  assert.equal(session.state().settings.presets[0].settings.position, null, 'it still opens wherever the camera is')
 })
 
 test('a size change that moves nothing and changes nothing saves nothing and offers no Undo', () => {

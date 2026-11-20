@@ -1,4 +1,4 @@
-import { sanitizeSettings, settingsAfterHandResize, settingsPatchChangesOverlayGeometry } from './settings.js'
+import { overlayDimensionsFor, sanitizeSettings, settingsAfterHandResize, settingsPatchChangesOverlayGeometry } from './settings.js'
 import * as sceneLibrary from './scenes.js'
 
 // The Scene session: the live Preferences, the Active Scene and the Scenes tab's Undo windows,
@@ -49,14 +49,39 @@ export function createSceneSession({
   function handChange(patch, { demo = false } = {}) {
     let next = sanitizeSettings({ ...settings, ...patch })
     const keys = Object.keys(patch)
+    let scenePosition
     if (settingsPatchChangesOverlayGeometry(patch) && !Object.hasOwn(patch, 'position')) {
       const position = geometry?.compactPlaceAfter?.(next)
       if (position) {
+        const scenePlace = activeScenePlaceAfter(next)
         next = sanitizeSettings({ ...next, position })
-        keys.push('position')
+        if (scenePlace !== null) keys.push('position')
+        scenePosition = scenePlace ?? undefined
       }
     }
-    commit(demo ? { settings: next, activeSceneId } : sceneLibrary.followLiveLook(state(), next, { keys }))
+    commit(demo ? { settings: next, activeSceneId } : sceneLibrary.followLiveLook(state(), next, { keys, scenePosition }))
+  }
+
+  // Where the Active Scene's place goes when a Shape or size change moves the window:
+  // - undefined: the live place is the Scene's own (it is shown at its saved place, it is a layout
+  //   Scene, or there is none), so the Scene saves the place the window lands on;
+  // - null: an exact Scene without a place keeps having none;
+  // - a place: the Scene is shown away from its saved place (its display is gone, or the window was
+  //   brought back on screen), so it keeps its own place, moved the way the window moves to keep
+  //   its centre, and still opens where it was saved once that display is back (ADR 0038).
+  function activeScenePlaceAfter(next) {
+    const active = settings.presets.find((scene) => scene.id === activeSceneId)
+    if (!active || active.layout) return undefined
+    const saved = active.settings.position
+    if (!saved) return null
+    const live = settings.position
+    if (live && live.x === saved.x && live.y === saved.y) return undefined
+    const before = overlayDimensionsFor(settings)
+    const after = overlayDimensionsFor(next)
+    return {
+      x: Math.round(saved.x + (before.width - after.width) / 2),
+      y: Math.round(saved.y + (before.height - after.height) / 2),
+    }
   }
 
   return {

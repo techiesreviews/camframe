@@ -75,12 +75,14 @@ const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right
 // Scene keeps the live look rather than storing one, so it changes only when the hand change changed
 // a followed value; it then becomes an exact Scene of the live look. Without an active Scene, or
 // with nothing to save, only the settings change. `autosaved` holds the Scene before and after, for
-// Undo.
-export function followLiveLook({ settings, activeSceneId }, next, { keys } = {}) {
+// Undo. `scenePosition`, when given, is the place an exact Scene saves instead of the live one (the
+// Scene is shown away from its saved place, so the live place is not its own; ADR 0038).
+export function followLiveLook({ settings, activeSceneId }, next, { keys, scenePosition } = {}) {
   const active = settings.presets.find((scene) => scene.id === activeSceneId)
   const reference = active?.layout ? settings : active?.settings
+  const saving = scenePosition && active && !active.layout ? { ...next, position: scenePosition } : next
   const set = keys ? FOLLOWED_SETTING_KEYS.filter((key) => keys.includes(key)) : FOLLOWED_SETTING_KEYS
-  const changed = active ? set.filter((key) => !sameValue(reference[key], next[key])) : []
+  const changed = active ? set.filter((key) => !sameValue(reference[key], saving[key])) : []
   if (!active || !changed.length) return { settings: next, activeSceneId: active ? activeSceneId : '' }
   const scene = active.layout
     ? { id: active.id, name: active.name, settings: settingsForPreset(next) }
@@ -89,7 +91,7 @@ export function followLiveLook({ settings, activeSceneId }, next, { keys } = {})
         name: active.name,
         settings: settingsForPreset({
           ...active.settings,
-          ...Object.fromEntries(changed.map((key) => [key, next[key]])),
+          ...Object.fromEntries(changed.map((key) => [key, saving[key]])),
         }),
       }
   const scenes = next.presets.map((candidate) => (candidate.id === scene.id ? scene : candidate))
