@@ -8,6 +8,7 @@ import {
   overlayDimensionsFor,
   sanitizeSettings,
   settingsAfterHandResize,
+  settingsForPreset,
 } from '../src/settings.js'
 import {
   OVERLAY_BOUNDS_TRANSITION_MS,
@@ -20,8 +21,10 @@ import {
   isOnScreen,
   keepOnWorkArea,
   onScreenBase,
+  openingCompactBounds,
   visibleShare,
 } from '../src/overlay-geometry.js'
+import { createSceneSession } from '../src/scene-session.js'
 
 const DISPLAY = { x: 0, y: 0, width: 1920, height: 1080 }
 const WORK_AREA = { x: 0, y: 0, width: 1920, height: 1040 }
@@ -1124,4 +1127,108 @@ test('a drag in progress is left alone; a move in progress is checked when it en
   moving.geometry.ensureOnScreen()
   moving.settle()
   assert.equal(isOnScreen(moving.window.bounds, [LAPTOP]), true, 'checked once the move ended')
+})
+
+test('compactPlaceAfter: a Shape change keeps the centre, and the window lands exactly on the place it gave (B1)', () => {
+  const view = overlay({ settings: { shape: 'circle', size: 288 } })
+  const before = view.window.getBounds()
+  const next = sanitizeSettings({ ...view.settings(), shape: 'landscape' })
+
+  const place = view.geometry.compactPlaceAfter(next)
+
+  const size = overlayDimensionsFor(next)
+  assert.deepEqual(place, {
+    x: Math.round(before.x + (before.width - size.width) / 2),
+    y: Math.round(before.y + (before.height - size.height) / 2),
+  })
+  assert.deepEqual(view.window.bounds, before, 'asking moves nothing')
+  view.patch({ shape: 'landscape', position: place })
+  view.geometry.apply({ keepCenter: false })
+  assert.deepEqual(view.window.bounds, { ...place, ...size })
+  assert.deepEqual(view.events.positions, [], 'nothing is reported late')
+})
+
+test('compactPlaceAfter: no place in Full screen or while a move is running', () => {
+  const view = overlay()
+  view.geometry.setFullscreen(true)
+  assert.equal(view.geometry.compactPlaceAfter(sanitizeSettings({ ...view.settings(), shape: 'landscape' })), undefined)
+  view.settle()
+  assert.equal(view.geometry.compactPlaceAfter(sanitizeSettings({ ...view.settings(), shape: 'landscape' })), undefined)
+  view.geometry.setFullscreen(false)
+  assert.equal(view.geometry.compactPlaceAfter(sanitizeSettings({ ...view.settings(), shape: 'landscape' })), undefined, 'the exit is still moving')
+  view.settle()
+  assert.notEqual(view.geometry.compactPlaceAfter(sanitizeSettings({ ...view.settings(), shape: 'landscape' })), undefined)
+})
+
+test('compactPlaceAfter: a centred place that would be lost comes back on screen, without a separate report', () => {
+  const view = overlay({ settings: { shape: 'circle', size: 200, position: { x: 1700, y: 400 } } })
+  screenWith(view, [LAPTOP])
+  const next = sanitizeSettings({ ...view.settings(), size: 900 })
+
+  const place = view.geometry.compactPlaceAfter(next)
+
+  assert.equal(isOnScreen({ ...place, ...overlayDimensionsFor(next) }, [LAPTOP]), true)
+  assert.deepEqual(view.events.positions, [])
+})
+
+test('openingCompactBounds: the saved place when it is on screen, else the bottom right of the main display', () => {
+  const screen = {
+    getPrimaryDisplay: () => ({ workArea: LAPTOP }),
+    getAllDisplays: () => [{ workArea: LAPTOP }, { workArea: DESK }],
+  }
+  const onDesk = sanitizeSettings({ position: { x: 2400, y: 300 } })
+  assert.deepEqual(openingCompactBounds({ settings: onDesk, screen }), { bounds: compact(onDesk), healed: undefined })
+
+  const docked = { ...screen, getAllDisplays: () => [{ workArea: LAPTOP }] }
+  const { bounds, healed } = openingCompactBounds({ settings: onDesk, screen: docked })
+  assert.deepEqual(bounds, onScreenBase(compact(onDesk), { workAreas: [LAPTOP], primaryWorkArea: LAPTOP, margin: onDesk.prompterMargin }))
+  assert.deepEqual(healed, { x: bounds.x, y: bounds.y }, 'the new place, for Preferences')
+
+  const first = { ...DEFAULT_SETTINGS }
+  assert.deepEqual(openingCompactBounds({ settings: first, screen }).bounds, compactBaseBounds({ settings: first, workArea: LAPTOP, keepCenter: false }))
+})
+
+test('B1: wired like main, a Shape change saves the place the camera really lands on, so the Scene opens there again', () => {
+  const desk = { id: 'desk', name: 'Desk', settings: settingsForPreset({ shape: 'circle', size: 288, position: { x: 400, y: 500 } }) }
+  const start = sanitizeSettings({ ...desk.settings, presets: [desk] })
+  const window = fakeWindow(compactBaseBounds({ settings: start, workArea: WORK_AREA, keepCenter: false }))
+  const screen = {
+    getCursorScreenPoint: () => ({ x: 0, y: 0 }),
+    getPrimaryDisplay: () => ({ workArea: WORK_AREA }),
+    getAllDisplays: () => [{ bounds: DISPLAY, workArea: WORK_AREA }],
+    getDisplayMatching: () => ({ bounds: DISPLAY, workArea: WORK_AREA }),
+  }
+  let session
+  const geometry = createOverlayGeometry({
+    window,
+    screen,
+    settings: () => session?.settings() ?? start,
+    timers: fakeClock().timers,
+    onCompactPositionChanged: (position) => session.record({ position }),
+  })
+  geometry.setReducedMotion(true)
+  session = createSceneSession({
+    settings: start,
+    activeSceneId: 'desk',
+    geometry: {
+      sceneContext: () => ({ workArea: WORK_AREA, workAreaAt: () => WORK_AREA, workAreas: [WORK_AREA] }),
+      compactPlace: () => ({ bounds: geometry.compactBounds(), fullscreen: geometry.isFullscreen() }),
+      compactPlaceAfter: (next) => geometry.compactPlaceAfter(next),
+    },
+    onChange: (result) => {
+      if (result.appliedScene) geometry.showScene()
+    },
+  })
+
+  // The toolbar's Shape button, as main's updateSettings handles it.
+  session.handChange({ shape: 'landscape' })
+  geometry.apply({ keepCenter: false })
+
+  const landed = { x: window.bounds.x, y: window.bounds.y }
+  assert.notDeepEqual(landed, { x: 400, y: 500 }, 'the window kept its centre, so its top-left moved')
+  assert.deepEqual(session.settings().position, landed)
+  assert.deepEqual(session.settings().presets[0].settings.position, landed)
+
+  session.applyScene('desk')
+  assert.deepEqual({ x: window.bounds.x, y: window.bounds.y }, landed, 'the Scene opens where it was left')
 })

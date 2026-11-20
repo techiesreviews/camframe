@@ -1,4 +1,4 @@
-import { sanitizeSettings, settingsAfterHandResize } from './settings.js'
+import { sanitizeSettings, settingsAfterHandResize, settingsPatchChangesOverlayGeometry } from './settings.js'
 import * as sceneLibrary from './scenes.js'
 
 // The Scene session: the live Preferences, the Active Scene and the Scenes tab's Undo windows,
@@ -9,6 +9,8 @@ import * as sceneLibrary from './scenes.js'
 // - `geometry` is the Overlay's port: `sceneContext()` returns the displays a Scene is fitted to
 //   (`workArea`, `workAreaAt`, `workAreas`, see applyScene), and `compactPlace()` returns where the
 //   camera is now (`{ bounds, fullscreen }`, the Compact window bounds, either may be missing).
+//   The optional `compactPlaceAfter(next)` returns where the Compact window lands for the settings
+//   `next` (`{ x, y }`), or undefined when the window does not move now.
 // - `onChange(result, options)` hears every stored result and every notice or announcement, so the
 //   adapter can broadcast, save and move the window. `options.resizing` is true for a hand resize,
 //   which reports every frame; other options are the ones given to `commit`. The session never
@@ -41,10 +43,20 @@ export function createSceneSession({
   }
 
   // A hand change (Inline settings, the toolbar, a drag or resize) is saved into the Active Scene,
-  // which stays active (ADR 0037). An onboarding demo step is stored but never saved into it.
+  // which stays active (ADR 0037). An onboarding demo step is stored but never saved into it. A
+  // Shape or size change moves the window (it keeps its centre): the place the geometry says it
+  // lands on is stored with the change, so the Active Scene saves the real place (B1).
   function handChange(patch, { demo = false } = {}) {
-    const next = sanitizeSettings({ ...settings, ...patch })
-    commit(demo ? { settings: next, activeSceneId } : sceneLibrary.followLiveLook(state(), next, { keys: Object.keys(patch) }))
+    let next = sanitizeSettings({ ...settings, ...patch })
+    const keys = Object.keys(patch)
+    if (settingsPatchChangesOverlayGeometry(patch) && !Object.hasOwn(patch, 'position')) {
+      const position = geometry?.compactPlaceAfter?.(next)
+      if (position) {
+        next = sanitizeSettings({ ...next, position })
+        keys.push('position')
+      }
+    }
+    commit(demo ? { settings: next, activeSceneId } : sceneLibrary.followLiveLook(state(), next, { keys }))
   }
 
   return {
