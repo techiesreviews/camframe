@@ -66,9 +66,10 @@ export function createSceneSession({
   // - undefined: the live place is the Scene's own (it is shown at its saved place, it is a layout
   //   Scene, or there is none), so the Scene saves the place the window lands on;
   // - null: an exact Scene without a place keeps having none;
-  // - a place: the Scene is shown away from its saved place (its display is gone, or the window was
-  //   brought back on screen), so it keeps its own place, moved the way the window moves to keep
-  //   its centre, and still opens where it was saved once that display is back (ADR 0038).
+  // - a place: the Scene is shown away from its saved place (its display is gone, the window was
+  //   brought back on screen, or an onboarding demo moved it), so it keeps its own centre, measured
+  //   with its own saved Shape and size, and still opens where it was saved once that display is
+  //   back (ADR 0038).
   function activeScenePlaceAfter(next) {
     const active = settings.presets.find((scene) => scene.id === activeSceneId)
     if (!active || active.layout) return undefined
@@ -76,7 +77,7 @@ export function createSceneSession({
     if (!saved) return null
     const live = settings.position
     if (live && live.x === saved.x && live.y === saved.y) return undefined
-    const before = overlayDimensionsFor(settings)
+    const before = overlayDimensionsFor(active.settings)
     const after = overlayDimensionsFor(next)
     return {
       x: Math.round(saved.x + (before.width - after.width) / 2),
