@@ -36,8 +36,16 @@ concurrency:
 
 jobs:
   build-and-verify:
-    name: Build & verify camframe-rust (macos-arm64)
-    runs-on: macos-15
+    name: Build & verify camframe-rust (macos-${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
 
     steps:
@@ -120,14 +128,20 @@ jobs:
           # Check the packaged app's binary too, so the download is the one that was checked.
           ./verify-macos --exe "$app/Contents/MacOS/camframe-rust" --out verification-macos/packaged-app
           cp rust/README.md dist/README.txt
-          (cd dist && ditto -c -k --keepParent "CamFrame Rust.app" CamFrame-Rust-macOS-arm64-beta.zip)
+          (cd dist && ditto -c -k --keepParent "CamFrame Rust.app" "CamFrame-Rust-macOS-${{ matrix.arch }}-beta.zip")
+          mkdir -p dist/dmg
+          cp -R "$app" dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "CamFrame Rust beta" -srcfolder dist/dmg -ov -format UDZO "dist/CamFrame-Rust-macOS-${{ matrix.arch }}-beta.dmg"
+          hdiutil verify "dist/CamFrame-Rust-macOS-${{ matrix.arch }}-beta.dmg"
+          rm -rf dist/dmg
           rm -rf "$app"
           ls -l dist
 
       - name: Upload the macOS build
         uses: actions/upload-artifact@v7
         with:
-          name: camframe-rust-macos-arm64-beta
+          name: camframe-rust-macos-${{ matrix.arch }}-beta
           path: dist/
           if-no-files-found: error
 
@@ -135,6 +149,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: camframe-rust-verification-macos
+          name: camframe-rust-verification-macos-${{ matrix.arch }}
           path: verification-macos/
           if-no-files-found: warn
