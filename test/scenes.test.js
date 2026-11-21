@@ -15,6 +15,7 @@ import {
   saveScene,
   sceneExport,
   SCENE_DELETE_UNDO_MS,
+  SCENE_LIMIT_MESSAGE,
   SCENE_UNDO_MS,
   createSceneEdits,
   describeScene,
@@ -79,11 +80,32 @@ test('saving from Full screen keeps the stored compact position', () => {
   assert.deepEqual(result.settings.presets[0].settings.position, { x: 10, y: 20 })
 })
 
-test('saving beyond the Scene limit drops the oldest Scene', () => {
+test('saving a new Scene at the Scene limit is refused and never drops the oldest Scene', () => {
   const full = Array.from({ length: SCENE_LIMIT }, (_, index) => scene(`s${index}`, `Scene ${index}`))
-  const result = saveScene(library(full), { name: 'Newest', createId: () => 'newest' })
+  const state = library(full, { size: 320 }, 's2')
+  const before = structuredClone(state)
+  const result = saveScene(state, {
+    name: 'Newest',
+    createId: () => assert.fail('a refused save makes no id'),
+  })
 
-  assert.deepEqual(ids(result), ['s1', 's2', 's3', 's4', 's5', 'newest'])
+  assert.deepEqual(result, { error: 'scene-limit', announce: SCENE_LIMIT_MESSAGE })
+  assert.match(SCENE_LIMIT_MESSAGE, new RegExp(`${SCENE_LIMIT} Scenes`))
+  assert.ok(SCENE_LIMIT_MESSAGE.length <= 80, 'the screen reader announcement is cut at 80 characters')
+  assert.deepEqual(state, before, 'the six Scenes, their order and the Active Scene stay as they were')
+})
+
+test('at the Scene limit, saving over an existing name or id still works and keeps all Scenes', () => {
+  const full = Array.from({ length: SCENE_LIMIT }, (_, index) => scene(`s${index}`, `Scene ${index}`))
+  const state = library(full, { size: 400 })
+
+  const byName = saveScene(state, { name: 'scene 0', createId: () => 'unused' })
+  assert.deepEqual(ids(byName), ['s0', 's1', 's2', 's3', 's4', 's5'])
+  assert.equal(byName.settings.presets[0].settings.size, 400)
+
+  const byId = saveScene(state, { name: 'Renamed', id: 's5', createId: () => 'unused' })
+  assert.deepEqual(ids(byId), ['s0', 's1', 's2', 's3', 's4', 's5'])
+  assert.equal(byId.settings.presets[5].name, 'Renamed')
 })
 
 test('saving a matching name or the selected id updates that Scene in place', () => {
