@@ -716,7 +716,7 @@ test('the status body formats the Scene library answers unchanged', () => {
       { id: 'loose', name: 'Loose', settings: settingsForPreset({ size: 288 }) },
     ],
   })
-  assert.deepEqual(linkStatusBody(settings, '0.6.0', { activeSceneId: 'desk', view: 'compact' }), {
+  assert.deepEqual(linkStatusBody(settings, '0.6.0', { activeSceneId: 'desk' }), {
     app: 'camframe',
     version: '0.6.0',
     scenes: ['Corner', 'Side', 'Point', 'Desk', 'Free', 'Loose'],
@@ -725,7 +725,7 @@ test('the status body formats the Scene library answers unchanged', () => {
     smallSize: 300,
     margin: 32,
     activeScene: 'Desk',
-    view: 'compact',
+    view: null,
     look: lookOf({ shape: 'rounded', frameEffect: 'glow', signature: '2e46c25ac5112bbb' }),
     sceneDetails: [
       {
