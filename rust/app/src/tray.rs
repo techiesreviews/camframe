@@ -111,8 +111,8 @@ mod imp {
         }
 
         pub fn set_scenes(&self, scenes: &[camframe_core::settings::Scene], active: &str) {
-            for item in self.scenes_menu.items() {
-                let _ = self.scenes_menu.remove(item.as_ref());
+            for _ in self.scenes_menu.items() {
+                let _ = self.scenes_menu.remove_at(0);
             }
             let mut actions = crate::camera::lock_unpoisoned(&self.scene_actions);
             actions.clear();

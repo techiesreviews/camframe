@@ -32,6 +32,8 @@ use crate::prefs::Prefs;
 use crate::tray::{Tray, TrayCommand};
 #[path = "presentation.rs"]
 mod presentation;
+#[path = "prompter_control.rs"]
+mod prompter_control;
 #[path = "scenes_panel.rs"]
 mod scenes_panel;
 #[path = "settings_panel.rs"]
@@ -192,6 +194,10 @@ pub struct BubbleOverlay {
     scene_drag: Option<String>,
     scene_focus: [FocusHandle; 6],
     camera_notice: String,
+    link: Option<crate::prompter::Link>,
+    link_commands: async_channel::Sender<crate::prompter::Command>,
+    link_generation: u64,
+    link_message: String,
 }
 
 impl BubbleOverlay {
@@ -275,6 +281,34 @@ impl BubbleOverlay {
             }
         })
         .detach();
+        let (link_commands, link_rx) = async_channel::bounded::<crate::prompter::Command>(8);
+        cx.spawn_in(window, async move |entity, cx| {
+            while let Ok(command) = link_rx.recv().await {
+                if entity
+                    .update_in(cx, |this, window, cx| {
+                        if command.generation != this.link_generation
+                            || command.cancelled.load(std::sync::atomic::Ordering::Relaxed)
+                        {
+                            return;
+                        }
+                        let result = this.run_link_command(&command.kind, &command.body, window, cx);
+                        let _ = command.reply.send(result);
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
+        let (link, link_message) = if settings.prompter_link {
+            match crate::prompter::Link::start(link_commands.clone(), 0) {
+                Ok(link) => (Some(link), String::new()),
+                Err(message) => (None, message),
+            }
+        } else {
+            (None, String::new())
+        };
 
         cx.on_app_quit(|this: &mut Self, _cx| {
             this.save_now();
@@ -319,6 +353,10 @@ impl BubbleOverlay {
             scene_drag: None,
             scene_focus: std::array::from_fn(|_| cx.focus_handle()),
             camera_notice: String::new(),
+            link,
+            link_commands,
+            link_generation: 0,
+            link_message,
         }
     }
 
@@ -653,6 +691,26 @@ impl BubbleOverlay {
                 this.settings_tab = None;
                 cx.notify();
             })))
+            .child(
+                toolbar_button("prompter-button", "icons/scroll.svg")
+                    .aria_label(if self.link.is_some() {
+                        "Prompter link: on"
+                    } else if self.link_message.is_empty() {
+                        "Prompter link: off"
+                    } else {
+                        self.link_message.as_str()
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| this.toggle_link(cx)))
+                    .child(div().absolute().right(px(4.0)).bottom(px(4.0)).size(px(5.0)).rounded_full().bg(rgb(
+                        if self.link.is_some() {
+                            0x22c55e
+                        } else if self.link_message.is_empty() {
+                            0x71717a
+                        } else {
+                            0xfb923c
+                        },
+                    ))),
+            )
             .child(
                 toolbar_button("controls-button", "icons/sliders-horizontal.svg")
                     .on_click(cx.listener(|this, _, window, cx| this.toggle_settings(window, cx))),

@@ -6,6 +6,7 @@ pub mod framing;
 pub mod geometry;
 pub mod interaction;
 pub mod js;
+pub mod prompter;
 pub mod scenes;
 pub mod settings;
 pub mod store;

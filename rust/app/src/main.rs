@@ -5,6 +5,7 @@ mod camera;
 mod mac_overlay;
 mod overlay;
 mod prefs;
+mod prompter;
 mod shortcuts;
 mod text_field;
 mod tray;
