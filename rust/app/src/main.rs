@@ -5,6 +5,7 @@ mod camera;
 mod mac_overlay;
 mod overlay;
 mod prefs;
+mod text_field;
 mod tray;
 #[cfg(not(target_os = "macos"))]
 mod win32_overlay;

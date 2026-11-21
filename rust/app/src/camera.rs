@@ -6,10 +6,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use camframe_core::framing::visible_source_rect;
-use camframe_core::settings::CameraPosition;
+use camframe_core::settings::{CameraPosition, Resolution};
 
 use nokhwa::Camera;
 use nokhwa::utils::{ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType};
@@ -19,8 +19,6 @@ use zune_jpeg::zune_core::colorspace::ColorSpace;
 use zune_jpeg::zune_core::options::DecoderOptions;
 
 /// Target capture resolution matching CamFrame 0.9.0 default (`720p`).
-const TARGET_WIDTH: u32 = 1280;
-const TARGET_HEIGHT: u32 = 720;
 const MIN_FRAME_RATE: u32 = 30;
 const SMOOTH_FRAME_RATE: u32 = 50;
 const MAX_CONSECUTIVE_FAILURES: u32 = 30;
@@ -86,6 +84,26 @@ pub struct CameraSlot {
     pub frame: Mutex<Option<BgraFrame>>,
     pub status: Mutex<Option<CameraStatus>>,
     pub view: Mutex<Option<OutputView>>,
+    pub request: Mutex<CaptureRequest>,
+    pub devices: Mutex<Vec<Device>>,
+    pub effect: Mutex<Option<(camframe_core::settings::Shape, u32, u32, u32)>>,
+    pub halo: Mutex<Option<BgraFrame>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct CaptureRequest {
+    pub device: String,
+    pub resolution: Resolution,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Device {
+    pub id: String,
+    pub label: String,
+}
+
+fn camera_label(name: &str, index: usize) -> String {
+    if name.trim().is_empty() { format!("Camera {}", index + 1) } else { name.trim().into() }
 }
 
 pub fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -138,6 +156,9 @@ fn publish_status(slot: &CameraSlot, wake: &async_channel::Sender<()>, status: C
 }
 
 fn publish_frame(slot: &CameraSlot, wake: &async_channel::Sender<()>, frame: BgraFrame) {
+    if let Some((shape, size, amount, opacity)) = *lock_unpoisoned(&slot.effect) {
+        *lock_unpoisoned(&slot.halo) = Some(blur_halo(&frame, shape, size, amount, opacity));
+    }
     *lock_unpoisoned(&slot.frame) = Some(frame);
     let _ = wake.try_send(());
 }
@@ -182,29 +203,102 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
         return camera_unavailable(slot, wake, msg);
     }
 
-    let cameras = match nokhwa::query(ApiBackend::Auto) {
-        Ok(list) if !list.is_empty() => list,
-        Ok(_) => return camera_unavailable(slot, wake, NO_CAMERA_MESSAGE),
-        Err(err) => return camera_unavailable(slot, wake, classify_error(&err.to_string())),
-    };
-
-    let info = &cameras[0];
-    let index = info.index().clone();
-
-    let mut camera = match open_preferred_camera(index) {
-        Ok(cam) => cam,
-        Err(msg) => return camera_unavailable(slot, wake, msg),
-    };
-
-    if let Err(err) = camera.open_stream() {
-        return camera_unavailable(slot, wake, classify_error(&err.to_string()));
-    }
-
-    publish_status(slot, wake, CameraStatus::Live);
-
+    let mut camera: Option<Camera> = None;
+    let mut applied: Option<CaptureRequest> = None;
+    let mut pending = lock_unpoisoned(&slot.request).clone();
+    let mut changed_at = Instant::now() - Duration::from_secs(1);
+    let mut scan_at = Instant::now();
+    let mut devices = Vec::new();
     let mut failures = FailureCount::default();
     while !stop.load(Ordering::Relaxed) {
-        let failure = match camera.frame() {
+        let wanted = lock_unpoisoned(&slot.request).clone();
+        if wanted != pending {
+            pending = wanted;
+            changed_at = Instant::now();
+        }
+        if Instant::now() >= scan_at {
+            if let Ok(list) = nokhwa::query(ApiBackend::Auto) {
+                devices = list;
+                let next = devices
+                    .iter()
+                    .enumerate()
+                    .map(|(i, info)| Device {
+                        id: info.index().as_string(),
+                        label: camera_label(&info.human_name(), i),
+                    })
+                    .collect();
+                *lock_unpoisoned(&slot.devices) = next;
+                let _ = wake.try_send(());
+                if let Some(current) = &camera
+                    && !devices.iter().any(|info| info.index() == current.index())
+                {
+                    if let Some(mut disconnected) = camera.take() {
+                        let _ = disconnected.stop_stream();
+                    }
+                    applied = None;
+                }
+            }
+            scan_at = Instant::now() + Duration::from_secs(2);
+        }
+        if changed_at.elapsed() >= Duration::from_millis(200) && applied.as_ref() != Some(&pending) {
+            if let Some(current) = camera.as_mut()
+                && applied.as_ref().is_some_and(|old| old.device == pending.device)
+            {
+                // Keep the same device and restore its working mode if the driver refuses a switch.
+                let old = current.camera_format();
+                if let Ok(formats) = current.compatible_camera_formats()
+                    && let Some(best) = pick_best_format(&formats, pending.resolution)
+                    && let Err(error) = current.set_camera_requset(RequestedFormat::with_formats(
+                        RequestedFormatType::Exact(best),
+                        &DECODABLE_FORMATS,
+                    ))
+                {
+                    let _ = current.set_camera_requset(RequestedFormat::with_formats(
+                        RequestedFormatType::Exact(old),
+                        &DECODABLE_FORMATS,
+                    ));
+                    let _ = current.open_stream();
+                    publish_status(
+                        slot,
+                        wake,
+                        CameraStatus::Unavailable(format!(
+                            "{} The previous quality is kept.",
+                            classify_error(&error.to_string())
+                        )),
+                    );
+                }
+                applied = Some(pending.clone());
+            } else {
+                if let Some(mut previous) = camera.take() {
+                    let _ = previous.stop_stream();
+                }
+                let info = devices.iter().find(|info| info.index().as_string() == pending.device).or(devices.first());
+                if let Some(info) = info {
+                    match open_preferred_camera(info.index().clone(), pending.resolution).and_then(|mut next| {
+                        next.open_stream().map_err(|error| classify_error(&error.to_string()))?;
+                        Ok(next)
+                    }) {
+                        Ok(next) => {
+                            camera = Some(next);
+                            applied = Some(pending.clone());
+                            failures.reset();
+                            publish_status(slot, wake, CameraStatus::Live);
+                        }
+                        Err(message) => camera_unavailable(slot, wake, message),
+                    }
+                } else {
+                    camera_unavailable(slot, wake, NO_CAMERA_MESSAGE);
+                }
+                if camera.is_none() {
+                    changed_at = Instant::now() + Duration::from_secs(1);
+                }
+            }
+        }
+        let Some(current) = camera.as_mut() else {
+            std::thread::sleep(Duration::from_millis(100));
+            continue;
+        };
+        let failure = match current.frame() {
             Ok(buffer) => {
                 let res = buffer.resolution();
                 let format = buffer.source_frame_format();
@@ -222,12 +316,18 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
         };
         if failures.add() {
             camera_unavailable(slot, wake, failure);
-            break;
+            if let Some(mut failed) = camera.take() {
+                let _ = failed.stop_stream();
+            }
+            applied = None;
+            changed_at = Instant::now() + Duration::from_secs(1);
         }
         std::thread::sleep(Duration::from_millis(16));
     }
 
-    let _ = camera.stop_stream();
+    if let Some(mut camera) = camera {
+        let _ = camera.stop_stream();
+    }
 }
 
 /// Asks macOS for camera access (the system prompt shows once per app) and waits for the answer.
@@ -254,13 +354,13 @@ fn wait_for_camera_permission(stop: &AtomicBool) -> Result<(), String> {
     Err("Camera permission prompt closed".into())
 }
 
-fn open_preferred_camera(index: CameraIndex) -> Result<Camera, String> {
+fn open_preferred_camera(index: CameraIndex, resolution: Resolution) -> Result<Camera, String> {
     let initial_request =
         RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
     let mut camera = Camera::new(index, initial_request).map_err(|err| classify_error(&err.to_string()))?;
 
     if let Ok(formats) = camera.compatible_camera_formats()
-        && let Some(best) = pick_best_format(&formats)
+        && let Some(best) = pick_best_format(&formats, resolution)
     {
         let exact = RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(RequestedFormatType::Exact(best));
         let _ = camera.set_camera_requset(exact);
@@ -269,7 +369,8 @@ fn open_preferred_camera(index: CameraIndex) -> Result<Camera, String> {
     Ok(camera)
 }
 
-fn pick_best_format(formats: &[CameraFormat]) -> Option<CameraFormat> {
+fn pick_best_format(formats: &[CameraFormat], resolution: Resolution) -> Option<CameraFormat> {
+    let (target_width, target_height) = resolution.size();
     let tier = |f: &CameraFormat| -> u8 {
         let fps = f.frame_rate();
         if fps >= SMOOTH_FRAME_RATE {
@@ -280,13 +381,21 @@ fn pick_best_format(formats: &[CameraFormat]) -> Option<CameraFormat> {
             2
         }
     };
-    let distance = |f: &CameraFormat| f.width().abs_diff(TARGET_WIDTH) + f.height().abs_diff(TARGET_HEIGHT);
+    let distance = |f: &CameraFormat| f.width().abs_diff(target_width) + f.height().abs_diff(target_height);
     let decode_cost = |f: &CameraFormat| u8::from(f.format() == FrameFormat::MJPEG);
 
     formats
         .iter()
         .filter(|f| DECODABLE_FORMATS.contains(&f.format()))
-        .min_by_key(|f| (tier(f), distance(f), std::cmp::Reverse(f.frame_rate()), decode_cost(f)))
+        .min_by_key(|f| {
+            (
+                u8::from(f.width() < target_width || f.height() < target_height),
+                tier(f),
+                distance(f),
+                std::cmp::Reverse(f.frame_rate()),
+                decode_cost(f),
+            )
+        })
         .copied()
 }
 
@@ -435,6 +544,52 @@ pub fn cover_resample(source: &BgraFrame, view: OutputView) -> BgraFrame {
     BgraFrame { width: dst_w, height: dst_h, bytes: out }
 }
 
+/// A small, premultiplied blur of the shaped live frame. The camera covers its centre, leaving
+/// only the soft outer halo visible. Work is bounded to a quarter of the logical surface size.
+fn blur_halo(
+    source: &BgraFrame,
+    shape: camframe_core::settings::Shape,
+    size: u32,
+    amount: u32,
+    opacity: u32,
+) -> BgraFrame {
+    let (width, height) = camframe_core::settings::dimensions_for(shape, size);
+    let scale = 0.25;
+    let pad = 5u32;
+    let (w, h) = ((width as f32 * scale).ceil() as u32, (height as f32 * scale).ceil() as u32);
+    let view = OutputView { width: w, height: h, mirror: false, ..OutputView::default() };
+    let small = cover_resample(source, view);
+    let mut padded = image::RgbaImage::new(w + pad * 2, h + pad * 2);
+    for y in 0..h {
+        for x in 0..w {
+            if camframe_core::geometry::is_inside_camera(shape, size, (f64::from(x) * 4.0, f64::from(y) * 4.0)) {
+                let offset = ((y * w + x) * 4) as usize;
+                let alpha = opacity as f32 / 100.0;
+                padded.put_pixel(
+                    x + pad,
+                    y + pad,
+                    image::Rgba([
+                        (f32::from(small.bytes[offset]) * alpha) as u8,
+                        (f32::from(small.bytes[offset + 1]) * alpha) as u8,
+                        (f32::from(small.bytes[offset + 2]) * alpha) as u8,
+                        (255.0 * alpha) as u8,
+                    ]),
+                );
+            }
+        }
+    }
+    let mut blurred = image::imageops::blur(&padded, amount as f32 * scale);
+    // GPUI uploads straight BGRA and premultiplies when painting.
+    for pixel in blurred.pixels_mut() {
+        if pixel[3] > 0 {
+            for c in 0..3 {
+                pixel[c] = (u32::from(pixel[c]) * 255 / u32::from(pixel[3])).min(255) as u8;
+            }
+        }
+    }
+    BgraFrame { width: blurred.width(), height: blurred.height(), bytes: blurred.into_raw() }
+}
+
 /// Deterministic animated BGRA test pattern (deep ocean-blue / cyan / warm amber; never magenta).
 pub fn generate_demo_pattern(width: u32, height: u32, tick: u32) -> BgraFrame {
     let mut bytes = vec![0u8; width as usize * height as usize * 4];
@@ -474,6 +629,32 @@ pub fn generate_demo_pattern(width: u32, height: u32, tick: u32) -> BgraFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blur_halo_has_transparent_corners_and_a_bounded_working_size() {
+        let source = generate_demo_pattern(288, 288, 0);
+        let halo = blur_halo(&source, camframe_core::settings::Shape::Circle, 288, 12, 72);
+        assert!(halo.width <= 180 && halo.height <= 180);
+        assert_eq!(halo.bytes[3], 0);
+        assert!(halo.bytes.as_chunks::<4>().0.iter().any(|pixel| pixel[3] > 0));
+    }
+
+    #[test]
+    fn quality_selection_uses_the_requested_resolution() {
+        let formats = [
+            CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 60),
+            CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60),
+            CameraFormat::new_from(3840, 2160, FrameFormat::MJPEG, 30),
+        ];
+        assert_eq!(pick_best_format(&formats, Resolution::R1080), Some(formats[1]));
+        assert_eq!(pick_best_format(&formats, Resolution::R2160), Some(formats[2]));
+    }
+
+    #[test]
+    fn camera_names_have_a_number_when_the_driver_provides_none() {
+        assert_eq!(camera_label("", 1), "Camera 2");
+        assert_eq!(camera_label("  Elgato  ", 0), "Elgato");
+    }
 
     #[test]
     fn camera_errors_use_the_same_words_as_camframe_090() {

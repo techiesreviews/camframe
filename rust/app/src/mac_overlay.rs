@@ -168,3 +168,12 @@ pub fn set_visible(window: &Window, visible: bool) {
         }
     }
 }
+
+pub fn set_always_on_top(window: &Window, on_top: bool) {
+    let Some(ns_window) = ns_window_of(window) else { return };
+    let level: isize = if on_top { NS_POP_UP_WINDOW_LEVEL } else { 0 };
+    // SAFETY: documented NSWindow setter on the main thread.
+    unsafe {
+        let _: () = msg_send![ns_window, setLevel: level];
+    }
+}

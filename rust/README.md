@@ -26,9 +26,18 @@ feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
   `--demo-pattern`.
 - The tray (menu bar on macOS): **Show camera** and **Quit CamFrame**.
 
-Not yet: the camera and Camera quality chosen in Preferences (the app always opens the first
-camera at up to 1280×720), and everything else in 0.9.0's settings panel, shortcuts, Full screen,
-Scenes, the Prompter link and the first-run tips. They come in the next parts of TOOLS-393.
+Part 2 adds inline Camera and Style controls: camera selection with a default fallback and device
+rescans, 480p through 2160p quality requests, Mirror, Always on top, the frame width, Glow with
+custom hex colour and presets, and Progressive blur. Changes to quality settle for 200 ms before
+the capture thread applies them; a refused format restores the previous format. The crosshair
+button switches to framing: drag to pan, scroll to zoom, double-click to reset, Escape to leave.
+The camera thread keeps only the newest frame. Blur works on a small shaped copy of that frame.
+The sliders also take arrow, Home and End keys. The custom colour field takes native text input,
+including IME composition, and applies on Enter.
+
+Not yet: shortcuts, Full screen, Scenes, the Prompter link and first-run tips. They come in the
+next parts of TOOLS-393. Real camera quality, hot-plug recovery and effect appearance still need
+Windows and Mac hardware checks; the Linux tests exercise the portable rules and drawing inputs.
 
 ## Layout
 

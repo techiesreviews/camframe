@@ -156,7 +156,7 @@ fn hwnd_of(window: &Window) -> Option<windows::Win32::Foundation::HWND> {
 /// Moves and sizes the window in one step. `bounds` are logical pixels, like GPUI's.
 #[cfg(target_os = "windows")]
 pub fn set_bounds(window: &Window, bounds: camframe_core::geometry::Rect) {
-    use windows::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SWP_NOACTIVATE, SetWindowPos};
+    use windows::Win32::UI::WindowsAndMessaging::{SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos};
     let Some(hwnd) = hwnd_of(window) else { return };
     let scale = f64::from(window.scale_factor());
     let physical = |value: i64| (value as f64 * scale).round() as i32;
@@ -164,12 +164,12 @@ pub fn set_bounds(window: &Window, bounds: camframe_core::geometry::Rect) {
     unsafe {
         let _ = SetWindowPos(
             hwnd,
-            Some(HWND_TOPMOST),
+            None,
             physical(bounds.x),
             physical(bounds.y),
             physical(bounds.width),
             physical(bounds.height),
-            SWP_NOACTIVATE,
+            SWP_NOACTIVATE | SWP_NOZORDER,
         );
     }
 }
@@ -225,6 +225,29 @@ pub fn primary_button_down() -> bool {
         (GetAsyncKeyState(i32::from(key.0)) as u16) & 0x8000 != 0
     }
 }
+
+#[cfg(target_os = "windows")]
+pub fn set_always_on_top(window: &Window, on_top: bool) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+    };
+    let Some(hwnd) = hwnd_of(window) else { return };
+    // SAFETY: changes only the z-order of GPUI's live window on the UI thread.
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            Some(if on_top { HWND_TOPMOST } else { HWND_NOTOPMOST }),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn set_always_on_top(_window: &Window, _on_top: bool) {}
 
 #[cfg(target_os = "windows")]
 pub fn set_visible(window: &Window, visible: bool) {

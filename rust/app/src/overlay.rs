@@ -30,8 +30,11 @@ use crate::camera::{CameraSlot, CameraStatus, CameraWorker, OutputView, lock_unp
 use crate::mac_overlay as platform;
 use crate::prefs::Prefs;
 use crate::tray::{Tray, TrayCommand};
+#[path = "settings_panel.rs"]
+mod settings_panel;
 #[cfg(not(target_os = "macos"))]
 use crate::win32_overlay as platform;
+use settings_panel::SettingsTab;
 
 /// How often the pointer is read while idle, and while a corner is being dragged.
 const POINTER_POLL: Duration = Duration::from_millis(33);
@@ -162,11 +165,18 @@ pub struct BubbleOverlay {
     slot: Arc<CameraSlot>,
     _worker: CameraWorker,
     frame: Option<Arc<RenderImage>>,
+    halo: Option<Arc<RenderImage>>,
     status: CameraStatus,
     tray: Option<Tray>,
     launch_instant: Instant,
     metrics_file: Option<PathBuf>,
     startup_recorded: bool,
+    settings_tab: Option<SettingsTab>,
+    framing: bool,
+    framing_drag: Option<((f64, f64), camframe_core::settings::CameraPosition)>,
+    color_input: gpui::Entity<crate::text_field::TextField>,
+    color_error: bool,
+    slider_drag: Option<(&'static str, u32, u32)>,
 }
 
 impl BubbleOverlay {
@@ -179,11 +189,27 @@ impl BubbleOverlay {
     ) -> Self {
         let focus = cx.focus_handle();
         focus.focus(window, cx);
+        let color_input =
+            cx.new(|cx| crate::text_field::TextField::new(settings.effect_color.clone(), "Effect color", cx));
+        cx.subscribe_in(&color_input, window, |this, _, event: &crate::text_field::Submitted, window, cx| {
+            this.color_error = hex_color(&event.0).is_none();
+            if !this.color_error {
+                this.patch_settings(serde_json::json!({"effectColor":event.0}), window, cx);
+            }
+            cx.notify();
+        })
+        .detach();
 
         let slot = Arc::new(CameraSlot::default());
+        *lock_unpoisoned(&slot.request) = crate::camera::CaptureRequest {
+            device: settings.camera_id.clone(),
+            resolution: settings.overlay_resolution,
+        };
         let (wake_tx, wake_rx) = async_channel::bounded::<()>(1);
         let initial_view = output_view(&settings, settings.size, window.scale_factor());
         let worker = CameraWorker::start(config.demo_pattern, initial_view, Arc::clone(&slot), wake_tx);
+        *lock_unpoisoned(&slot.effect) = (settings.frame_effect == camframe_core::settings::FrameEffect::Blur)
+            .then_some((settings.shape, settings.size, settings.blur_amount, settings.blur_opacity));
 
         cx.spawn_in(window, async move |entity, cx| {
             while wake_rx.recv().await.is_ok() {
@@ -245,11 +271,18 @@ impl BubbleOverlay {
             slot,
             _worker: worker,
             frame: None,
+            halo: None,
             status: CameraStatus::Starting,
             tray,
             launch_instant: config.launch_instant,
             metrics_file: config.metrics_file,
             startup_recorded: false,
+            settings_tab: None,
+            framing: false,
+            framing_drag: None,
+            color_input,
+            color_error: false,
+            slider_drag: None,
         }
     }
 
@@ -271,6 +304,14 @@ impl BubbleOverlay {
         if let Some(status) = lock_unpoisoned(&self.slot.status).take() {
             self.status = status;
         }
+        if let Some(bgra) = lock_unpoisoned(&self.slot.halo).take()
+            && let Some(buffer) = image::RgbaImage::from_raw(bgra.width, bgra.height, bgra.bytes)
+        {
+            let next = Arc::new(RenderImage::new(SmallVec::from_elem(image::Frame::new(buffer), 1)));
+            if let Some(previous) = self.halo.replace(next) {
+                let _ = window.drop_image(previous);
+            }
+        }
         if let Some(bgra) = lock_unpoisoned(&self.slot.frame).take()
             && let Some(buffer) = image::RgbaImage::from_raw(bgra.width, bgra.height, bgra.bytes)
         {
@@ -285,6 +326,13 @@ impl BubbleOverlay {
 
     fn sync_capture_view(&self, window: &Window) {
         *lock_unpoisoned(&self.slot.view) = Some(output_view(&self.settings, self.size(), window.scale_factor()));
+        *lock_unpoisoned(&self.slot.request) = crate::camera::CaptureRequest {
+            device: self.settings.camera_id.clone(),
+            resolution: self.settings.overlay_resolution,
+        };
+        *lock_unpoisoned(&self.slot.effect) = (self.settings.frame_effect
+            == camframe_core::settings::FrameEffect::Blur)
+            .then_some((self.settings.shape, self.size(), self.settings.blur_amount, self.settings.blur_opacity));
     }
 
     /// Reads the pointer, moves a corner drag on, shows or hides the chrome, switches the click mode,
@@ -332,7 +380,7 @@ impl BubbleOverlay {
         let was_hovered = self.interaction.hovered();
         let target = target_at(self.settings.shape, self.size(), local, was_hovered);
         self.interaction.pointer(target != Target::Nothing, now);
-        let through = !self.interaction.interactive(target);
+        let through = self.settings_tab.is_none() && !self.framing && !self.interaction.interactive(target);
         if self.click_through != Some(through) {
             platform::set_click_through(window, through);
             self.click_through = Some(through);
@@ -465,9 +513,18 @@ impl BubbleOverlay {
                 let next = this.settings.shape.next();
                 this.set_shape(next, window, cx);
             })))
+            .child(toolbar_button("position-button", "icons/crosshair.svg").on_click(cx.listener(|this, _, _, cx| {
+                this.framing = !this.framing;
+                this.settings_tab = None;
+                cx.notify();
+            })))
+            .child(
+                toolbar_button("controls-button", "icons/sliders-horizontal.svg")
+                    .on_click(cx.listener(|this, _, window, cx| this.toggle_settings(window, cx))),
+            )
     }
 
-    fn render_camera(&self, camera_width: f32, camera_height: f32) -> impl IntoElement {
+    fn render_camera(&self, camera_width: f32, camera_height: f32, cx: &mut Context<Self>) -> impl IntoElement {
         let radius = geometry::corner_radius(self.settings.shape, self.size()) as f32;
         let status_label: Option<SharedString> = match &self.status {
             CameraStatus::Starting if self.frame.is_none() => Some("Starting camera.".into()),
@@ -486,15 +543,67 @@ impl BubbleOverlay {
             .overflow_hidden()
             .bg(rgb(0x18181b))
             .cursor_grab()
-            .window_control_area(WindowControlArea::Drag);
+            .when(!self.framing && self.settings_tab.is_none(), |camera| {
+                camera.window_control_area(WindowControlArea::Drag)
+            })
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    if !this.framing {
+                        return;
+                    }
+                    cx.stop_propagation();
+                    if event.click_count == 2 {
+                        let (position, zoom) = camframe_core::framing::centered_framing();
+                        this.patch_settings(
+                            serde_json::json!({"cameraPosition":position,"cameraZoom":zoom}),
+                            window,
+                            cx,
+                        );
+                    } else {
+                        this.framing_drag = Some((
+                            (f64::from(event.position.x), f64::from(event.position.y)),
+                            this.settings.camera_position,
+                        ));
+                    }
+                }),
+            )
+            .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
+                if !this.framing || !event.dragging() {
+                    this.framing_drag = None;
+                    return;
+                }
+                let Some((start, position)) = this.framing_drag else { return };
+                let (width, height) = dimensions_for(this.settings.shape, this.size());
+                let next = camframe_core::framing::camera_position_after_drag(
+                    position,
+                    (f64::from(event.position.x) - start.0, f64::from(event.position.y) - start.1),
+                    (f64::from(width), f64::from(height)),
+                    this.settings.mirror,
+                    this.settings.camera_zoom,
+                );
+                this.patch_settings(serde_json::json!({"cameraPosition":next}), window, cx);
+            }))
+            .on_scroll(cx.listener(|this, event: &gpui::ScrollEvent, window, cx| {
+                if this.framing {
+                    cx.stop_propagation();
+                    let zoom = camframe_core::framing::camera_zoom_after_wheel(
+                        this.settings.camera_zoom,
+                        -f64::from(event.delta.pixel_delta(px(20.0)).y),
+                    );
+                    this.patch_settings(serde_json::json!({"cameraZoom":zoom}), window, cx);
+                }
+            }));
 
         // `gpui_macos` ignores `WindowControlArea::Drag`, so on macOS the bubble starts the native
         // window drag itself.
         #[cfg(target_os = "macos")]
         {
-            camera = camera.on_mouse_down(MouseButton::Left, |_event, window, _cx| {
-                window.start_window_move();
-            });
+            if !self.framing && self.settings_tab.is_none() {
+                camera = camera.on_mouse_down(MouseButton::Left, |_event, window, _cx| {
+                    window.start_window_move();
+                });
+            }
         }
 
         if let Some(frame) = self.frame.clone() {
@@ -518,6 +627,16 @@ impl BubbleOverlay {
                     .border(px(self.settings.border_width as f32))
                     .border_color(rgb(hex_color(&self.settings.border_color).unwrap_or(0xffffff))),
             );
+        }
+        if self.settings.frame_effect == camframe_core::settings::FrameEffect::Glow {
+            let color = hex_color(&self.settings.effect_color).unwrap_or(0xfb923c);
+            let opacity = self.settings.glow_strength as f32 / 100.0;
+            camera = camera.shadow(vec![
+                gpui::BoxShadow::new(px(0.0), px(0.0), gpui::rgba((color << 8) | (opacity * 224.0) as u32).into())
+                    .blur_radius(px(self.settings.glow_spread as f32 * 0.4)),
+                gpui::BoxShadow::new(px(0.0), px(0.0), gpui::rgba((color << 8) | (opacity * 148.0) as u32).into())
+                    .blur_radius(px(self.settings.glow_spread as f32)),
+            ]);
         }
         camera
     }
@@ -578,14 +697,15 @@ impl Render for BubbleOverlay {
         let (camera_width, camera_height) = dimensions_for(shape, self.size());
         let (window_width, window_height) = overlay_dimensions_for(shape, self.size());
         let (camera_width, camera_height) = (camera_width as f32, camera_height as f32);
-        let show_chrome = self.interaction.hovered() || self.resize.is_some();
+        let show_chrome =
+            self.interaction.hovered() || self.resize.is_some() || self.settings_tab.is_some() || self.framing;
 
         div()
             .id("overlay-root")
             .track_focus(&self.focus)
             .relative()
             .w(px(window_width as f32))
-            .h(px(window_height as f32))
+            .h(px(if self.settings_tab.is_some() { window_height.max(390) } else { window_height } as f32))
             .bg(transparent_black())
             .when(cfg!(target_os = "linux"), |root| {
                 root.on_hover(cx.listener(|this, &hovered: &bool, _window, cx| {
@@ -598,9 +718,40 @@ impl Render for BubbleOverlay {
             .on_action(cx.listener(|this, _: &ShapeRounded, window, cx| this.set_shape(Shape::Rounded, window, cx)))
             .on_action(cx.listener(|this, _: &ShapePortrait, window, cx| this.set_shape(Shape::Portrait, window, cx)))
             .on_action(cx.listener(|this, _: &ShapeLandscape, window, cx| this.set_shape(Shape::Landscape, window, cx)))
-            .child(self.render_camera(camera_width, camera_height))
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" {
+                    if this.settings_tab.is_some() {
+                        this.toggle_settings(window, cx);
+                    }
+                    this.framing = false;
+                    cx.notify();
+                }
+            }))
+            .when(self.settings.frame_effect == camframe_core::settings::FrameEffect::Blur, |root| {
+                root.children(self.halo.clone().map(|halo| {
+                    img(halo)
+                        .absolute()
+                        .left(px(-2.0))
+                        .top(px(64.0))
+                        .w(px(camera_width + 40.0))
+                        .h(px(camera_height + 40.0))
+                }))
+            })
+            .child(self.render_camera(camera_width, camera_height, cx))
             .when(show_chrome, |root| {
                 root.child(self.render_toolbar(cx)).children(self.render_handles(camera_width, camera_height, cx))
+            })
+            .when(self.settings_tab.is_some(), |root| root.child(self.render_settings(cx)))
+            .when(self.framing, |root| {
+                root.child(
+                    div()
+                        .absolute()
+                        .top(px(68.0))
+                        .left(px(18.0))
+                        .text_xs()
+                        .text_color(rgb(0xffffff))
+                        .child(format!("Zoom {}% · Drag · Scroll · Double-click resets", self.settings.camera_zoom)),
+                )
             })
     }
 }
