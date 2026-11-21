@@ -423,6 +423,25 @@ try {
     Write-Host "=== BENCHMARK ==="
     Write-Host $reportJson
 
+    # Capture the real GPUI settings panels, each with its own disposable Preferences folder.
+    foreach ($panel in @('camera', 'style', 'scenes')) {
+        if ($rustProc -and -not $rustProc.HasExited) { Stop-Process -Id $rustProc.Id -Force }
+        $panelSettings = Join-Path $OutDir "panel-settings-$panel"
+        $rustProc = Start-Process -FilePath $ExePath -ArgumentList @('--demo-pattern', '--position', "$winX,$winY", '--settings-panel', $panel, '--settings-dir', $panelSettings) -PassThru
+        $panelWindow = [IntPtr]::Zero
+        for ($attempt = 0; $attempt -lt 100; $attempt++) {
+            $panelWindow = [Win32Verify]::FindVisibleWindowByPid($rustProc.Id)
+            if ($panelWindow -ne [IntPtr]::Zero) { break }
+            Start-Sleep -Milliseconds 50
+        }
+        if ($panelWindow -eq [IntPtr]::Zero) { throw "Rust $panel panel did not open" }
+        Start-Sleep -Milliseconds 800
+        $panelBounds = New-Object Win32Verify+RECT
+        [void][Win32Verify]::GetWindowRect($panelWindow, [ref]$panelBounds)
+        $panelShot = Capture-ScreenRegion -X ($panelBounds.Left - 40) -Y ($panelBounds.Top - 40) -W ($panelBounds.Right - $panelBounds.Left + 80) -H ($panelBounds.Bottom - $panelBounds.Top + 80) -Path (Join-Path $OutDir "$panel-panel.png")
+        $panelShot.Dispose()
+    }
+
     if ($failures.Count -gt 0) {
         Write-Error ("Transparency / shape verification FAILED:`n" + ($failures -join "`n"))
         exit 1

@@ -250,6 +250,36 @@ pub fn set_always_on_top(window: &Window, on_top: bool) {
 pub fn set_always_on_top(_window: &Window, _on_top: bool) {}
 
 #[cfg(target_os = "windows")]
+pub fn accessibility_preferences() -> (bool, bool) {
+    use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SPI_GETCLIENTAREAANIMATION, SPI_GETHIGHCONTRAST, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+    };
+    let mut animation = windows::core::BOOL(1);
+    let mut contrast = HIGHCONTRASTW { cbSize: std::mem::size_of::<HIGHCONTRASTW>() as u32, ..Default::default() };
+    // SAFETY: the OS fills correctly sized local preference values; no window state is changed.
+    unsafe {
+        let _ = SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&mut animation as *mut windows::core::BOOL).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        );
+        let _ = SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            contrast.cbSize,
+            Some((&mut contrast as *mut HIGHCONTRASTW).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        );
+    }
+    (!animation.as_bool(), contrast.dwFlags.0 & HCF_HIGHCONTRASTON.0 != 0)
+}
+#[cfg(not(target_os = "windows"))]
+pub fn accessibility_preferences() -> (bool, bool) {
+    (false, false)
+}
+
+#[cfg(target_os = "windows")]
 pub fn set_visible(window: &Window, visible: bool) {
     use windows::Win32::UI::WindowsAndMessaging::{SW_HIDE, SW_SHOWNOACTIVATE, ShowWindow};
     let Some(hwnd) = hwnd_of(window) else { return };

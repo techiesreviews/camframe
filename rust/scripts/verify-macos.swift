@@ -484,6 +484,27 @@ func checks() -> Int32 {
         log(String(data: json, encoding: .utf8) ?? "")
     }
 
+    // Capture native GPUI controls, rather than the old Electron browser preview.
+    if app.isRunning { app.terminate(); app.waitUntilExit() }
+    for panel in ["camera", "style", "scenes"] {
+        let panelApp = Process()
+        panelApp.executableURL = URL(fileURLWithPath: exePath)
+        panelApp.arguments = ["--demo-pattern", "--position", "\(Int(windowX)),\(Int(windowY))", "--settings-panel", panel,
+                              "--settings-dir", (outDir as NSString).appendingPathComponent("panel-settings-\(panel)")]
+        do { try panelApp.run() } catch { failures.append("could not launch \(panel) panel: \(error)"); continue }
+        var panelWindow: WindowInfo?
+        for _ in 0..<100 {
+            panelWindow = bubbleWindow(of: panelApp.processIdentifier)
+            if panelWindow != nil { break }
+            sleepMs(50)
+        }
+        sleepMs(800)
+        if let panelWindow {
+            if capture(around: panelWindow.bounds, name: "\(panel)-panel") == nil { failures.append("could not capture \(panel) panel") }
+        } else { failures.append("\(panel) panel did not open") }
+        if panelApp.isRunning { panelApp.terminate(); panelApp.waitUntilExit() }
+    }
+
     if !failures.isEmpty {
         log("macOS see-through / shape-switch verification FAILED:")
         failures.forEach { log("  - \($0)") }

@@ -23,8 +23,14 @@ use overlay::LaunchConfig;
 /// - `--metrics-file path`: write the time to the first frame.
 /// - `--settings-dir path`: keep Preferences under this folder instead of the app-data folder.
 fn parse_args(launch_instant: Instant) -> LaunchConfig {
-    let mut config =
-        LaunchConfig { demo_pattern: false, position: None, metrics_file: None, launch_instant, settings_dir: None };
+    let mut config = LaunchConfig {
+        demo_pattern: false,
+        position: None,
+        metrics_file: None,
+        launch_instant,
+        settings_dir: None,
+        settings_panel: None,
+    };
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -40,6 +46,7 @@ fn parse_args(launch_instant: Instant) -> LaunchConfig {
             }
             "--metrics-file" => config.metrics_file = args.next().map(PathBuf::from),
             "--settings-dir" => config.settings_dir = args.next().map(PathBuf::from),
+            "--settings-panel" => config.settings_panel = args.next(),
             _ => {}
         }
     }

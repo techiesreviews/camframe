@@ -19,12 +19,14 @@ pub(super) enum SceneAction {
 
 impl BubbleOverlay {
     pub(super) fn apply_scene_at(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.finish_guide(window, cx);
         let Some(scene) = self.settings.presets.get(index).cloned() else { return };
         let compact = self.presentation.compact.unwrap_or_else(|| rect_of(window.bounds()));
         self.set_fullscreen(false, window, cx);
         let (areas, primary) = work_areas(cx);
         self.settings = scenes::apply_scene(&self.settings, &scene, compact, &areas, primary);
         self.active_scene_id = scene.id;
+        self.announcement = scene.name;
         self.scene_edits.clear_change();
         let mut bounds = geometry::window_size(self.settings.shape, self.size())
             .at(self.settings.position.unwrap_or(compact.origin()));
@@ -44,7 +46,7 @@ impl BubbleOverlay {
             scenes::rename_scene(&self.settings, &id, name).map(|settings| (settings, self.active_scene_id.clone()))
         } else {
             if !self.presentation.fullscreen {
-                self.settings.position = Some(rect_of(window.bounds()).origin());
+                self.settings.position = Some(self.guide_base_bounds(window).origin());
             }
             let id = format!("preset-{}-{}", std::process::id(), self.clock.elapsed().as_nanos());
             scenes::save_look(&self.settings, name, &id)
@@ -212,6 +214,9 @@ impl BubbleOverlay {
         let mut list = div().flex().flex_wrap().gap(px(6.0));
         let (areas, primary) = work_areas(cx);
         for (i, scene) in self.settings.presets.iter().enumerate() {
+            let available = dimensions_for(self.settings.shape, self.size()).0 as f32 - 26.0;
+            let row_width =
+                if self.settings.scene_view == SceneView::Grid { (available - 6.0) / 2.0 } else { available };
             let active = scene.id == self.active_scene_id;
             let scene_id = scene.id.clone();
             let current = geometry::window_size(self.settings.shape, self.size())
@@ -221,10 +226,10 @@ impl BubbleOverlay {
             let camera = geometry::camera_rect_for(
                 geometry::window_size(opening.shape, opening.size).at(opening.position.unwrap_or(area.origin())),
             );
-            let scale = 120.0 / area.width.max(1) as f32;
+            let scale = (row_width - 10.0) / area.width.max(1) as f32;
             let tile = div()
                 .relative()
-                .w(px(120.0))
+                .w(px(row_width - 10.0))
                 .h(px(area.height as f32 * scale))
                 .rounded(px(4.0))
                 .bg(rgb(0x252528))
@@ -240,6 +245,9 @@ impl BubbleOverlay {
                 );
             let mut row = div()
                 .id(SharedString::from(format!("scene-row-{}", scene.id)))
+                .w(px(row_width))
+                .min_w_0()
+                .overflow_hidden()
                 .track_focus(&self.scene_focus[i])
                 .tab_index(0)
                 .role(gpui::Role::ListItem)
@@ -344,6 +352,8 @@ impl BubbleOverlay {
                         "Rename"
                     } else if replacing {
                         "Replace"
+                    } else if self.settings.presets.len() >= 6 {
+                        "Full"
                     } else {
                         "Save look"
                     }

@@ -95,6 +95,14 @@ impl TextField {
 }
 
 impl EntityInputHandler for TextField {
+    fn text_length_utf16(&mut self, _: &mut Window, _: &mut Context<Self>) -> Option<usize> {
+        Some(self.text.encode_utf16().count())
+    }
+    fn set_selected_text_range(&mut self, range: Range<usize>, window: &mut Window, cx: &mut Context<Self>) {
+        self.selection = self.bytes(range);
+        window.notify_text_selection_changed(&self.focus);
+        cx.notify();
+    }
     fn text_for_range(
         &mut self,
         range: Range<usize>,

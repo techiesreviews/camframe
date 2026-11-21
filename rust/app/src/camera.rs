@@ -247,6 +247,7 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
     let mut pending = lock_unpoisoned(&slot.request).clone();
     let mut changed_at = Instant::now() - Duration::from_secs(1);
     let mut devices = Vec::new();
+    let mut scan_error: Option<String> = None;
     let mut current_device = String::new();
     let mut failures = FailureCount::default();
     while !stop.load(Ordering::Relaxed) {
@@ -258,16 +259,18 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
         if let Some(scan) = lock_unpoisoned(&slot.inventory).take() {
             if let Ok(list) = scan {
                 devices = list;
+                scan_error = None;
                 if camera.is_some() && !devices.iter().any(|info| device_id(info) == current_device) {
                     if let Some(mut disconnected) = camera.take() {
                         let _ = disconnected.stop_stream();
                     }
                     applied = None;
                 }
-            } else if camera.is_none()
-                && let Err(message) = scan
-            {
-                camera_unavailable(slot, wake, message);
+            } else if let Err(message) = scan {
+                scan_error = Some(message.clone());
+                if camera.is_none() {
+                    camera_unavailable(slot, wake, message);
+                }
             }
         }
         if changed_at.elapsed() >= Duration::from_millis(200) && applied.as_ref() != Some(&pending) {
@@ -330,7 +333,7 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
                         Err(message) => camera_unavailable(slot, wake, message),
                     }
                 } else {
-                    camera_unavailable(slot, wake, NO_CAMERA_MESSAGE);
+                    camera_unavailable(slot, wake, scan_error.as_deref().unwrap_or(NO_CAMERA_MESSAGE));
                 }
                 if camera.is_none() {
                     changed_at = Instant::now() + Duration::from_secs(1);

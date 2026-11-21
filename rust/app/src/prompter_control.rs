@@ -32,7 +32,7 @@ impl BubbleOverlay {
         cx.notify();
     }
     fn link_view(&self, window: &Window, cx: &App) -> Value {
-        let target = self.presentation.transition.map_or_else(|| rect_of(window.bounds()), |(_, to, _)| to);
+        let target = self.presentation.transition.map_or_else(|| self.guide_base_bounds(window), |(_, to, _)| to);
         let (areas, primary) = work_areas(cx);
         let area = scenes::work_area_at(target.origin(), &areas, primary);
         json!({"mode":if self.presentation.fullscreen{"fullscreen"}else{"compact"},"visible":self.settings.overlay_visible,"settled":self.presentation.transition.is_none(),"size":self.size(),"shape":self.settings.shape,
@@ -67,7 +67,7 @@ impl BubbleOverlay {
         self.presentation
             .compact
             .or(self.presentation.transition.map(|(_, to, _)| to))
-            .unwrap_or_else(|| rect_of(window.bounds()))
+            .unwrap_or_else(|| self.guide_base_bounds(window))
     }
     fn link_plan(&self, body: &Value, window: &Window, cx: &App) -> Result<(geometry::LayoutPlan, Rect), String> {
         let current = self.compact_reference(window);
@@ -134,6 +134,7 @@ impl BubbleOverlay {
             Ok(plan) => plan,
             Err(message) => return error(422, "does-not-fit", &message),
         };
+        self.finish_guide(window, cx);
         let current = self.compact_reference(window);
         let keep = bare && plan.size == self.size() && plan.position == current.origin();
         self.presentation.fullscreen = false;

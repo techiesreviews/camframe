@@ -16,6 +16,8 @@ pub(super) enum Control {
     Tab(SettingsTab),
     Close,
     Scene(super::scenes_panel::SceneAction),
+    GuideNext,
+    GuideFinish,
 }
 
 // CamFrame 0.9.0's dark surface tokens.
@@ -49,11 +51,11 @@ impl BubbleOverlay {
             cx.notify();
             return;
         }
-        let mut bounds = rect_of(window.bounds());
+        let mut bounds = self.guide_base_bounds(window);
         let (width, height) = overlay_dimensions_for(self.settings.shape, self.size());
         bounds.width = i64::from(width);
         bounds.height = i64::from(if self.settings_tab.is_some() { height.max(390) } else { height });
-        platform::set_bounds(window, bounds);
+        platform::set_bounds(window, self.with_guide_bounds(bounds));
         cx.notify();
     }
 
@@ -66,6 +68,8 @@ impl BubbleOverlay {
             }
             Control::Close => self.toggle_settings(window, cx),
             Control::Scene(action) => self.run_scene_action(action.clone(), window, cx),
+            Control::GuideNext => self.advance_guide(window, cx),
+            Control::GuideFinish => self.finish_guide(window, cx),
         }
     }
 
@@ -87,9 +91,11 @@ impl BubbleOverlay {
             .py(px(7.0))
             .rounded(px(6.0))
             .border_1()
-            .border_color(rgb(if selected { TEXT } else { EDGE }))
+            .border_color(rgb(if selected || self.high_contrast { TEXT } else { EDGE }))
             .bg(rgb(CONTROL))
             .text_xs()
+            .min_w_0()
+            .truncate()
             .text_color(rgb(TEXT))
             .cursor_pointer()
             .hover(|s| s.bg(rgb(0x2a2a2d)))
@@ -285,12 +291,12 @@ impl BubbleOverlay {
             .id("inline-settings")
             .absolute()
             .left(px(OVERLAY_CHROME.left as f32))
-            .top(px(OVERLAY_CHROME.top as f32))
+            .top(px(OVERLAY_CHROME.top as f32 + self.guide_reserve() as f32))
             .w(px(width))
             .h(px(height.max(390) as f32 - OVERLAY_CHROME.top as f32 - 18.0))
             .bg(rgb(PANEL))
             .border_1()
-            .border_color(rgb(EDGE))
+            .border_color(rgb(if self.high_contrast { TEXT } else { EDGE }))
             .rounded(px(12.0))
             .p(px(12.0))
             .flex()

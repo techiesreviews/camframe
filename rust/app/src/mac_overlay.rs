@@ -177,3 +177,13 @@ pub fn set_always_on_top(window: &Window, on_top: bool) {
         let _: () = msg_send![ns_window, setLevel: level];
     }
 }
+
+pub fn accessibility_preferences() -> (bool, bool) {
+    // SAFETY: documented NSWorkspace preference getters on GPUI's main thread.
+    unsafe {
+        let workspace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let reduced: Bool = msg_send![workspace, accessibilityDisplayShouldReduceMotion];
+        let contrast: Bool = msg_send![workspace, accessibilityDisplayShouldIncreaseContrast];
+        (reduced.as_bool(), contrast.as_bool())
+    }
+}

@@ -6,7 +6,7 @@ pub(super) struct Presentation {
     pub fullscreen: bool,
     pub compact: Option<Rect>,
     pub transition: Option<(Rect, Rect, Instant)>,
-    pub pointer: Option<(f64, f64)>,
+    pub chrome_shown: bool,
     pub chrome_at: u64,
     areas: Vec<Rect>,
 }
@@ -27,10 +27,10 @@ impl BubbleOverlay {
         if areas != self.presentation.areas {
             self.presentation.areas = areas.clone();
             if !self.presentation.fullscreen && self.presentation.transition.is_none() {
-                let current = rect_of(window.bounds());
+                let current = self.guide_base_bounds(window);
                 let healed = geometry::restore_compact(current, &areas, primary, self.settings.prompter_margin);
                 if healed != current {
-                    platform::set_bounds(window, healed);
+                    platform::set_bounds(window, self.with_guide_bounds(healed));
                     self.last_origin = Some(healed.origin());
                     self.settings.position = Some(healed.origin());
                     self.save_now();
@@ -55,6 +55,9 @@ impl BubbleOverlay {
     }
 
     pub(super) fn set_fullscreen(&mut self, fullscreen: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if fullscreen {
+            self.finish_guide(window, cx);
+        }
         if fullscreen == self.presentation.fullscreen {
             return;
         }
@@ -79,6 +82,7 @@ impl BubbleOverlay {
         };
         self.presentation.fullscreen = fullscreen;
         self.presentation.chrome_at = self.now_ms();
+        self.presentation.chrome_shown = true;
         self.set_overlay_visible(true, window, cx);
         self.move_to(target, window, cx);
         self.sync_capture_view(window);

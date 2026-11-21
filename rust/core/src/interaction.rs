@@ -17,6 +17,15 @@ pub const CORNER_HANDLE_REACH: f64 = 9.0;
 pub const TOOLBAR_TOP: f64 = 22.0;
 pub const TOOLBAR_HEIGHT: f64 = 44.0;
 pub const TOOLBAR_MAX_WIDTH: f64 = 234.0;
+pub const FULLSCREEN_TOOLBAR_HIDE_DELAY_MS: u64 = 200;
+
+pub fn fullscreen_toolbar_hotspot(point: (f64, f64), window_width: f64) -> bool {
+    let left = (window_width - TOOLBAR_MAX_WIDTH) / 2.0;
+    point.0 >= left - 12.0
+        && point.0 <= left + TOOLBAR_MAX_WIDTH + 12.0
+        && point.1 >= TOOLBAR_TOP - 12.0
+        && point.1 <= TOOLBAR_TOP + TOOLBAR_HEIGHT + 12.0
+}
 
 /// The toolbar's box in window coordinates: (left, top, width, height), centred over the camera.
 pub fn toolbar_box(shape: Shape, size: u32) -> (f64, f64, f64, f64) {
@@ -122,6 +131,13 @@ impl Interaction {
 mod tests {
     use super::*;
     use crate::geometry::Corner;
+
+    #[test]
+    fn full_screen_toolbar_hotspot_stays_at_the_top_centre() {
+        assert!(fullscreen_toolbar_hotspot((960.0, 44.0), 1920.0));
+        assert!(!fullscreen_toolbar_hotspot((100.0, 44.0), 1920.0));
+        assert!(!fullscreen_toolbar_hotspot((960.0, 100.0), 1920.0));
+    }
 
     #[test]
     fn the_empty_corner_around_a_circle_lets_clicks_through_even_with_the_chrome_shown() {

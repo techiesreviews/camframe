@@ -7,7 +7,7 @@ feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
 - **Runs beside CamFrame 0.9.0.** It keeps its own Preferences in a "CamFrame Rust" folder next to
   0.9.0's "CamFrame" folder (`%APPDATA%` on Windows, `~/Library/Application Support` on macOS). On
   its first start it copies 0.9.0's Preferences once; 0.9.0's file is only read, never changed.
-- **Unsigned.** No release, no installer, no auto-update. The macOS app carries only the ad-hoc
+- **Unsigned test downloads.** No release or auto-update. The macOS app carries only the ad-hoc
   signature Apple Silicon needs to start a program.
 
 ## What works now
@@ -15,16 +15,17 @@ feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
 - The camera in a see-through, always-on-top bubble, in the same four shapes, sizes, border and
   window layout as 0.9.0 (84 px of room above the camera for the toolbar, 18 px on the other
   sides). Drag the camera to move it; the place is saved.
-- Hover the bubble: the toolbar and the four corner handles appear. The toolbar has **Close** and
-  **Shape** (steps through Circle, Rounded square, Portrait, Landscape and keeps the bubble's
-  centre). Drag a corner handle to resize, as in 0.9.0.
+- Hover the bubble: the toolbar and four corner handles appear. The six buttons are Quit, Full
+  screen, Shape, Camera framing, Prompter link and Settings. Shape steps through Circle, Rounded
+  square, Portrait and Landscape, keeping the centre. Drag a corner handle to resize.
 - Clicks pass through the empty corners around the circle, the room around the toolbar and every
   other empty part of the window (allowed improvement 1). Only the camera shape, the toolbar and
   the handles take clicks.
 - Camera messages in the bubble, in 0.9.0's words: "Starting camera.", or why the camera cannot
   start (blocked, busy, or none found). The moving test picture appears only with
   `--demo-pattern`.
-- The tray (menu bar on macOS): **Show camera** and **Quit CamFrame**.
+- The tray (menu bar on macOS): controls, Help & onboarding, Show camera, Scenes with the active
+  Scene marked, and Quit. Windows double-click opens the controls.
 
 Part 2 adds inline Camera and Style controls: camera selection with a default fallback and device
 rescans, 480p through 2160p quality requests, Mirror, Always on top, the frame width, Glow with
@@ -39,9 +40,33 @@ Part 3 adds Full screen without reopening the camera, return to Compact, animate
 display-change recovery, global shortcuts and the expanded tray menu. Shortcut registration
 failures appear in Camera settings. The old Shape click checks follow the expanded toolbar.
 
-Not yet: Scenes, the Prompter link and first-run tips. They come in the
-next parts of TOOLS-393. Real camera quality, hot-plug recovery and effect appearance still need
-Windows and Mac hardware checks; the Linux tests exercise the portable rules and drawing inputs.
+The Scenes tab includes starter Scenes, apply, Save look and Replace, autosave with 10-second Undo,
+delete with 6-second Undo, rename, reorder, list/grid and import/export. Its miniatures use the
+same display-opening rules as applying a Scene. Keyboard controls include arrows, Enter, F2,
+Delete, Ctrl/Cmd+Z and Escape; Alt+arrows reorder. Global Ctrl/Cmd+Shift+P cycles Scenes, and 1–6
+apply by number. The other global shortcuts remain C (controls), H (show/hide), F (Full screen).
+
+Prompter link implements API 2 on 127.0.0.1:47833, off by default, from its toolbar button. Status,
+view cues, layout Scene saves and small-size changes use the same Scene and geometry rules as the
+controls. Host/Origin checks and the restricted `Origin: null` responses follow 0.9.0. Only one of
+the two CamFrame apps can use that port at a time.
+
+The simpler first-run guide has four tips and progress, no ghost mouse. Skip/Finish is remembered,
+and Help reopens it. Native reduced-motion and high-contrast settings are checked while running.
+Controls expose names, states and focus to screen readers; Scene changes have a live announcement.
+NVDA and VoiceOver still require a human check.
+
+CI produces a Windows per-user NSIS installer and a single-file Portable executable, and Mac DMG
+and ZIP downloads for both ARM and Intel. These remain test downloads with a separate identity.
+Installation and uninstallation do not remove 0.9.0 or either settings folder. Switch-over and
+cleanup of 0.9.0's old login entry wait for Lex's try and go; no release is published by these jobs.
+
+Real camera quality, hot-plug recovery and effect appearance still need Windows and Mac hardware
+checks; Linux tests exercise the portable rules and drawing inputs. Resampling remains on the
+capture thread, so 2160p smoothness and full-app size/startup/memory claims need real-camera
+measurements. Electron's camera ids are origin-specific; a copied selection falls back to a
+matching camera label, then the default if that is unavailable or ambiguous. Rust selections use
+the native device's stable id afterwards.
 
 ## Layout
 

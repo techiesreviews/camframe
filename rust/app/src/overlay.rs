@@ -30,6 +30,8 @@ use crate::camera::{CameraSlot, CameraStatus, CameraWorker, OutputView, lock_unp
 use crate::mac_overlay as platform;
 use crate::prefs::Prefs;
 use crate::tray::{Tray, TrayCommand};
+#[path = "guide.rs"]
+mod guide;
 #[path = "presentation.rs"]
 mod presentation;
 #[path = "prompter_control.rs"]
@@ -62,6 +64,7 @@ pub struct LaunchConfig {
     pub metrics_file: Option<PathBuf>,
     pub launch_instant: Instant,
     pub settings_dir: Option<PathBuf>,
+    pub settings_panel: Option<String>,
 }
 
 /// The toolbar icons: Phosphor (regular), the same set 0.9.0 uses, as SVG files in the binary.
@@ -116,6 +119,9 @@ pub fn open(config: LaunchConfig, cx: &mut App) -> anyhow::Result<()> {
         prefs.save(&settings);
     }
 
+    if config.demo_pattern && config.settings_panel.is_some() {
+        bounds.height = bounds.height.max(390);
+    }
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(gpui_bounds(bounds))),
         titlebar: None,
@@ -198,6 +204,11 @@ pub struct BubbleOverlay {
     link_commands: async_channel::Sender<crate::prompter::Command>,
     link_generation: u64,
     link_message: String,
+    high_contrast: bool,
+    accessibility_scan: Instant,
+    guide_step: Option<usize>,
+    demo_pattern: bool,
+    announcement: String,
 }
 
 impl BubbleOverlay {
@@ -336,7 +347,16 @@ impl BubbleOverlay {
             launch_instant: config.launch_instant,
             metrics_file: config.metrics_file,
             startup_recorded: false,
-            settings_tab: None,
+            settings_tab: if config.demo_pattern {
+                match config.settings_panel.as_deref() {
+                    Some("camera") => Some(SettingsTab::Camera),
+                    Some("style") => Some(SettingsTab::Style),
+                    Some("scenes") => Some(SettingsTab::Scenes),
+                    _ => None,
+                }
+            } else {
+                None
+            },
             framing: false,
             framing_drag: None,
             color_input,
@@ -357,6 +377,11 @@ impl BubbleOverlay {
             link_commands,
             link_generation: 0,
             link_message,
+            high_contrast: false,
+            accessibility_scan: Instant::now() - Duration::from_secs(2),
+            guide_step: None,
+            demo_pattern: config.demo_pattern,
+            announcement: String::new(),
         }
     }
 
@@ -387,6 +412,13 @@ impl BubbleOverlay {
         if let Some(status) = lock_unpoisoned(&self.slot.status).take() {
             self.status = status;
         }
+        if !self.demo_pattern
+            && self.guide_step.is_none()
+            && self.settings.completed_onboarding_version < 1
+            && !matches!(self.status, CameraStatus::Starting)
+        {
+            self.show_guide(window, cx);
+        }
         if let Some(bgra) = lock_unpoisoned(&self.slot.halo).take()
             && let Some(buffer) = image::RgbaImage::from_raw(bgra.width, bgra.height, bgra.bytes)
         {
@@ -410,8 +442,9 @@ impl BubbleOverlay {
     fn sync_capture_view(&self, window: &Window) {
         let mut view = output_view(&self.settings, self.size(), window.scale_factor());
         if self.presentation.fullscreen {
-            view.width = (f32::from(window.bounds().size.width) * window.scale_factor()).round().max(1.0) as u32;
-            view.height = (f32::from(window.bounds().size.height) * window.scale_factor()).round().max(1.0) as u32;
+            let target = self.presentation.transition.map_or_else(|| rect_of(window.bounds()), |(_, to, _)| to);
+            view.width = (target.width as f32 * window.scale_factor()).round().max(1.0) as u32;
+            view.height = (target.height as f32 * window.scale_factor()).round().max(1.0) as u32;
         }
         *lock_unpoisoned(&self.slot.view) = Some(view);
         *lock_unpoisoned(&self.slot.request) = crate::camera::CaptureRequest {
@@ -430,6 +463,19 @@ impl BubbleOverlay {
     /// Reads the pointer, moves a corner drag on, shows or hides the chrome, switches the click mode,
     /// and notices when the window was dragged somewhere new.
     fn poll_pointer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.accessibility_scan.elapsed() >= Duration::from_secs(1) {
+            self.accessibility_scan = Instant::now();
+            let (reduced, contrast) = platform::accessibility_preferences();
+            cx.set_reduce_motion(reduced);
+            if reduced && let Some((_, target, _)) = self.presentation.transition.take() {
+                platform::set_bounds(window, target);
+                self.sync_capture_view(window);
+            }
+            if contrast != self.high_contrast {
+                self.high_contrast = contrast;
+                cx.notify();
+            }
+        }
         if !self.settings.overlay_visible {
             return;
         }
@@ -450,12 +496,19 @@ impl BubbleOverlay {
             return;
         };
         if self.presentation.fullscreen {
-            if self.presentation.pointer != Some(cursor) {
-                self.presentation.pointer = Some(cursor);
+            let bounds = window.bounds();
+            let local = (cursor.0 - f64::from(bounds.origin.x), cursor.1 - f64::from(bounds.origin.y));
+            if camframe_core::interaction::fullscreen_toolbar_hotspot(local, f64::from(bounds.size.width)) {
                 self.presentation.chrome_at = now;
-                cx.notify();
-            }
-            if now.saturating_sub(self.presentation.chrome_at) >= 1500 {
+                if !self.presentation.chrome_shown {
+                    self.presentation.chrome_shown = true;
+                    cx.notify();
+                }
+            } else if self.presentation.chrome_shown
+                && now.saturating_sub(self.presentation.chrome_at)
+                    >= camframe_core::interaction::FULLSCREEN_TOOLBAR_HIDE_DELAY_MS
+            {
+                self.presentation.chrome_shown = false;
                 cx.notify();
             }
             platform::set_click_through(window, false);
@@ -477,7 +530,10 @@ impl BubbleOverlay {
                 resize.origin = origin;
                 self.resize = Some(resize);
                 let (width, height) = overlay_dimensions_for(self.settings.shape, next);
-                platform::set_bounds(window, Rect::new(origin.x, origin.y, i64::from(width), i64::from(height)));
+                platform::set_bounds(
+                    window,
+                    self.with_guide_bounds(Rect::new(origin.x, origin.y, i64::from(width), i64::from(height))),
+                );
                 self.last_origin = Some(origin);
                 self.sync_capture_view(window);
                 cx.notify();
@@ -488,11 +544,14 @@ impl BubbleOverlay {
         }
 
         let origin = window.bounds().origin;
-        let local = (cursor.0 - f64::from(origin.x), cursor.1 - f64::from(origin.y));
+        let local = (cursor.0 - f64::from(origin.x), cursor.1 - f64::from(origin.y) - f64::from(self.guide_reserve()));
         let was_hovered = self.interaction.hovered();
         let target = target_at(self.settings.shape, self.size(), local, was_hovered);
         self.interaction.pointer(target != Target::Nothing, now);
-        let through = self.settings_tab.is_none() && !self.framing && !self.interaction.interactive(target);
+        let through = self.guide_step.is_none()
+            && self.settings_tab.is_none()
+            && !self.framing
+            && !self.interaction.interactive(target);
         if self.click_through != Some(through) {
             platform::set_click_through(window, through);
             self.click_through = Some(through);
@@ -507,7 +566,7 @@ impl BubbleOverlay {
         if self.presentation.fullscreen || self.presentation.transition.is_some() {
             return;
         }
-        let origin = rect_of(window.bounds()).origin();
+        let origin = self.guide_base_bounds(window).origin();
         let moved = self.last_origin.is_some_and(|last| last != origin);
         self.last_origin = Some(origin);
         if moved && !self.pinned_position && self.resize.is_none() {
@@ -529,7 +588,7 @@ impl BubbleOverlay {
 
     fn start_resize(&mut self, corner: Corner, window: &mut Window, cx: &mut Context<Self>) {
         let Some(cursor) = platform::cursor_position(window) else { return };
-        let start_window = rect_of(window.bounds());
+        let start_window = self.guide_base_bounds(window);
         self.resize = Some(Resize {
             corner,
             start_cursor: cursor,
@@ -574,7 +633,7 @@ impl BubbleOverlay {
             .presentation
             .compact
             .or(self.presentation.transition.map(|(_, to, _)| to))
-            .unwrap_or_else(|| rect_of(window.bounds()));
+            .unwrap_or_else(|| self.guide_base_bounds(window));
         self.presentation.fullscreen = false;
         self.presentation.compact = None;
         self.presentation.transition = None;
@@ -582,10 +641,13 @@ impl BubbleOverlay {
         if !areas.is_empty() {
             base = geometry::on_screen_base(base, &areas, primary, self.settings.prompter_margin);
         }
+        if self.settings_tab.is_some() {
+            base.height = base.height.max(390);
+        }
         if leaving_full {
             self.move_to(base, window, cx);
         } else {
-            platform::set_bounds(window, base);
+            platform::set_bounds(window, self.with_guide_bounds(base));
         }
         self.last_origin = Some(base.origin());
         let before = self.settings.clone();
@@ -643,7 +705,7 @@ impl BubbleOverlay {
                 }
             }
             TrayCommand::Scene(index) => self.apply_scene_at(index, window, cx),
-            TrayCommand::Help => {}
+            TrayCommand::Help => self.show_guide(window, cx),
         }
     }
 
@@ -662,12 +724,16 @@ impl BubbleOverlay {
         });
     }
 
-    fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (left, top, width, height) = toolbar_box(self.settings.shape, self.size());
+    fn render_toolbar(&self, window_width: f32, cx: &mut Context<Self>) -> impl IntoElement {
+        let (mut left, top, mut width, height) = toolbar_box(self.settings.shape, self.size());
+        if self.presentation.fullscreen {
+            width = camframe_core::interaction::TOOLBAR_MAX_WIDTH;
+            left = (f64::from(window_width) - width) / 2.0;
+        }
         div()
             .id("hover-toolbar")
             .absolute()
-            .top(px(top as f32))
+            .top(px(top as f32 + self.guide_reserve() as f32))
             .left(px(left as f32))
             .w(px(width as f32))
             .h(px(height as f32))
@@ -678,21 +744,25 @@ impl BubbleOverlay {
             .p(px(4.0))
             .rounded(px(10.0))
             .bg(rgb(0x0c0c0d))
-            .child(toolbar_button("close-button", "icons/x-circle.svg").on_click(|_, _, cx| cx.quit()))
-            .child(toolbar_button("fullscreen-button", "icons/corners-out.svg").on_click(
+            .child(toolbar_button("close-button", "icons/x-circle.svg", cx).on_click(|_, _, cx| cx.quit()))
+            .child(toolbar_button("fullscreen-button", "icons/corners-out.svg", cx).on_click(
                 cx.listener(|this, _, window, cx| this.set_fullscreen(!this.presentation.fullscreen, window, cx)),
             ))
-            .child(toolbar_button("shape-button", "icons/circle.svg").on_click(cx.listener(|this, _, window, cx| {
-                let next = this.settings.shape.next();
-                this.set_shape(next, window, cx);
-            })))
-            .child(toolbar_button("position-button", "icons/crosshair.svg").on_click(cx.listener(|this, _, _, cx| {
-                this.framing = !this.framing;
-                this.settings_tab = None;
-                cx.notify();
-            })))
+            .child(toolbar_button("shape-button", "icons/circle.svg", cx).on_click(cx.listener(
+                |this, _, window, cx| {
+                    let next = this.settings.shape.next();
+                    this.set_shape(next, window, cx);
+                },
+            )))
+            .child(toolbar_button("position-button", "icons/crosshair.svg", cx).on_click(cx.listener(
+                |this, _, _, cx| {
+                    this.framing = !this.framing;
+                    this.settings_tab = None;
+                    cx.notify();
+                },
+            )))
             .child(
-                toolbar_button("prompter-button", "icons/scroll.svg")
+                toolbar_button("prompter-button", "icons/scroll.svg", cx)
                     .aria_label(if self.link.is_some() {
                         "Prompter link: on"
                     } else if self.link_message.is_empty() {
@@ -712,7 +782,7 @@ impl BubbleOverlay {
                     ))),
             )
             .child(
-                toolbar_button("controls-button", "icons/sliders-horizontal.svg")
+                toolbar_button("controls-button", "icons/sliders-horizontal.svg", cx)
                     .on_click(cx.listener(|this, _, window, cx| this.toggle_settings(window, cx))),
             )
     }
@@ -733,7 +803,11 @@ impl BubbleOverlay {
             .id("camera-surface")
             .absolute()
             .left(px(if self.presentation.fullscreen { 0.0 } else { OVERLAY_CHROME.left as f32 }))
-            .top(px(if self.presentation.fullscreen { 0.0 } else { OVERLAY_CHROME.top as f32 }))
+            .top(px(if self.presentation.fullscreen {
+                0.0
+            } else {
+                OVERLAY_CHROME.top as f32 + self.guide_reserve() as f32
+            }))
             .w(px(camera_width))
             .h(px(camera_height))
             .rounded(px(radius))
@@ -805,6 +879,21 @@ impl BubbleOverlay {
 
         if let Some(frame) = self.frame.clone() {
             camera = camera.child(img(frame).w(px(camera_width)).h(px(camera_height)).rounded(px(radius)));
+            if let CameraStatus::Unavailable(message) = &self.status {
+                camera = camera.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .bg(rgb(0x18181b))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .p(px(16.0))
+                        .text_xs()
+                        .text_color(rgb(0xf4f4f5))
+                        .child(message.clone()),
+                );
+            }
         } else if let Some(message) = status_label {
             camera = camera
                 .flex()
@@ -825,7 +914,10 @@ impl BubbleOverlay {
                     .border_color(rgb(hex_color(&self.settings.border_color).unwrap_or(0xffffff))),
             );
         }
-        if !self.presentation.fullscreen && self.settings.frame_effect == camframe_core::settings::FrameEffect::Glow {
+        if !self.high_contrast
+            && !self.presentation.fullscreen
+            && self.settings.frame_effect == camframe_core::settings::FrameEffect::Glow
+        {
             let color = hex_color(&self.settings.effect_color).unwrap_or(0xfb923c);
             let opacity = self.settings.glow_strength as f32 / 100.0;
             camera = camera.shadow(vec![
@@ -835,12 +927,15 @@ impl BubbleOverlay {
                     .blur_radius(px(self.settings.glow_spread as f32)),
             ]);
         }
+        if self.high_contrast {
+            camera = camera.border_2().border_color(rgb(0xffffff));
+        }
         camera
     }
 
     fn render_handles(&self, camera_width: f32, camera_height: f32, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
         let left = OVERLAY_CHROME.left as f32;
-        let top = OVERLAY_CHROME.top as f32;
+        let top = OVERLAY_CHROME.top as f32 + self.guide_reserve() as f32;
         let corners = [
             ("corner-top-left", Corner::TopLeft, left, top),
             ("corner-top-right", Corner::TopRight, left + camera_width, top),
@@ -903,9 +998,13 @@ impl Render for BubbleOverlay {
         };
         let (camera_width, camera_height) = (camera_width as f32, camera_height as f32);
         let show_chrome = if self.presentation.fullscreen {
-            self.now_ms().saturating_sub(self.presentation.chrome_at) < 1500 || self.settings_tab.is_some()
+            self.presentation.chrome_shown || self.settings_tab.is_some() || self.framing
         } else {
-            self.interaction.hovered() || self.resize.is_some() || self.settings_tab.is_some() || self.framing
+            self.interaction.hovered()
+                || self.resize.is_some()
+                || self.settings_tab.is_some()
+                || self.framing
+                || self.guide_step.is_some()
         };
 
         div()
@@ -913,7 +1012,8 @@ impl Render for BubbleOverlay {
             .track_focus(&self.focus)
             .relative()
             .w(px(window_width as f32))
-            .h(px(if self.settings_tab.is_some() { window_height.max(390) } else { window_height } as f32))
+            .h(px((if self.settings_tab.is_some() { window_height.max(390) } else { window_height }
+                + self.guide_reserve()) as f32))
             .bg(transparent_black())
             .when(cfg!(target_os = "linux"), |root| {
                 root.on_hover(cx.listener(|this, &hovered: &bool, _window, cx| {
@@ -928,6 +1028,10 @@ impl Render for BubbleOverlay {
             .on_action(cx.listener(|this, _: &ShapeLandscape, window, cx| this.set_shape(Shape::Landscape, window, cx)))
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
+                    if this.guide_step.is_some() {
+                        this.finish_guide(window, cx);
+                        return;
+                    }
                     if this.scene_rename.take().is_some() {
                         this.scene_input.update(cx, |input, cx| input.set_text(String::new(), cx));
                         cx.notify();
@@ -945,13 +1049,14 @@ impl Render for BubbleOverlay {
             }))
             .when(
                 !self.presentation.fullscreen
+                    && !self.high_contrast
                     && self.settings.frame_effect == camframe_core::settings::FrameEffect::Blur,
                 |root| {
                     root.children(self.halo.clone().map(|halo| {
                         img(halo)
                             .absolute()
                             .left(px(-2.0))
-                            .top(px(64.0))
+                            .top(px(64.0 + self.guide_reserve() as f32))
                             .w(px(camera_width + 40.0))
                             .h(px(camera_height + 40.0))
                     }))
@@ -959,11 +1064,22 @@ impl Render for BubbleOverlay {
             )
             .child(self.render_camera(camera_width, camera_height, cx))
             .when(show_chrome, |root| {
-                root.child(self.render_toolbar(cx)).when(!self.presentation.fullscreen, |root| {
+                root.child(self.render_toolbar(window_width as f32, cx)).when(!self.presentation.fullscreen, |root| {
                     root.children(self.render_handles(camera_width, camera_height, cx))
                 })
             })
             .when(self.settings_tab.is_some(), |root| root.child(self.render_settings(cx)))
+            .when(self.guide_step.is_some(), |root| root.child(self.render_guide(cx)))
+            .child({
+                let announcement = self.announcement.clone();
+                div().id("announcements").role(gpui::Role::Status).a11y_synthetic_children(move |tree| {
+                    let id = tree.synthetic_node_id("live-status");
+                    let mut node = accesskit::Node::new(accesskit::Role::Status);
+                    node.set_live(accesskit::Live::Polite);
+                    node.set_label(announcement);
+                    tree.push_child(id, node);
+                })
+            })
             .when(self.framing, |root| {
                 root.child(
                     div()
@@ -978,10 +1094,41 @@ impl Render for BubbleOverlay {
     }
 }
 
-fn toolbar_button(id: &'static str, icon: &'static str) -> gpui::Stateful<gpui::Div> {
+fn toolbar_button(id: &'static str, icon: &'static str, cx: &mut Context<BubbleOverlay>) -> gpui::Stateful<gpui::Div> {
+    let label = match id {
+        "close-button" => "Quit CamFrame",
+        "fullscreen-button" => "Full screen",
+        "shape-button" => "Change camera shape",
+        "position-button" => "Frame camera",
+        "prompter-button" => "Prompter link",
+        _ => "Open camera controls",
+    };
     div()
         .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .accessibility_id(id)
+        .tab_index(0)
+        .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
+            if !matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                return;
+            }
+            cx.stop_propagation();
+            match id {
+                "close-button" => cx.quit(),
+                "fullscreen-button" => this.set_fullscreen(!this.presentation.fullscreen, window, cx),
+                "shape-button" => this.set_shape(this.settings.shape.next(), window, cx),
+                "position-button" => {
+                    this.framing = !this.framing;
+                    cx.notify();
+                }
+                "prompter-button" => this.toggle_link(cx),
+                _ => this.toggle_settings(window, cx),
+            }
+        }))
         .w(px(TOOLBAR_BUTTON))
+        .min_w_0()
+        .flex_1()
         .h(px(TOOLBAR_BUTTON))
         .flex()
         .items_center()
