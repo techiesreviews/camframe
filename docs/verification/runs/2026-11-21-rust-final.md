@@ -38,7 +38,7 @@ camera name or the default. The old app and its settings remain available.
 | `kit status` | Cannot run | Command cut by kit TOOLS-235 | No status result inferred from it. |
 | `kit panel-text` | Old Mac fails; fixed Mac and Windows pass | Old Mac 0 pixels; both fixed Macs 120; Windows 86 | Camera, Style and Scenes captures checked. |
 | Independent main review | P1/P2 resolved; nits/test gaps remain | Claude Opus 5.5 high, 3 rounds for Parts 2–7 | Round 3: `camframe/.scratch/reviews/fleet-lead/20261121T194442Z`. [Round 2 fixes and ledger](2026-11-21-rust-review-fixes.md). |
-| Other-family second look | Pending | Grok or free OpenCode only | GPT is the builder and is excluded. |
+| Other-family second look | Attempted; skipped | Grok weekly budget 8/8; free OpenCode usage limit | Evidence `camframe/.scratch/reviews/fleet-lead/20261121T194912Z`; GPT is the builder and is excluded. |
 
 New behavior tests failed first with missing functions before implementation: quality selection,
 halo generation, Compact restoration, Scene edits, Prompter validation, toolbar hotspot and
@@ -132,6 +132,10 @@ for the quality-decision adapter, shortcut table, full presentation table, cue a
 drag dispatch, repeated refusal and the pixel counter. The reviewer explicitly ended the loop
 because only nits and test gaps remain. No P1/P2 finding is waived.
 
+The first `kit pr --no-merge` stopped because two standard MIT-license lines in the Phosphor
+notice matched lines indexed from a local skill. The complete license and copyright remain;
+only two line breaks were moved. No skill content was copied, and the guard stays enabled.
+
 ## Release decision
 
 - **Decision:** No-go for production replacement or release.
@@ -167,4 +171,7 @@ RESULT: ok ci 6a29e490c9f702630cdcc5c4931358c025437e3c 6a29e49 green (2 workflow
 RESULT: ok review git diff aafe2b28210ef3981bc8926dc65cecfbcbeb497b...HEAD evidence /home/ubulex/Projects/camframe/.scratch/reviews/fleet-lead/20261121T185442Z
 RESULT: ok review git diff aafe2b28210ef3981bc8926dc65cecfbcbeb497b...HEAD evidence /home/ubulex/Projects/camframe/.scratch/reviews/fleet-lead/20261121T192506Z
 RESULT: ok review git diff aafe2b28210ef3981bc8926dc65cecfbcbeb497b...HEAD evidence /home/ubulex/Projects/camframe/.scratch/reviews/fleet-lead/20261121T194442Z
+RESULT: skip second look (grok-4.7 grok review budget used up: 8/8 in 2026-W47; raise ASE_REVIEW_BUDGET_GROK to override; opencode/deepseek-v4.1-flash-free opencode usage limit: Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.)
+RESULT: fail skill-guard 2 problem(s); paid skills never go in a repo
+RESULT: fail skills: problem: rust/app/assets/icons/Phosphor-LICENSE.txt:12: holds a line from the local skill visualize
 ```
