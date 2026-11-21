@@ -81,6 +81,7 @@ test('the Scenes tab holds only Scenes; Start at login, the shortcut list and th
   assert.match(overlaySource, /interaction\.controlsOpen &&\n {4}inlineSettings\.dataset\.activePanel === 'presets' &&\n {4}!typingIn\(event\.target\) &&\n {4}scenesPanel\.undo\(\)/)
   // The settings stay open while Scenes are applied, saved and deleted (ADR 0037).
   assert.doesNotMatch(read('scenes-panel.js'), /setControlsOpen|closeSettings\(\)\s*\n\s*camFrame/)
+  assert.doesNotMatch(read('scenes-tab-state.js'), /setControlsOpen|closeSettings\(\)/)
 })
 
 test('the Scenes tab uses only Phosphor glyphs that the embedded font maps', () => {

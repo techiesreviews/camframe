@@ -240,6 +240,49 @@ test('Escape cancels a rename (focus back on the Scene), else closes the setting
   assert.deepEqual(closed.requests, [])
 })
 
+test('Escape in the rename field cancels it there and stays in the tab', () => {
+  const { tab } = tabWith()
+  tab.send({ type: 'rename', id: 'b' })
+  const step = tab.send({ type: 'keydown', key: 'Escape', role: 'rename', id: 'b' })
+  assert.equal(step.preventDefault, true)
+  assert.equal(step.stopPropagation, true, 'the Overlay does not also close the settings')
+  assert.equal(step.focus, 'apply:b')
+  assert.equal(step.draw.model.items[1].editing, false)
+  assert.deepEqual(step.requests, [])
+})
+
+// ADR 0037: the settings stay open while Scenes are applied, saved, renamed, deleted and restored.
+test('no Scene request closes the settings', () => {
+  const deleted = { id: 'c', name: 'Old', index: 2, endsAt: 7_000 }
+  const { tab } = tabWith(stateWith([scene('a', 'Intro'), scene('b', 'Talk')], { activePresetId: 'a', sceneDeleted: deleted }))
+  const steps = [tab.send({ type: 'apply', id: 'b' })]
+  tab.send({ type: 'save-open' })
+  tab.send({ type: 'input', role: 'new-name', value: 'New' })
+  steps.push(tab.send({ type: 'save-ok' }))
+  tab.send({ type: 'rename', id: 'a' })
+  tab.send({ type: 'input', role: 'rename', value: 'Opening' })
+  steps.push(tab.send({ type: 'rename-ok', id: 'a' }), tab.send({ type: 'undo-delete' }), tab.send({ type: 'delete', id: 'b' }))
+  assert.deepEqual(steps.map((step) => step.requests[0][0]), ['applyPreset', 'savePreset', 'renamePreset', 'undoPresetDelete', 'deletePreset'])
+  for (const step of steps) assert.equal(step.closeSettings, false, step.requests[0][0])
+})
+
+test('a bridge call that throws leaves the next step whole', () => {
+  const scenes = [scene('a', 'Intro'), scene('b', 'Talk')]
+  let tab
+  const camFrame = {
+    applyPreset(id) {
+      tab.send({ type: 'state', state: stateWith(scenes, { activePresetId: id }) })
+      throw new Error('bad argument')
+    },
+  }
+  tab = createScenesTabState({ camFrame, now: () => 1_000 })
+  tab.send({ type: 'state', state: stateWith(scenes, { activePresetId: 'a' }) })
+  assert.throws(() => tab.send({ type: 'apply', id: 'b' }), /bad argument/)
+  const next = tab.send({ type: 'state', state: stateWith([...scenes, scene('c', 'New')], { activePresetId: 'b' }) })
+  assert.ok(next.draw, 'the next state draws in its own step')
+  assert.equal(next.draw.model.items.length, 3)
+})
+
 test('a rename open on a Scene that main deleted closes', () => {
   const { tab } = tabWith()
   tab.send({ type: 'rename', id: 'b' })

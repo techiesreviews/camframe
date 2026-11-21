@@ -22,6 +22,11 @@ function element(tag, attributes = {}, children = []) {
 
 const icon = (name) => element('i', { class: `ph ph-${name}`, 'aria-hidden': 'true' })
 
+// A button's `data-act` is its tab state event; only these, so a button can never send an inner one.
+const BUTTON_ACTS = new Set([
+  'apply', 'rename', 'rename-ok', 'rename-cancel', 'delete', 'undo-delete', 'undo-change', 'save-open', 'save-ok', 'import', 'export',
+])
+
 function drain(endsAt, total, now) {
   return element('span', {
     class: 'scene-drain',
@@ -412,7 +417,7 @@ export function createScenesPanel({ root, camFrame, announce, closeSettings, now
       return
     }
     const button = event.target.closest('[data-act]')
-    if (!button || button.disabled) return
+    if (!button || button.disabled || !BUTTON_ACTS.has(button.dataset.act)) return
     send({ type: button.dataset.act, id: button.closest('[data-id]')?.dataset.id ?? '' })
   })
 

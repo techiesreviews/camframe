@@ -74,7 +74,7 @@ The active Scene (`activeSceneId` in the Scene session, `activePresetId` on the 
 - Inside the camera session: the active MediaStream, requested camera ID, monotonic request numbers that discard stale camera/device results, and the serialized Camera quality chain.
 - Inside Overlay interaction: chrome shown, interactive, the hide timer, and the activities (Full screen, settings open, onboarding open, dragging, framing, resizing, crop-dragging).
 - Inside the onboarding tour: open, step, reveal token, camera-settled/auto-offered flags, and the running demo with its snapshot, timers, and intervals. The view in `overlay.js` holds the highlighted target, focus-return element, and Web Animations.
-- In `overlay.js`: the rendered state, the crop-drag pointer, and notice timers. In `scenes-tab-state.js`: the rename or save in progress, the saved-check flash, the Import/Export result, input-method composition, the dragged Scene, and where focus goes next. In `scenes-panel.js`: only the timer for the next tick.
+- In `overlay.js`: the rendered state, the crop-drag pointer, and notice timers. In `scenes-tab-state.js`: the rename or save in progress, the saved-check flash, the Import/Export result, input-method composition, the dragged Scene, and where focus goes next. In `scenes-panel.js`: only the timer for the next tick and the rename field's text and mark as last drawn.
 - Live reduced-motion, forced-colors, and increased-contrast media queries reflected as Overlay data attributes.
 
 ## Startup sequence
