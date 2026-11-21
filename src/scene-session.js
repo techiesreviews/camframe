@@ -112,8 +112,8 @@ export function createSceneSession({
     applyScene: (id) => commit(sceneLibrary.applyScene(state(), id, context())),
     applySceneAt: (index) => commit(sceneLibrary.applySceneAt(state(), index, context())),
     cycleScene: () => commit(sceneLibrary.cycleScene(state(), context())),
-    // A new Scene in a full library is refused (`{ error: 'scene-limit' }`): nothing is stored and
-    // only its announcement reaches the adapter.
+    // A new Scene in a full library is refused: the refusal (`{ error: 'scene-limit', announce }`,
+    // no `settings`) reaches the adapter, which saves and broadcasts nothing.
     saveScene(name, id) {
       const { bounds, fullscreen = false } = geometry?.compactPlace() ?? {}
       const saved = sceneLibrary.saveScene(state(), { name, id, liveBounds: bounds, fullscreen: Boolean(fullscreen) })

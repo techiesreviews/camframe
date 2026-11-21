@@ -246,6 +246,20 @@ test('a seventh Scene is refused: the six Scenes stay and screen readers hear wh
   assert.equal(changes[0].result.announce, SCENE_LIMIT_MESSAGE)
 })
 
+test('a refused seventh Scene leaves the Undo window for the Active Scene open', () => {
+  const full = Array.from({ length: SCENE_LIMIT }, (_, index) => scene(`s${index}`, `Scene ${index}`))
+  const { session } = sessionWith({ scenes: full, settings: full[0].settings, activeSceneId: 's0' })
+  session.handChange({ borderWidth: 9 })
+  const undo = session.view().sceneUndo
+  assert.ok(undo)
+
+  session.saveScene('Seventh')
+
+  assert.deepEqual(session.view().sceneUndo, undo)
+  session.undoChange()
+  assert.deepEqual(session.state().settings.presets[0], full[0], 'Undo still puts the Scene back')
+})
+
 test('saving over a Scene by its id keeps the id and order', () => {
   const { session } = sessionWith({ scenes: [desk, talk], settings: { borderWidth: 12 } })
 
