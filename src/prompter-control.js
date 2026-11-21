@@ -127,7 +127,7 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
     commit(saved)
     const answer = {
       ok: true,
-      scene: sceneDetail(saved.scene, { smallSize: saved.settings.prompterSmallSize }),
+      scene: sceneDetail(saved.scene, saved.settings),
       replaced: saved.replaced,
       saved: {
         size: planned.size,
