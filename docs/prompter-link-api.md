@@ -10,7 +10,7 @@ The Prompter link is a public interface on this computer, not only the prompter'
 
 - A program that sends no `Origin`, the prompter site and any `http://localhost` or `http://127.0.0.1` page may use every request below.
 - A page that sends `Origin: null` (a `file://` copy, or a sandboxed frame on any web site) may send cues and read the Scene names, but not save or read the display layout.
-- It never accepts another computer, never changes the camera or look on its own (only by applying a saved Scene), never deletes, renames or reorders Scenes, and cannot hide or quit CamFrame. Turning the link off stops all of it.
+- It never accepts another computer, never changes the camera or look on its own (only by applying a saved Scene), never deletes, renames or reorders Scenes (a `replace` save takes the name as sent, so it may change how a matching name is written), and cannot hide or quit CamFrame. Turning the link off stops all of it.
 
 A change that narrows this is Lex's decision in a new ADR.
 
