@@ -32,6 +32,8 @@ use crate::prefs::Prefs;
 use crate::tray::{Tray, TrayCommand};
 #[path = "presentation.rs"]
 mod presentation;
+#[path = "scenes_panel.rs"]
+mod scenes_panel;
 #[path = "settings_panel.rs"]
 mod settings_panel;
 #[cfg(not(target_os = "macos"))]
@@ -182,6 +184,14 @@ pub struct BubbleOverlay {
     presentation: presentation::Presentation,
     _shortcuts: Option<crate::shortcuts::Shortcuts>,
     shortcut_errors: Vec<String>,
+    active_scene_id: String,
+    scene_edits: camframe_core::scenes::SceneEdits,
+    scene_input: gpui::Entity<crate::text_field::TextField>,
+    scene_rename: Option<String>,
+    scene_status: String,
+    scene_drag: Option<String>,
+    scene_focus: [FocusHandle; 6],
+    camera_notice: String,
 }
 
 impl BubbleOverlay {
@@ -204,10 +214,16 @@ impl BubbleOverlay {
             cx.notify();
         })
         .detach();
+        let scene_input = cx.new(|cx| crate::text_field::TextField::new(String::new(), "Scene name", cx));
+        cx.subscribe_in(&scene_input, window, |this, _, event: &crate::text_field::Submitted, window, cx| {
+            this.save_scene_name(&event.0, window, cx);
+        })
+        .detach();
 
         let slot = Arc::new(CameraSlot::default());
         *lock_unpoisoned(&slot.request) = crate::camera::CaptureRequest {
             device: settings.camera_id.clone(),
+            label: settings.camera_label.clone(),
             resolution: settings.overlay_resolution,
         };
         let (wake_tx, wake_rx) = async_channel::bounded::<()>(1);
@@ -248,6 +264,9 @@ impl BubbleOverlay {
                 None
             }
         };
+        if let Some(tray) = &tray {
+            tray.set_scenes(&settings.presets, "");
+        }
         cx.spawn_in(window, async move |entity, cx| {
             while let Ok(command) = tray_rx.recv().await {
                 if entity.update_in(cx, |this, window, cx| this.run_tray_command(command, window, cx)).is_err() {
@@ -292,6 +311,14 @@ impl BubbleOverlay {
             presentation: presentation::Presentation::default(),
             _shortcuts: shortcuts,
             shortcut_errors,
+            active_scene_id: String::new(),
+            scene_edits: camframe_core::scenes::SceneEdits::default(),
+            scene_input,
+            scene_rename: None,
+            scene_status: String::new(),
+            scene_drag: None,
+            scene_focus: std::array::from_fn(|_| cx.focus_handle()),
+            camera_notice: String::new(),
         }
     }
 
@@ -310,6 +337,15 @@ impl BubbleOverlay {
     }
 
     fn pull_camera_update(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let rejection = lock_unpoisoned(&self.slot.rejection).take();
+        if let Some((rejected, resolution, message)) = rejection {
+            self.camera_notice = message;
+            if self.settings.camera_id == rejected.device && self.settings.overlay_resolution == rejected.resolution {
+                self.settings.overlay_resolution = resolution;
+                self.sync_capture_view(window);
+                self.save_at = Some(self.now_ms() + POSITION_SAVE_DELAY_MS);
+            }
+        }
         if let Some(status) = lock_unpoisoned(&self.slot.status).take() {
             self.status = status;
         }
@@ -342,6 +378,7 @@ impl BubbleOverlay {
         *lock_unpoisoned(&self.slot.view) = Some(view);
         *lock_unpoisoned(&self.slot.request) = crate::camera::CaptureRequest {
             device: self.settings.camera_id.clone(),
+            label: self.settings.camera_label.clone(),
             resolution: self.settings.overlay_resolution,
         };
         *lock_unpoisoned(&self.slot.effect) = (self.settings.frame_effect
@@ -359,6 +396,12 @@ impl BubbleOverlay {
             return;
         }
         let now = self.now_ms();
+        if self.save_at.is_some_and(|at| now >= at) {
+            self.save_now();
+        }
+        if self.settings_tab == Some(SettingsTab::Scenes) {
+            cx.notify();
+        }
         self.tick_presentation(window, cx);
         self.track_position(window, now);
         let Some(cursor) = platform::cursor_position(window) else {
@@ -430,7 +473,15 @@ impl BubbleOverlay {
         let moved = self.last_origin.is_some_and(|last| last != origin);
         self.last_origin = Some(origin);
         if moved && !self.pinned_position && self.resize.is_none() {
+            let before = self.settings.clone();
             self.settings.position = Some(origin);
+            self.settings = self.scene_edits.follow(
+                &before,
+                self.settings.clone(),
+                &self.active_scene_id,
+                &serde_json::json!({"position":origin}),
+                now,
+            );
             self.save_at = Some(now + POSITION_SAVE_DELAY_MS);
         }
         if self.save_at.is_some_and(|at| now >= at) {
@@ -460,7 +511,15 @@ impl BubbleOverlay {
         if !self.pinned_position {
             next.position = Some(resize.origin);
         }
+        let before = self.settings.clone();
         self.settings = next;
+        self.settings = self.scene_edits.follow(
+            &before,
+            self.settings.clone(),
+            &self.active_scene_id,
+            &serde_json::json!({"size":self.settings.size,"position":self.settings.position}),
+            self.now_ms(),
+        );
         self.save_now();
         self.sync_capture_view(window);
         cx.notify();
@@ -468,21 +527,41 @@ impl BubbleOverlay {
 
     /// Changes the shape and keeps the window's centre where it was, as 0.9.0 does.
     fn set_shape(&mut self, shape: Shape, window: &mut Window, cx: &mut Context<Self>) {
-        if shape == self.settings.shape || self.resize.is_some() {
+        if (shape == self.settings.shape && !self.presentation.fullscreen) || self.resize.is_some() {
             return;
         }
         let (areas, primary) = work_areas(cx);
-        let current = rect_of(window.bounds());
+        let leaving_full = self.presentation.fullscreen;
+        let current = self
+            .presentation
+            .compact
+            .or(self.presentation.transition.map(|(_, to, _)| to))
+            .unwrap_or_else(|| rect_of(window.bounds()));
+        self.presentation.fullscreen = false;
+        self.presentation.compact = None;
+        self.presentation.transition = None;
         let mut base = geometry::compact_base_bounds(shape, self.settings.size, None, Some(current), primary, true);
         if !areas.is_empty() {
             base = geometry::on_screen_base(base, &areas, primary, self.settings.prompter_margin);
         }
-        platform::set_bounds(window, base);
+        if leaving_full {
+            self.move_to(base, window, cx);
+        } else {
+            platform::set_bounds(window, base);
+        }
         self.last_origin = Some(base.origin());
+        let before = self.settings.clone();
         self.settings.shape = shape;
         if !self.pinned_position {
             self.settings.position = Some(base.origin());
         }
+        self.settings = self.scene_edits.follow(
+            &before,
+            self.settings.clone(),
+            &self.active_scene_id,
+            &serde_json::json!({"shape":shape,"position":self.settings.position}),
+            self.now_ms(),
+        );
         self.save_now();
         self.sync_capture_view(window);
         cx.notify();
@@ -517,10 +596,16 @@ impl BubbleOverlay {
             }
             TrayCommand::Fullscreen => self.set_fullscreen(!self.presentation.fullscreen, window, cx),
             TrayCommand::Shape(shape) => {
-                self.set_fullscreen(false, window, cx);
                 self.set_shape(shape, window, cx);
             }
-            TrayCommand::Help | TrayCommand::CycleScene | TrayCommand::Scene(_) => {}
+            TrayCommand::CycleScene => {
+                let current = self.settings.presets.iter().position(|s| s.id == self.active_scene_id);
+                if !self.settings.presets.is_empty() {
+                    self.apply_scene_at(current.map_or(0, |i| (i + 1) % self.settings.presets.len()), window, cx);
+                }
+            }
+            TrayCommand::Scene(index) => self.apply_scene_at(index, window, cx),
+            TrayCommand::Help => {}
         }
     }
 
@@ -785,6 +870,11 @@ impl Render for BubbleOverlay {
             .on_action(cx.listener(|this, _: &ShapeLandscape, window, cx| this.set_shape(Shape::Landscape, window, cx)))
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
+                    if this.scene_rename.take().is_some() {
+                        this.scene_input.update(cx, |input, cx| input.set_text(String::new(), cx));
+                        cx.notify();
+                        return;
+                    }
                     if this.presentation.fullscreen {
                         this.set_fullscreen(false, window, cx);
                     }

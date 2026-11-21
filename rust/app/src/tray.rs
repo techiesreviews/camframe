@@ -23,24 +23,36 @@ pub use imp::Tray;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod imp {
     use super::TrayCommand;
-    use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+    use std::sync::{Arc, Mutex};
+    use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
     use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
     pub struct Tray {
         _icon: TrayIcon,
         show_camera: CheckMenuItem,
+        scenes_menu: Submenu,
+        scene_actions: Arc<Mutex<Vec<(MenuId, TrayCommand)>>>,
     }
 
     impl Tray {
         pub fn new(camera_shown: bool, commands: async_channel::Sender<TrayCommand>) -> anyhow::Result<Tray> {
+            let tray_commands = commands.clone();
+            tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+                if matches!(event, tray_icon::TrayIconEvent::DoubleClick { .. }) {
+                    let _ = tray_commands.try_send(TrayCommand::Controls);
+                }
+            }));
             let show_camera = CheckMenuItem::new("Show camera", true, camera_shown, None);
             let quit = MenuItem::new("Quit CamFrame", true, None);
             let menu = Menu::new();
+            let scenes_menu = Submenu::new("Scenes", true);
+            let scene_actions = Arc::new(Mutex::new(Vec::<(MenuId, TrayCommand)>::new()));
+            let handler_scenes = Arc::clone(&scene_actions);
             let controls = MenuItem::new("Camera controls", true, None);
             let fullscreen = MenuItem::new("Full screen", true, None);
             let help = MenuItem::new("Help & onboarding", true, None);
             let shapes = camframe_core::settings::Shape::ALL.map(|shape| MenuItem::new(shape.label(), true, None));
-            menu.append_items(&[&show_camera, &controls, &fullscreen])?;
+            menu.append_items(&[&show_camera, &controls, &fullscreen, &scenes_menu])?;
             for shape in &shapes {
                 menu.append(shape)?;
             }
@@ -61,6 +73,10 @@ mod imp {
                 } else if event.id == quit_id {
                     TrayCommand::Quit
                 } else if let Some((_, command)) = actions.iter().find(|(id, _)| *id == event.id) {
+                    *command
+                } else if let Some((_, command)) =
+                    crate::camera::lock_unpoisoned(&handler_scenes).iter().find(|(id, _)| *id == event.id)
+                {
                     *command
                 } else {
                     return;
@@ -86,12 +102,29 @@ mod imp {
                 .with_tooltip("CamFrame Rust")
                 .with_icon(Icon::from_rgba(pixels, 16, 16)?)
                 .build()?;
-            Ok(Tray { _icon: icon, show_camera })
+            Ok(Tray { _icon: icon, show_camera, scenes_menu, scene_actions })
         }
 
         /// Keeps the tick in step when the camera is shown or hidden some other way.
         pub fn set_camera_shown(&self, shown: bool) {
             self.show_camera.set_checked(shown);
+        }
+
+        pub fn set_scenes(&self, scenes: &[camframe_core::settings::Scene], active: &str) {
+            for item in self.scenes_menu.items() {
+                let _ = self.scenes_menu.remove(item.as_ref());
+            }
+            let mut actions = crate::camera::lock_unpoisoned(&self.scene_actions);
+            actions.clear();
+            for (i, scene) in scenes.iter().enumerate() {
+                let item = CheckMenuItem::new(&scene.name, true, scene.id == active, None);
+                if self.scenes_menu.append(&item).is_ok() {
+                    actions.push((item.id().clone(), TrayCommand::Scene(i)));
+                }
+            }
+            if scenes.is_empty() {
+                let _ = self.scenes_menu.append(&MenuItem::new("No saved scenes", false, None));
+            }
         }
     }
 }
@@ -107,4 +140,5 @@ impl Tray {
     }
 
     pub fn set_camera_shown(&self, _shown: bool) {}
+    pub fn set_scenes(&self, _scenes: &[camframe_core::settings::Scene], _active: &str) {}
 }

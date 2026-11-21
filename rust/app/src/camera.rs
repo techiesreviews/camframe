@@ -88,11 +88,14 @@ pub struct CameraSlot {
     pub devices: Mutex<Vec<Device>>,
     pub effect: Mutex<Option<(camframe_core::settings::Shape, u32, u32, u32)>>,
     pub halo: Mutex<Option<BgraFrame>>,
+    inventory: Mutex<Option<Result<Vec<nokhwa::utils::CameraInfo>, String>>>,
+    pub rejection: Mutex<Option<(CaptureRequest, Resolution, String)>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct CaptureRequest {
     pub device: String,
+    pub label: String,
     pub resolution: Resolution,
 }
 
@@ -106,6 +109,11 @@ fn camera_label(name: &str, index: usize) -> String {
     if name.trim().is_empty() { format!("Camera {}", index + 1) } else { name.trim().into() }
 }
 
+fn device_id(info: &nokhwa::utils::CameraInfo) -> String {
+    let unique = info.misc();
+    if unique.is_empty() { info.index().as_string() } else { unique }
+}
+
 pub fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
@@ -113,6 +121,7 @@ pub fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 pub struct CameraWorker {
     stop: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
+    scan: Option<JoinHandle<()>>,
 }
 
 impl CameraWorker {
@@ -125,6 +134,33 @@ impl CameraWorker {
         *lock_unpoisoned(&slot.view) = Some(initial_view);
         let stop = Arc::new(AtomicBool::new(false));
         let stop_flag = Arc::clone(&stop);
+        let scan = if demo_pattern {
+            None
+        } else {
+            let stop = Arc::clone(&stop);
+            let slot = Arc::clone(&slot);
+            let wake = wake.clone();
+            Some(std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let result = nokhwa::query(ApiBackend::Auto).map_err(|error| classify_error(&error.to_string()));
+                    if let Ok(devices) = &result {
+                        *lock_unpoisoned(&slot.devices) = devices
+                            .iter()
+                            .enumerate()
+                            .map(|(i, info)| Device { id: device_id(info), label: camera_label(&info.human_name(), i) })
+                            .collect();
+                    }
+                    *lock_unpoisoned(&slot.inventory) = Some(result);
+                    let _ = wake.try_send(());
+                    for _ in 0..20 {
+                        if stop.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                }
+            }))
+        };
         let handle = std::thread::Builder::new()
             .name("camframe-capture".into())
             .spawn(move || {
@@ -137,7 +173,7 @@ impl CameraWorker {
                 }
             })
             .ok();
-        Self { stop, handle }
+        Self { stop, handle, scan }
     }
 }
 
@@ -146,6 +182,9 @@ impl Drop for CameraWorker {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
+        }
+        if let Some(scan) = self.scan.take() {
+            let _ = scan.join();
         }
     }
 }
@@ -207,8 +246,8 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
     let mut applied: Option<CaptureRequest> = None;
     let mut pending = lock_unpoisoned(&slot.request).clone();
     let mut changed_at = Instant::now() - Duration::from_secs(1);
-    let mut scan_at = Instant::now();
     let mut devices = Vec::new();
+    let mut current_device = String::new();
     let mut failures = FailureCount::default();
     while !stop.load(Ordering::Relaxed) {
         let wanted = lock_unpoisoned(&slot.request).clone();
@@ -216,29 +255,20 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
             pending = wanted;
             changed_at = Instant::now();
         }
-        if Instant::now() >= scan_at {
-            if let Ok(list) = nokhwa::query(ApiBackend::Auto) {
+        if let Some(scan) = lock_unpoisoned(&slot.inventory).take() {
+            if let Ok(list) = scan {
                 devices = list;
-                let next = devices
-                    .iter()
-                    .enumerate()
-                    .map(|(i, info)| Device {
-                        id: info.index().as_string(),
-                        label: camera_label(&info.human_name(), i),
-                    })
-                    .collect();
-                *lock_unpoisoned(&slot.devices) = next;
-                let _ = wake.try_send(());
-                if let Some(current) = &camera
-                    && !devices.iter().any(|info| info.index() == current.index())
-                {
+                if camera.is_some() && !devices.iter().any(|info| device_id(info) == current_device) {
                     if let Some(mut disconnected) = camera.take() {
                         let _ = disconnected.stop_stream();
                     }
                     applied = None;
                 }
+            } else if camera.is_none()
+                && let Err(message) = scan
+            {
+                camera_unavailable(slot, wake, message);
             }
-            scan_at = Instant::now() + Duration::from_secs(2);
         }
         if changed_at.elapsed() >= Duration::from_millis(200) && applied.as_ref() != Some(&pending) {
             if let Some(current) = camera.as_mut()
@@ -258,28 +288,41 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
                         &DECODABLE_FORMATS,
                     ));
                     let _ = current.open_stream();
-                    publish_status(
-                        slot,
-                        wake,
-                        CameraStatus::Unavailable(format!(
-                            "{} The previous quality is kept.",
-                            classify_error(&error.to_string())
-                        )),
-                    );
+                    let old_resolution = applied.as_ref().map_or(Resolution::R720, |old| old.resolution);
+                    *lock_unpoisoned(&slot.rejection) = Some((
+                        pending.clone(),
+                        old_resolution,
+                        format!("{} The previous quality is kept.", classify_error(&error.to_string())),
+                    ));
+                    publish_status(slot, wake, CameraStatus::Live);
                 }
                 applied = Some(pending.clone());
             } else {
                 if let Some(mut previous) = camera.take() {
                     let _ = previous.stop_stream();
                 }
-                let info = devices.iter().find(|info| info.index().as_string() == pending.device).or(devices.first());
+                let info = devices
+                    .iter()
+                    .find(|info| device_id(info) == pending.device)
+                    .or_else(|| {
+                        devices.iter().find(|info| {
+                            !pending.label.is_empty()
+                                && pending.label != "Default camera"
+                                && info.human_name() == pending.label
+                        })
+                    })
+                    .or(devices.first());
                 if let Some(info) = info {
-                    match open_preferred_camera(info.index().clone(), pending.resolution).and_then(|mut next| {
+                    let unique = device_id(info);
+                    let index =
+                        if info.misc().is_empty() { info.index().clone() } else { CameraIndex::String(unique.clone()) };
+                    match open_preferred_camera(index, pending.resolution).and_then(|mut next| {
                         next.open_stream().map_err(|error| classify_error(&error.to_string()))?;
                         Ok(next)
                     }) {
                         Ok(next) => {
                             camera = Some(next);
+                            current_device = unique;
                             applied = Some(pending.clone());
                             failures.reset();
                             publish_status(slot, wake, CameraStatus::Live);

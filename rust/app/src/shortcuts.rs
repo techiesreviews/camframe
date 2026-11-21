@@ -21,7 +21,7 @@ impl Shortcuts {
         let mut mods = Modifiers::SHIFT;
         #[cfg(target_os = "macos")]
         {
-            mods |= Modifiers::SUPER;
+            mods |= Modifiers::META;
         }
         #[cfg(target_os = "windows")]
         {

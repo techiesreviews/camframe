@@ -7,13 +7,15 @@ use serde_json::{Value, json};
 pub(super) enum SettingsTab {
     Camera,
     Style,
+    Scenes,
 }
 
 #[derive(Clone)]
-enum Control {
+pub(super) enum Control {
     Patch(Value),
     Tab(SettingsTab),
     Close,
+    Scene(super::scenes_panel::SceneAction),
 }
 
 // CamFrame 0.9.0's dark surface tokens.
@@ -26,17 +28,27 @@ impl BubbleOverlay {
     pub(super) fn patch_settings(&mut self, patch: Value, window: &mut Window, cx: &mut Context<Self>) {
         let previous = self.settings.clone();
         self.settings = self.settings.with_patch(&patch);
+        self.settings =
+            self.scene_edits.follow(&previous, self.settings.clone(), &self.active_scene_id, &patch, self.now_ms());
+        if patch.get("effectColor").is_some() {
+            let color = self.settings.effect_color.clone();
+            self.color_input.update(cx, |input, cx| input.set_text(color, cx));
+        }
         if previous.always_on_top != self.settings.always_on_top {
             platform::set_always_on_top(window, self.settings.always_on_top);
         }
         self.sync_capture_view(window);
-        self.save_now();
+        self.save_at = Some(self.now_ms() + POSITION_SAVE_DELAY_MS);
         cx.notify();
     }
 
     pub(super) fn toggle_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.settings_tab = if self.settings_tab.is_some() { None } else { Some(SettingsTab::Camera) };
         self.framing = false;
+        if self.presentation.fullscreen {
+            cx.notify();
+            return;
+        }
         let mut bounds = rect_of(window.bounds());
         let (width, height) = overlay_dimensions_for(self.settings.shape, self.size());
         bounds.width = i64::from(width);
@@ -53,10 +65,11 @@ impl BubbleOverlay {
                 cx.notify();
             }
             Control::Close => self.toggle_settings(window, cx),
+            Control::Scene(action) => self.run_scene_action(action.clone(), window, cx),
         }
     }
 
-    fn control(
+    pub(super) fn control(
         &self,
         id: String,
         label: String,
@@ -169,6 +182,9 @@ impl BubbleOverlay {
         let mut body = div().flex().flex_col().gap(px(10.0));
         if self.settings_tab == Some(SettingsTab::Camera) {
             body = body.child("Camera");
+            if !self.camera_notice.is_empty() {
+                body = body.child(self.camera_notice.clone());
+            }
             for error in &self.shortcut_errors {
                 body = body.child(format!("Shortcut unavailable: {error}"));
             }
@@ -212,6 +228,8 @@ impl BubbleOverlay {
                     cx,
                 ));
             }
+        } else if self.settings_tab == Some(SettingsTab::Scenes) {
+            body = self.render_scenes(cx);
         } else {
             body = body.child("Frame effect");
             for (effect, name) in
@@ -283,6 +301,7 @@ impl BubbleOverlay {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .gap(px(4.0))
                     .child(self.control(
                         "camera-tab".into(),
@@ -296,6 +315,13 @@ impl BubbleOverlay {
                         "Style".into(),
                         self.settings_tab == Some(SettingsTab::Style),
                         Control::Tab(SettingsTab::Style),
+                        cx,
+                    ))
+                    .child(self.control(
+                        "scenes-tab".into(),
+                        "Scenes".into(),
+                        self.settings_tab == Some(SettingsTab::Scenes),
+                        Control::Tab(SettingsTab::Scenes),
                         cx,
                     ))
                     .child(self.control("close-settings".into(), "Close".into(), false, Control::Close, cx)),

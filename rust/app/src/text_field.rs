@@ -28,6 +28,12 @@ fn byte_offset(text: &str, utf16: usize) -> usize {
 }
 
 impl TextField {
+    pub fn set_text(&mut self, text: String, cx: &mut Context<Self>) {
+        self.text = text;
+        self.selection = 0..self.text.len();
+        self.marked = None;
+        cx.notify();
+    }
     pub fn new(text: String, label: &'static str, cx: &mut Context<Self>) -> Self {
         let end = text.len();
         Self { text, label, focus: cx.focus_handle(), selection: 0..end, marked: None, line: None, bounds: None }
