@@ -151,3 +151,12 @@ Not yet seen by hand on Windows (row W-37): unplugging or undocking a display wh
 
 **Status:** Open, 2026-11-20 (found while testing Orbit TOOLS-295 B1; older than that change).
 **Evidence:** Real-Electron run on Linux through X11 (`docs/verification/runs/2026-11-20-compact-place-one-owner.md`): a Shape change sent within about 0.3 s of a Scene going on camera is stored in Preferences and the active Scene, but `apply()` skips the bounds while the move animation runs and nothing places the window again when it ends, so the window keeps the old Shape's bounds until the next placement. The place is not lost: the Scene session asks no place then (`compactPlaceAfter` returns nothing during a move), so the stored place stays the Scene's.
+
+## KG-19 — 0.9.0 was released without Windows hand checks, and its Portable is smaller for an unknown reason
+
+**Status:** Open, 2026-11-21 (Orbit TOOLS-295; Lex chose "Release now (Recommended)" instead of trying a build first: `verification/runs/2026-11-21-v0.9.0-go.md`).
+**Evidence:** Automated only: `npm test` (481 tests on each tag-build job), the Windows Electron smoke in CI and the read-only version check of the published files (`verification/runs/2026-11-21-v0.9.0-post-tag.md`). No published file was opened.
+
+Not yet seen by hand on Windows: the Setup and Portable launch; the update from 0.8.0 keeping saved settings and Scenes; settings kept after a restart with the one-step save (ADR 0039); Scene tiles for a Scene saved on a missing screen (B2); a seventh Scene refused, with its screen-reader message (B3); the Compact place after a Shape or size change (B1).
+
+The published Portable (`CamFrame-Portable-0.9.0-Windows-x64.exe`) is 101385890 bytes, about 10 MB smaller than 0.8.0's (111524428), while the Setup is about the same size. PR #61 moved Electron from 44.7.0 to 44.11.3 and Electron Builder from 26.17.0 to 26.18.1; either may pack the Portable differently. Its contents were not inspected (ASAR, locales, fonts), so the cause is unknown.
