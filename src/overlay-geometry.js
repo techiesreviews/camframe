@@ -320,11 +320,14 @@ export function createOverlayGeometry({
   }
 
   // The settings' Compact window bounds, never off screen: a saved place that would be lost is
-  // replaced (and reported, so Preferences store where the Overlay really is).
+  // replaced. `report` tells Preferences where the Overlay really is; callers run it once the
+  // window has its new bounds (or its move has started), so main's broadcast reads them.
   function compactWindowBounds({ keepCenter }) {
     const { base, healed } = compactBasesFor(settings(), { keepCenter })
-    if (healed !== base) onCompactPositionChanged({ x: healed.x, y: healed.y })
-    return windowFromBase(healed)
+    const report = () => {
+      if (healed !== base) onCompactPositionChanged({ x: healed.x, y: healed.y })
+    }
+    return { bounds: windowFromBase(healed), report }
   }
 
   // Brings a lost Overlay back (TOOLS-156): a Compact window not substantially on a connected
@@ -443,7 +446,9 @@ export function createOverlayGeometry({
   function apply({ keepCenter = true, updateBounds = true } = {}) {
     if (!alive()) return
     if (updateBounds && !fullscreen && !animation) {
-      window.setBounds(compactWindowBounds({ keepCenter }))
+      const { bounds, report } = compactWindowBounds({ keepCenter })
+      window.setBounds(bounds)
+      report()
     }
     applyZOrder()
     if (settings().overlayVisible) {
@@ -516,12 +521,13 @@ export function createOverlayGeometry({
       apply({ keepCenter: false })
       return
     }
-    const target = base
-      ? windowFromBase(onScreen({ ...base, ...overlayDimensionsFor(settings()) }))
+    const { bounds: target, report } = base
+      ? { bounds: windowFromBase(onScreen({ ...base, ...overlayDimensionsFor(settings()) })), report: () => {} }
       : compactWindowBounds({ keepCenter: false })
     applyZOrder()
     window.showInactive()
     animateTo(target)
+    report()
   }
 
   applyZOrder()
@@ -561,8 +567,8 @@ export function createOverlayGeometry({
       }
       const base = baseFromWindow(window.getBounds())
       reserveOpen = false
-      onCompactPositionChanged({ x: base.x, y: base.y })
       window.setBounds({ ...base, ...overlayDimensionsFor(settings()) })
+      onCompactPositionChanged({ x: base.x, y: base.y })
       return 0
     },
 
