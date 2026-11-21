@@ -260,6 +260,8 @@ test('Scene tiles are sent after the window starts moving to the display it is h
   // A Prompter request: the control moves the window, then main sends the tiles again.
   assert.match(mainSource, /const thenSendTiles = \(handle\) => \(request\) => \{\s*const answer = handle\(request\)\s*emitState\(\)/)
   assert.match(mainSource, /applyCue: thenSendTiles\(prompterControl\.applyCue\),\s*saveScene: thenSendTiles\(prompterControl\.saveScene\),/)
+  // A display plugged in or out: the tiles are sent again for the displays there are now.
+  assert.match(mainSource, /screen\.on\(event, \(\) => \{\s*overlayGeometry\?\.ensureOnScreen\(\)\s*emitState\(\)\s*\}\)/)
 })
 
 test('the toolbar Prompter link button turns the link on and off', () => {
