@@ -6,6 +6,7 @@ import { OVERLAY_BOUNDS_TRANSITION_MS, compactBaseBounds, createOverlayGeometry 
 import { PROMPTER_LINK_HOST, createPrompterLink } from '../src/prompter-link.js'
 import { createPrompterControl } from '../src/prompter-control.js'
 import * as sceneLibrary from '../src/scenes.js'
+import { sceneDisplays } from '../src/layout-request.js'
 
 // The Prompter link end to end in Node: the real HTTP endpoint, the real control, Scene library
 // and Overlay geometry, with a fake window, screen and clock in place of Electron.
@@ -400,6 +401,28 @@ test('with no stored position, Full screen then a bare "small" goes back where t
   assert.equal(after.view.mode, 'compact')
   assert.deepEqual(after.view.window, before.window)
   assert.equal(after.activeScene, 'Live small corner', 'same size and place keeps the Active Scene')
+})
+
+test('while a Scene moves the Overlay to a smaller display, the tiles already show the size layout Scenes open at there', async (t) => {
+  const laptop = { bounds: { x: 1920, y: 0, width: 1280, height: 720 }, workArea: { x: 1920, y: 0, width: 1280, height: 680 } }
+  const live = await harness(t, { extraDisplays: [laptop] })
+  assert.equal((await live.saveScene({ name: 'Big right', size: 640, position: 'right' })).status, 200)
+  live.state.settings = sanitizeSettings({
+    ...live.state.settings,
+    presets: [
+      ...live.state.settings.presets,
+      { id: 'preset-laptop', name: 'Laptop', settings: { size: 288, shape: 'circle', position: { x: 2100, y: 100 } } },
+    ],
+  })
+  assert.equal((await live.cue({ scene: 'Laptop' })).status, 200)
+  // Mid-move, as main builds the tiles right after the move starts.
+  const displayAt = (point) => (point.x >= 1920 ? laptop : { bounds: { x: 0, y: 0, width: 1920, height: 1080 } }).bounds
+  const previews = sceneLibrary.scenePreviews(live.state.settings, { ...sceneDisplays(live.geometry), displayAt })
+  const big = live.state.settings.presets.find((scene) => scene.name === 'Big right')
+  live.settle()
+  const opened = (await live.cue({ scene: 'Big right' })).body.layout
+  assert.ok(opened.size < 640)
+  assert.equal(previews.scenes[big.id].size, opened.size)
 })
 
 test('in Full screen, a bare "small" after a tray apply of a Scene from another display returns to that display', async (t) => {

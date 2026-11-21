@@ -145,8 +145,10 @@ function compactPlaceReached(position) {
 
 // Broadcasts and saves what the Scene session stored. A resize skips rebuilding the tray menu (a
 // corner drag reports a size every frame). A Scene put on camera moves the window to it, unless the
-// caller moves the window itself (the Prompter link).
+// caller moves the window itself (the Prompter link). The move starts before the broadcast, so the
+// tiles are fitted to the display the window is heading to (`currentWorkArea()` reads the move's target).
 function sceneSessionChanged(result, { resizing, placedByCaller = false }) {
+  if (result.appliedScene && !placedByCaller) overlayGeometry?.showScene()
   if (result.settings) {
     emitState()
     if (!resizing) setTrayMenu()
@@ -154,7 +156,6 @@ function sceneSessionChanged(result, { resizing, placedByCaller = false }) {
   }
   if (result.notice) showPresentationNotice(result.notice)
   if (result.announce) announceScene(result.announce)
-  if (result.appliedScene && !placedByCaller) overlayGeometry?.showScene()
 }
 
 // A layout Scene fits the display the Overlay is on now, or the display its saved point is on; an
@@ -415,10 +416,17 @@ app.whenReady().then(() => {
     commit: (result) => sceneSession.commit(result, { placedByCaller: true }),
     version: () => app.getVersion(),
   })
+  // The Prompter link moves the window after its commit, so the tiles are sent again once the window
+  // is heading to its new display.
+  const thenSendTiles = (handle) => (request) => {
+    const answer = handle(request)
+    emitState()
+    return answer
+  }
   prompterLink = createPrompterLink({
     status: prompterControl.status,
-    applyCue: prompterControl.applyCue,
-    saveScene: prompterControl.saveScene,
+    applyCue: thenSendTiles(prompterControl.applyCue),
+    saveScene: thenSendTiles(prompterControl.saveScene),
     setSmallSize: prompterControl.setSmallSize,
     onState(state) {
       prompterLinkStatus = state

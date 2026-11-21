@@ -252,6 +252,16 @@ test('Scene tiles are fitted to the same displays as applying a Scene (TOOLS-295
   assert.match(mainSource, /function previewContext\(\) \{\s*if \(!overlayGeometry\) return undefined\s*return \{\s*\.\.\.sceneDisplays\(overlayGeometry\),/)
 })
 
+test('Scene tiles are sent after the window starts moving to the display it is heading to (TOOLS-295 B2)', () => {
+  // An applied Scene: the move starts before the broadcast.
+  const changed = mainSource.match(/function sceneSessionChanged\([\s\S]*?\n\}/)?.[0] ?? ''
+  const move = changed.indexOf('overlayGeometry?.showScene()')
+  assert.ok(move >= 0 && move < changed.indexOf('emitState()'))
+  // A Prompter request: the control moves the window, then main sends the tiles again.
+  assert.match(mainSource, /const thenSendTiles = \(handle\) => \(request\) => \{\s*const answer = handle\(request\)\s*emitState\(\)/)
+  assert.match(mainSource, /applyCue: thenSendTiles\(prompterControl\.applyCue\),\s*saveScene: thenSendTiles\(prompterControl\.saveScene\),/)
+})
+
 test('the toolbar Prompter link button turns the link on and off', () => {
   const toolbar = overlayHtml.match(/<nav class="hover-toolbar"[\s\S]*?<\/nav>/)?.[0] ?? ''
   const buttons = [...toolbar.matchAll(/<button type="button" id="([a-z-]+)"/g)].map((match) => match[1])
