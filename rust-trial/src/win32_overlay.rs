@@ -21,7 +21,7 @@ use gpui::Window;
 #[cfg(target_os = "windows")]
 pub fn configure_transparent_overlay(window: &Window, position: Option<(i32, i32)>) -> Result<(), String> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use windows::Win32::Foundation::{BOOL, HWND};
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Dwm::{
         DWM_WINDOW_CORNER_PREFERENCE, DWMNCRP_DISABLED, DWMSBT_NONE, DWMWCP_DONOTROUND,
         DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_NCRENDERING_POLICY,
@@ -34,10 +34,9 @@ pub fn configure_transparent_overlay(window: &Window, position: Option<(i32, i32
         WS_CAPTION, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_DLGFRAME, WS_EX_NOREDIRECTIONBITMAP,
         WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
     };
-    use windows::core::PCSTR;
+    use windows::core::{BOOL, PCSTR};
 
-    let raw = window
-        .window_handle()
+    let raw = HasWindowHandle::window_handle(window)
         .map_err(|e| format!("failed to get raw window handle: {e}"))?
         .as_raw();
     let RawWindowHandle::Win32(win32) = raw else {

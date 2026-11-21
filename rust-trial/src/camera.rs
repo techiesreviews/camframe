@@ -228,7 +228,10 @@ fn open_preferred_camera(index: CameraIndex) -> Result<Camera, String> {
     if let Ok(formats) = camera.compatible_camera_formats()
         && let Some(best) = pick_best_format(&formats)
     {
-        let _ = camera.set_camera_format(best);
+        let exact = RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
+            RequestedFormatType::Exact(best),
+        );
+        let _ = camera.set_camera_requset(exact);
     }
 
     Ok(camera)
