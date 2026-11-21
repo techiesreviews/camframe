@@ -145,7 +145,9 @@ const qaBridge = isQaPreview
           if (status.prompterLinkStatus) applyState({ ...state, ...status })
         },
         completeOnboarding: () => qaScenes.session.record({ completedOnboardingVersion: CURRENT_ONBOARDING_VERSION }),
-        savePreset: (name, id) => qaScenes.session.saveScene(name, id),
+        savePreset: (name, id) => {
+          qaScenes.session.saveScene(name, id)
+        },
         applyPreset: (id) => qaScenes.session.applyScene(id),
         renamePreset: (id, name) => {
           qaScenes.session.renameScene(id, name)

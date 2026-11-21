@@ -112,9 +112,13 @@ export function createSceneSession({
     applyScene: (id) => commit(sceneLibrary.applyScene(state(), id, context())),
     applySceneAt: (index) => commit(sceneLibrary.applySceneAt(state(), index, context())),
     cycleScene: () => commit(sceneLibrary.cycleScene(state(), context())),
+    // A new Scene in a full library is refused (`{ error: 'scene-limit' }`): nothing is stored and
+    // only its announcement reaches the adapter.
     saveScene(name, id) {
       const { bounds, fullscreen = false } = geometry?.compactPlace() ?? {}
-      commit(sceneLibrary.saveScene(state(), { name, id, liveBounds: bounds, fullscreen: Boolean(fullscreen) }))
+      const saved = sceneLibrary.saveScene(state(), { name, id, liveBounds: bounds, fullscreen: Boolean(fullscreen) })
+      commit(saved)
+      return saved
     },
     // `{ error: 'name-taken' }` when another Scene has the name; nothing is stored then.
     renameScene(id, name) {

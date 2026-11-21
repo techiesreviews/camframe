@@ -14,6 +14,9 @@ const SCENE_EXPORT_FORMAT = 'camframe-scenes'
 const SCENE_EXPORT_VERSION = 1
 export const SCENE_IMPORT_ERROR = 'That file is not a valid CamFrame scene export.'
 export const NO_SCENES_NOTICE = 'No saved scenes'
+// Read to screen readers when a new Scene is refused because the library is full (B3); the Scenes
+// tab already shows Full on the save tile, so nothing is drawn.
+export const SCENE_LIMIT_MESSAGE = `Not saved: CamFrame keeps ${SCENE_LIMIT} Scenes. Delete one to save a new one.`
 
 const defaultSceneId = () => `preset-${Date.now().toString(36)}`
 // Scene names match without regard to case, to composed versus decomposed accents, or to joiners,
@@ -197,10 +200,12 @@ export function saveScene(
   const existing =
     live.presets.find((scene) => scene.id === requestedId) ??
     live.presets.find((scene) => sameName(scene.name, name))
+  // A full library refuses a new Scene and stores nothing; it never drops one to make room (B3).
+  if (!existing && live.presets.length >= SCENE_LIMIT) return { error: 'scene-limit', announce: SCENE_LIMIT_MESSAGE }
   const scene = { id: existing?.id ?? createId(), name, settings: settingsForPreset(live) }
   const scenes = existing
     ? live.presets.map((candidate) => (candidate.id === scene.id ? scene : candidate))
-    : [...live.presets.slice(-(SCENE_LIMIT - 1)), scene]
+    : [...live.presets, scene]
   return {
     settings: withScenes(live, scenes),
     activeSceneId: scene.id,

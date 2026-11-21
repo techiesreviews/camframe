@@ -1,7 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { SCENE_LIMIT, overlayDimensionsFor, sanitizeSettings, settingsForPreset } from '../src/settings.js'
-import { NO_SCENES_NOTICE, SCENE_DELETE_UNDO_MS, SCENE_IMPORT_ERROR, SCENE_UNDO_MS, patchSettings } from '../src/scenes.js'
+import {
+  NO_SCENES_NOTICE,
+  SCENE_DELETE_UNDO_MS,
+  SCENE_IMPORT_ERROR,
+  SCENE_LIMIT_MESSAGE,
+  SCENE_UNDO_MS,
+  patchSettings,
+} from '../src/scenes.js'
 import { createSceneSession } from '../src/scene-session.js'
 
 const WORK_AREA = Object.freeze({ x: 0, y: 0, width: 1920, height: 1040 })
@@ -222,6 +229,21 @@ test('saving remembers where the camera is now, except from Full screen', () => 
   })
   full.session.saveScene('Talk')
   assert.deepEqual(full.session.state().settings.presets[0].settings.position, { x: 10, y: 20 })
+})
+
+test('a seventh Scene is refused: the six Scenes stay and screen readers hear why', () => {
+  const full = Array.from({ length: SCENE_LIMIT }, (_, index) => scene(`s${index}`, `Scene ${index}`, { size: 200 + index }))
+  const { session, changes } = sessionWith({ scenes: full, settings: full[3].settings, activeSceneId: 's3' })
+  const before = structuredClone(session.state())
+
+  const result = session.saveScene('Seventh')
+
+  assert.equal(result.error, 'scene-limit')
+  assert.deepEqual(session.state(), before, 'nothing is stored: same Scenes, same order, same Active Scene')
+  assert.equal(session.view().sceneSaved, null, 'no Scene counts as saved')
+  assert.equal(changes.length, 1)
+  assert.equal(changes[0].result.settings, undefined, 'the adapter saves and broadcasts nothing')
+  assert.equal(changes[0].result.announce, SCENE_LIMIT_MESSAGE)
 })
 
 test('saving over a Scene by its id keeps the id and order', () => {

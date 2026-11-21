@@ -361,7 +361,9 @@ function registerIpc() {
       reportAccessibilityPreferences: ({ reducedMotion }) => {
         overlayGeometry?.setReducedMotion(reducedMotion)
       },
-      savePreset: (name, id) => sceneSession.saveScene(name, id),
+      savePreset: (name, id) => {
+        sceneSession.saveScene(name, id)
+      },
       applyPreset: (id) => sceneSession.applyScene(id),
       renamePreset: (id, name) => {
         sceneSession.renameScene(id, name)
