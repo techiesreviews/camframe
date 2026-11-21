@@ -91,7 +91,7 @@ test('every Scenes tab button reaches a tab state handler', () => {
   const drawn = new Set([...panel.matchAll(/'data-act': '([^']+)'|(?:confirmButton|fileButton)\('([^']+)'/g)].map((match) => match[1] ?? match[2]))
   assert.ok(['rename-ok', 'import', 'export'].every((act) => drawn.has(act)))
   for (const act of drawn) assert.ok(allowed.includes(act), `${act} is drawn but not in BUTTON_ACTS, so its clicks are ignored`)
-  const handlers = read('scenes-tab-state.js')
+  const handlers = read('scenes-tab-state.js').split('\n  const handlers = {\n')[1].split('\n  }\n')[0]
   for (const act of allowed) assert.match(handlers, new RegExp(`\\n {4}('${act}'|${act}): `), `${act} has no tab state handler`)
 })
 
