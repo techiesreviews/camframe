@@ -2,6 +2,7 @@ import { DEFAULT_CAMERA_LABEL, createCameraSession } from './camera-session.js'
 import { createOverlayInteraction } from './overlay-interaction.js'
 import { DEFAULT_SETTINGS, SHAPES, STARTER_SCENES, dimensionsFor, sanitizeSettings } from './settings.js'
 import * as sceneLibrary from './scenes.js'
+import { createSceneSession } from './scene-session.js'
 import { createScenesPanel } from './scenes-panel.js'
 import {
   cameraFramingStyles,
@@ -95,10 +96,10 @@ function qaPrompterLinkStatus(patch) {
 const QA_DISPLAY = Object.freeze({ x: 0, y: 0, width: 1920, height: 1080 })
 const QA_WORK_AREA = Object.freeze({ x: 0, y: 0, width: 1920, height: 1040 })
 const qaScenes = {
-  edits: sceneLibrary.createSceneEdits(),
-  active: '',
-  context: { workArea: QA_WORK_AREA, workAreaAt: () => QA_WORK_AREA },
-  start() {
+  session: undefined,
+  context: { workArea: QA_WORK_AREA, workAreaAt: () => QA_WORK_AREA, workAreas: [QA_WORK_AREA] },
+  // `overrides` are Preferences the preview starts with on top of the picked Scenes.
+  start(overrides) {
     const extra = [
       { id: 'qa-interview', name: 'Interview', settings: { shape: 'landscape', size: 360, borderWidth: 4, position: { x: 60, y: 600 } } },
       { id: 'qa-demo', name: 'Demo corner', settings: { shape: 'rounded', size: 220, frameEffect: 'glow', position: { x: 40, y: 30 } } },
@@ -107,60 +108,54 @@ const qaScenes = {
     ]
     const pick = qaPreviewParams.get('scenes') ?? 'starter'
     const presets = pick === 'empty' ? [] : pick === 'full' ? [...STARTER_SCENES, ...extra] : STARTER_SCENES
-    const settings = sanitizeSettings({ ...DEFAULT_SETTINGS, presets })
-    this.active = presets.length ? presets[0].id : ''
-    const applied = this.active ? sceneLibrary.applyScene({ settings, activeSceneId: '' }, this.active, this.context) : undefined
-    return applied?.settings ?? settings
+    const settings = sanitizeSettings({ ...DEFAULT_SETTINGS, ...overrides, presets })
+    const first = presets[0]?.id ?? ''
+    const applied = first ? sceneLibrary.applyScene({ settings, activeSceneId: '' }, first, this.context) : undefined
+    this.session = createSceneSession({
+      settings: applied?.settings ?? settings,
+      activeSceneId: first,
+      // No window here, so no `compactPlaceAfter`: a Shape or size change keeps the stored place.
+      geometry: { sceneContext: () => this.context, compactPlace: () => ({}) },
+      onChange: (result) => {
+        if (result.settings) applyState({ ...this.state(), prompterLinkStatus: state.prompterLinkStatus })
+      },
+    })
+    return this.state()
   },
-  stateFor(settings) {
+  state() {
+    const settings = this.session.settings()
     return {
       ...settings,
-      activePresetId: this.active,
-      ...this.edits.view(this.active),
+      ...this.session.view(),
       scenePreviews: sceneLibrary.scenePreviews(settings, { ...this.context, displayAt: () => QA_DISPLAY }),
     }
   },
-  commit(result) {
-    if (!result?.settings) return
-    this.edits.track({ settings: state, activeSceneId: this.active }, result)
-    this.active = result.activeSceneId
-    applyState({ ...this.stateFor(result.settings), prompterLinkStatus: state.prompterLinkStatus })
-  },
-  library: () => ({ settings: sanitizeSettings(state), activeSceneId: qaScenes.active }),
 }
 const qaBridge = isQaPreview
   ? createBridgeFake({
       platform: navigator.userAgent.includes('Mac') ? 'darwin' : 'win32',
       overrides: {
-        getState: async () => ({
-          ...qaScenes.stateFor(qaScenes.start()),
-          completedOnboardingVersion:
-            qaPreviewParams.get('state') === 'onboarding' ? 0 : CURRENT_ONBOARDING_VERSION,
-        }),
+        getState: async () =>
+          qaScenes.start({
+            completedOnboardingVersion: qaPreviewParams.get('state') === 'onboarding' ? 0 : CURRENT_ONBOARDING_VERSION,
+          }),
         updateState: (patch, options) => {
           const status = qaPrompterLinkStatus(patch)
-          const next = sanitizeSettings({ ...state, ...patch })
-          qaScenes.commit(
-            options?.demo
-              ? { settings: next, activeSceneId: qaScenes.active }
-              : sceneLibrary.followLiveLook(qaScenes.library(), next, { keys: Object.keys(patch) }),
-          )
+          qaScenes.session.handChange(patch, { demo: Boolean(options?.demo) })
           if (status.prompterLinkStatus) applyState({ ...state, ...status })
         },
-        savePreset: (name, id) => qaScenes.commit(sceneLibrary.saveScene(qaScenes.library(), { name, id })),
-        applyPreset: (id) => qaScenes.commit(sceneLibrary.applyScene(qaScenes.library(), id, qaScenes.context)),
-        renamePreset: (id, name) => {
-          const renamed = sceneLibrary.renameScene(qaScenes.library(), id, name)
-          if (!renamed?.error) qaScenes.commit(renamed)
+        completeOnboarding: () => qaScenes.session.record({ completedOnboardingVersion: CURRENT_ONBOARDING_VERSION }),
+        savePreset: (name, id) => {
+          qaScenes.session.saveScene(name, id)
         },
-        deletePreset: (id) => qaScenes.commit(sceneLibrary.deleteScene(qaScenes.library(), id)),
-        reorderPreset: (id, offset) => qaScenes.commit(sceneLibrary.reorderScene(qaScenes.library(), id, offset)),
-        undoPresetChange: () =>
-          qaScenes.commit(
-            sceneLibrary.undoSceneChange(qaScenes.library(), qaScenes.edits.takeChange(qaScenes.active), qaScenes.context),
-          ),
-        undoPresetDelete: () =>
-          qaScenes.commit(sceneLibrary.restoreScene(qaScenes.library(), qaScenes.edits.takeDelete(), qaScenes.context)),
+        applyPreset: (id) => qaScenes.session.applyScene(id),
+        renamePreset: (id, name) => {
+          qaScenes.session.renameScene(id, name)
+        },
+        deletePreset: (id) => qaScenes.session.deleteScene(id),
+        reorderPreset: (id, offset) => qaScenes.session.reorderScene(id, offset),
+        undoPresetChange: () => qaScenes.session.undoChange(),
+        undoPresetDelete: () => qaScenes.session.undoDelete(),
         exportPresets: async () => ({ canceled: false, count: state.presets.length }),
         importPresets: async () =>
           qaPreviewParams.get('import') === 'bad'

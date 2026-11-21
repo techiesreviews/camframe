@@ -81,6 +81,18 @@ test('the Scenes tab holds only Scenes; Start at login, the shortcut list and th
   assert.match(overlaySource, /interaction\.controlsOpen &&\n {4}inlineSettings\.dataset\.activePanel === 'presets' &&\n {4}!typingIn\(event\.target\) &&\n {4}scenesPanel\.undo\(\)/)
   // The settings stay open while Scenes are applied, saved and deleted (ADR 0037).
   assert.doesNotMatch(read('scenes-panel.js'), /setControlsOpen|closeSettings\(\)\s*\n\s*camFrame/)
+  assert.doesNotMatch(read('scenes-tab-state.js'), /setControlsOpen|closeSettings\(\)/)
+})
+
+test('every Scenes tab button reaches a tab state handler', () => {
+  const panel = read('scenes-panel.js')
+  const allowed = [...panel.match(/const BUTTON_ACTS = new Set\(\[([^\]]+)\]\)/)[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
+  // Literal `data-act`s, plus the ones the confirm and file button helpers are called with.
+  const drawn = new Set([...panel.matchAll(/'data-act': '([^']+)'|(?:confirmButton|fileButton)\('([^']+)'/g)].map((match) => match[1] ?? match[2]))
+  assert.ok(['rename-ok', 'import', 'export'].every((act) => drawn.has(act)))
+  for (const act of drawn) assert.ok(allowed.includes(act), `${act} is drawn but not in BUTTON_ACTS, so its clicks are ignored`)
+  const handlers = read('scenes-tab-state.js').split('\n  const handlers = {\n')[1].split('\n  }\n')[0]
+  for (const act of allowed) assert.match(handlers, new RegExp(`\\n {4}('${act}'|${act}): `), `${act} has no tab state handler`)
 })
 
 test('the Scenes tab uses only Phosphor glyphs that the embedded font maps', () => {
@@ -229,15 +241,41 @@ test('high contrast preserves boundaries, selection, focus, and status without e
 })
 
 test('the Prompter link is opt-in through the toolbar button and closes with the app', () => {
-  assert.match(mainSource, /prompterLink\.setEnabled\(settings\.prompterLink\)/)
-  // A layout Scene from the tray, the cycle shortcut or a numbered shortcut plans on the live display.
-  assert.match(mainSource, /sceneLibrary\.applyScene\(sceneState\(\), id, sceneContext\(\)\)/)
-  assert.match(mainSource, /sceneLibrary\.cycleScene\(sceneState\(\), sceneContext\(\)\)/)
-  assert.match(mainSource, /sceneLibrary\.applySceneAt\(sceneState\(\), index, sceneContext\(\)\)/)
+  assert.match(mainSource, /prompterLink\.setEnabled\(settings\(\)\.prompterLink\)/)
+  // A layout Scene from the tray, the cycle shortcut or a numbered shortcut plans on the live display:
+  // the Scene session asks main's geometry port for it (test/scene-session.test.js).
+  assert.match(mainSource, /geometry: \{\s*sceneContext,/)
+  assert.match(mainSource, /click: \(\) => sceneSession\.applyScene\(preset\.id\)/)
+  assert.match(mainSource, /\(\) => sceneSession\.cycleScene\(\)/)
+  assert.match(mainSource, /\(\) => sceneSession\.applySceneAt\(index\)/)
   // Resizing by hand sets the small size (KG-14) and is saved into the active Scene (ADR 0037).
-  assert.match(mainSource, /onResize\(patch\) \{\s*commitState\(\s*sceneLibrary\.followLiveLook\(sceneState\(\), settingsAfterHandResize\(settings, patch\), \{ keys: \['size', 'position'\] \}\),\s*\{ tray: false \},\s*\)/)
-  assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\.prompterLink\)/)
+  assert.match(mainSource, /onResize\(patch\) \{\s*sceneSession\.handResize\(patch\)/)
+  // A Prompter link cue places the window itself, so main does not move it to the Scene again.
+  assert.match(mainSource, /commit: \(result\) => sceneSession\.commit\(result, \{ placedByCaller: true \}\)/)
+  // Every other Scene put on camera moves the window; a corner resize does not rebuild the tray.
+  assert.match(mainSource, /if \(result\.appliedScene && !placedByCaller\) overlayGeometry\?\.showScene\(\)/)
+  assert.match(mainSource, /if \(!resizing\) setTrayMenu\(\)/)
+  assert.match(mainSource, /if \(Object\.hasOwn\(patch, 'prompterLink'\)\) prompterLink\?\.setEnabled\(settings\(\)\.prompterLink\)/)
   assert.match(mainSource, /app\.on\('before-quit', \(\) => \{\n {2}app\.isQuitting = true\n {2}prompterLink\?\.close\(\)/)
+})
+
+test('Scene tiles are fitted to the same displays as applying a Scene (TOOLS-295 B2)', () => {
+  assert.match(mainSource, /function sceneContext\(\) \{\s*return sceneDisplays\(overlayGeometry\)/)
+  assert.match(mainSource, /function previewContext\(\) \{\s*if \(!overlayGeometry\) return undefined\s*return \{\s*\.\.\.sceneDisplays\(overlayGeometry\),/)
+})
+
+test('Scene tiles are sent after the window starts moving to the display it is heading to (TOOLS-295 B2)', () => {
+  // An applied Scene: the move starts before the broadcast.
+  const changed = mainSource.match(/function sceneSessionChanged\([\s\S]*?\n\}/)?.[0] ?? ''
+  const move = changed.indexOf('overlayGeometry?.showScene()')
+  assert.ok(move >= 0 && move < changed.indexOf('emitState()'))
+  // A Prompter request: the control moves the window, then main sends the tiles again.
+  assert.match(mainSource, /const thenSendTiles = \(handle\) => \(request\) => \{\s*const answer = handle\(request\)\s*emitState\(\)/)
+  assert.match(mainSource, /applyCue: thenSendTiles\(prompterControl\.applyCue\),\s*saveScene: thenSendTiles\(prompterControl\.saveScene\),/)
+  // A display plugged in or out: the tiles are sent again for the displays there are now.
+  assert.match(mainSource, /screen\.on\(event, \(\) => \{\s*overlayGeometry\?\.ensureOnScreen\(\)\s*emitState\(\)\s*\}\)/)
+  // A place the window reached by itself, such as the heal after a move whose display was unplugged.
+  assert.match(mainSource, /function compactPlaceReached\(position\) \{\s*sceneSession\.record\(\{ position \}\)\s*emitState\(\)/)
 })
 
 test('the toolbar Prompter link button turns the link on and off', () => {

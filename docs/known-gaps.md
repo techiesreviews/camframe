@@ -61,7 +61,7 @@ The current source packaged successfully as Windows unpacked, NSIS, and portable
 **Status:** Resolved in the unreleased working tree by ADR 0027.
 **Evidence:** Package/lockfile inspection, isolated clean dependency resolution, and packaging verification; final CI install pending.
 
-Electron, Electron Builder, Playwright Core, and Vite are exact direct dependencies. This prevents lockfile regeneration from silently crossing versions and selects Electron Builder 26.17.0 (newer than the 26.15.5 fix) instead of npm's broken 26.15.3 `latest` resolution on Windows. Continue recording exact resolved versions in every release verification run.
+Electron, Electron Builder, Playwright Core, and Vite are exact direct dependencies. This prevents lockfile regeneration from silently crossing versions and selects Electron Builder 26.18.1 (newer than the 26.15.5 fix; 26.17.0 until 2026-11-16) instead of npm's broken 26.15.3, which `latest` resolved to until npm moved it (it is 26.18.0 on 2026-11-16). Continue recording exact resolved versions in every release verification run.
 
 ## KG-08 — Global shortcut failures are silent
 
@@ -113,7 +113,7 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 **Evidence:** Automated: unit tests (cue, Scene and small-size checks; `planCompactLayout` on several displays; the whole large → small → relaunch flow through the real HTTP server with fake Electron pieces in `test/prompter-control.test.js`) and one real-Electron run on Linux (`docs/verification/runs/2026-11-04-prompter-layout-scenes.md`). Ships in 0.7.0 (the build Lex tried said 0.6.1 and no 0.7.0 file had been opened before the tag); Lex reported the six-step W-30 API 2 hand check on the PC he streams from as OK as a whole on 2026-11-06 ("All works"; result Inconclusive; step 4, whether a Scene name stays off the stream picture, is unknown; per-step observations, the optional second screen and side taskbar unknown; his separate retest of the silent Scene names on that PC reported "All is ok"; W-29 (a screen reader reads the Scene name), signing and notarization M-11 and M-12 are Not run and not accepted by name; the Mac file launches, the Windows installer launch and the package inspection are Not run and accepted by Lex's "yes"; `docs/verification/runs/2026-11-06-v0.7.0-go.md`).
 
 - Resizing the Overlay by hand sets the small size, also while a large layout is showing (holding a corner still does not). Then a later `"small"` and "Live small corner" restore that hand-picked size. The prompter can check `smallSize` in the status and reset it with `POST /camframe/small-size`.
-- Saving a seventh Scene from Inline settings still drops the oldest Scene, and importing past six still skips new names (KG-09 area). Only Prompter link saves refuse instead.
+- Importing past six still skips new names (KG-09 area). Saving a seventh Scene is refused everywhere since 2026-11-21 (TOOLS-295 B3): from Inline settings the save tile already shows Full, and a save that reaches the Scene library anyway (sent before a Prompter link save filled the last slot) stores nothing and is only announced to screen readers. In that rare case the name typed into the save form is gone and focus does not move to any Scene (accepted, TOOLS-295 B3 review).
 - Saving over a layout Scene from Inline settings, or changing the look by hand while it is on camera (autosave, ADR 0037), turns it into a snapshot Scene (it then applies its saved look again, and the status reports `kind: "snapshot"`).
 - A very large `margin` at a bottom place on a short display is not met in full (the window is kept on screen), and the cue answer still says `clamped: false`.
 - Resizing the Overlay by hand while a Scene is active leaves that Scene marked active (the tray tick and the status `activeScene`). Since ADR 0037 (2026-11-09) that is right: the resize is saved into the active Scene, so the camera matches it again.
@@ -123,11 +123,11 @@ Still to confirm by hand: Chrome's one-time Local Network Access prompt when htt
 ## KG-15 — The rebuild guide is behind the source
 
 **Status:** Open, 2026-11-06 (found in the 0.7.0 release review).
-**Evidence:** `docs/rebuild-guide.md` still says Preferences schema 12 and "schema-12 migration", has no reconstruction step for the Prompter link or `src/prompter-control.js`, and still lists "notices" for Scenes without ADR 0036. The Prompter link predates 0.7.0; `src/prompter-control.js` and schema 14 are new in 0.7.0, so 0.7.0 widened the gap. ADR 0037 (2026-11-09) widened it again: schema 15, the Scenes tab module `src/scenes-panel.js`, autosave and the Undo windows (`followLiveLook`, `createSceneEdits` in `src/scenes.js`) and the removed Start at login have no step there yet.
+**Evidence:** `docs/rebuild-guide.md` still says Preferences schema 12 and "schema-12 migration", has no reconstruction step for the Prompter link or `src/prompter-control.js`, and still lists "notices" for Scenes without ADR 0036. The Prompter link predates 0.7.0; `src/prompter-control.js` and schema 14 are new in 0.7.0, so 0.7.0 widened the gap. ADR 0037 (2026-11-09) widened it again: schema 15, the Scenes tab module `src/scenes-panel.js`, autosave and the Undo windows (`followLiveLook`, `createSceneEdits` in `src/scenes.js`) and the removed Start at login have no step there yet. TOOLS-295 B2 (2026-11-21) added `src/layout-request.js` (where and how big a Scene really opens, shared by applying a Scene and its tile), which has no step there either, and the Scenes tab job (2026-11-21) moved the tab's state into `src/scenes-tab-state.js`, also without a step.
 
 ## KG-16 — Scenes tab autosave and Undo lack Windows hand checks
 
-**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132); updated 2026-11-09 (ships in 0.8.0; Lex's eight plain hand-check steps on his Windows laptop, "1-8 ok", reported as a whole, so Inconclusive: `verification/runs/2026-11-09-v0.8.0-go.md`; the written rows below stay open).
+**Status:** Open, 2026-11-09 (ADR 0037, Orbit TOOLS-132); updated 2026-11-09 (ships in 0.8.0; Lex's eight plain hand-check steps on his Windows laptop, "1-8 ok", reported as a whole, so Inconclusive: `verification/runs/2026-11-09-v0.8.0-go.md`; again with the accessibility fixes of PR #56 in run 42629380293, with Save look by keyboard and a long name, "ok" as a whole; the written rows below stay open).
 **Evidence:** Automated: unit tests (`followLiveLook`, `createSceneEdits`, `restoreScene`, `undoSceneChange`, `scenePreviews`, the Scenes tab model, the schema-15 load fixtures) and a real-Electron run on Linux with Chromium's synthetic camera (`docs/verification/runs/2026-11-09-scenes-tab.md`): open the tab, apply, autosave a shape change, Undo, rename, Save look, delete and Ctrl+Z, Alt+arrow, list/grid, Escape, the Prompter link status and a cue by name, and the saved file. Browser screenshots of both views from `kit shots`.
 
 Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.md`):
@@ -136,7 +136,8 @@ Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.
 - Whether the tiles match the real screen on Lex's displays: the tile is a 16:9 screen, so on a display of another shape the camera's place is right as a share of the display but the screen around it is drawn 16:9.
 - Dragging Scenes into a new order in the transparent, always-on-top Overlay window.
 - That updating a PC where Start at login was on stops CamFrame starting at sign-in (the one-time unregister runs only in a packaged build).
-- Screen reader names for the tiles, the saved state and the delete announcement (NVDA or Narrator).
+- Screen reader names for the tiles, the saved state and the delete announcement (NVDA or Narrator), and that the Scene name field is not read again on each key (PR #56).
+- Typing a Scene name with an input method (Chinese, Japanese, Korean): the smoke only fakes composition events (PR #56).
 - A hand change can no longer be tried "outside" the active Scene: it is saved into it. Undo (10 s) or switching to another Scene first are the only ways back.
 
 ## KG-17 — The self-healing Overlay position lacks Windows hand checks
@@ -145,3 +146,8 @@ Not yet seen by hand on Windows (rows W-31 to W-36 in `docs/verification/README.
 **Evidence:** Automated: unit tests (`visibleShare`, `isOnScreen`, `onScreenBase`, `keepOnWorkArea`; the geometry on one and two displays, a display removed, a lower resolution and the Full screen exit; an exact Scene saved off screen; an old Preferences file with an off-screen place) and a real-Electron run on Linux through X11 (`docs/verification/runs/2026-11-09-overlay-on-screen.md`). The cause was confirmed on Lex's Windows laptop before the fix (a saved place off every display); the fix itself was seen on that laptop with manual build run 42617228120 (the window shows by itself, `verification/runs/2026-11-09-v0.8.0-go.md`); docking and undocking not yet.
 
 Not yet seen by hand on Windows (row W-37): unplugging or undocking a display while CamFrame runs and before it starts, resolution and scale changes, mixed scaling, and a main display that is not the leftmost. Whether Windows sends `display-metrics-changed` before or after it moves windows itself on undock is unknown; either way the check runs on every such event.
+
+## KG-18 — A Shape or size change during a Scene's move animation leaves the window behind
+
+**Status:** Open, 2026-11-20 (found while testing Orbit TOOLS-295 B1; older than that change).
+**Evidence:** Real-Electron run on Linux through X11 (`docs/verification/runs/2026-11-20-compact-place-one-owner.md`): a Shape change sent within about 0.3 s of a Scene going on camera is stored in Preferences and the active Scene, but `apply()` skips the bounds while the move animation runs and nothing places the window again when it ends, so the window keeps the old Shape's bounds until the next placement. The place is not lost: the Scene session asks no place then (`compactPlaceAfter` returns nothing during a move), so the stored place stays the Scene's.

@@ -1,19 +1,6 @@
-import {
-  OVERLAY_CHROME,
-  PRESET_SETTING_KEYS,
-  SCENE_LIMIT,
-  overlayDimensionsFor,
-  sanitizeSettings,
-  settingsForPreset,
-} from './settings.js'
-import {
-  cameraRectFor,
-  compactBaseBounds,
-  isOnScreen,
-  keepInside,
-  keepOnWorkArea,
-  planCompactLayout,
-} from './overlay-geometry.js'
+import { PRESET_SETTING_KEYS, SCENE_LIMIT, overlayDimensionsFor, sanitizeSettings, settingsForPreset } from './settings.js'
+import { cameraRectFor, compactBaseBounds } from './overlay-geometry.js'
+import { resolveLayoutRequest, sceneOpening, sceneRequest } from './layout-request.js'
 
 // The Scene library owns every Scene rule: naming, ids, the Scene limit, ordering, import/export,
 // and which Scene is active. Each operation takes the current `{ settings, activeSceneId }` and
@@ -27,6 +14,9 @@ const SCENE_EXPORT_FORMAT = 'camframe-scenes'
 const SCENE_EXPORT_VERSION = 1
 export const SCENE_IMPORT_ERROR = 'That file is not a valid CamFrame scene export.'
 export const NO_SCENES_NOTICE = 'No saved scenes'
+// Read to screen readers when a new Scene is refused because the library is full (B3); the Scenes
+// tab already shows Full on the save tile, so nothing is drawn.
+export const SCENE_LIMIT_MESSAGE = `Not saved: CamFrame keeps ${SCENE_LIMIT} Scenes. Delete one to save a new one.`
 
 const defaultSceneId = () => `preset-${Date.now().toString(36)}`
 // Scene names match without regard to case, to composed versus decomposed accents, or to joiners,
@@ -57,14 +47,63 @@ export function patchSettings({ settings }, patch) {
   return { settings: sanitizeSettings({ ...settings, ...patch }), activeSceneId: '' }
 }
 
+const PLACE_KEYS = ['size', 'position']
+const CAMERA_KEYS = ['cameraId', 'cameraLabel', 'overlayResolution']
+// A Scene's look: everything it stores except its size and place (the camera and its quality, the
+// shape, the appearance and the framing).
+const SCENE_LOOK_KEYS = PRESET_SETTING_KEYS.filter((key) => !PLACE_KEYS.includes(key))
 // What the active Scene follows when the look changes by hand (ADR 0037): everything a Scene stores
 // except the camera and its quality, so a missing camera falling back to the default one, or a
 // quality the device refused, never rewrites a Scene.
-export const FOLLOWED_SETTING_KEYS = Object.freeze(
-  PRESET_SETTING_KEYS.filter((key) => !['cameraId', 'cameraLabel', 'overlayResolution'].includes(key)),
-)
-const LOOK_KEYS = FOLLOWED_SETTING_KEYS.filter((key) => key !== 'size' && key !== 'position')
+export const FOLLOWED_SETTING_KEYS = Object.freeze(PRESET_SETTING_KEYS.filter((key) => !CAMERA_KEYS.includes(key)))
+// The part of the look that Undo puts back with a layout Scene: the followed part.
+const FOLLOWED_LOOK_KEYS = SCENE_LOOK_KEYS.filter((key) => FOLLOWED_SETTING_KEYS.includes(key))
 const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+
+// ---- What a Scene is ----
+// The Scene library answers the questions about one Scene; the Prompter link status and the Scenes
+// tab format these answers instead of reading the Scene record. Where and how big a Scene really
+// opens is `sceneOpening` (layout-request.js).
+
+// The look of a settings object (`SCENE_LOOK_KEYS`), with the framing copied.
+export function sceneLook(settings) {
+  return Object.fromEntries(
+    SCENE_LOOK_KEYS.map((key) => {
+      const value = settings[key]
+      return [key, value && typeof value === 'object' ? { ...value } : value]
+    }),
+  )
+}
+
+// 'layout' for a Scene saved through the Prompter link (a size and place with the live look),
+// 'snapshot' for any other Scene.
+export const sceneKind = (scene) => (scene.layout ? 'layout' : 'snapshot')
+
+// What a Scene asks for with the live `settings`: `size` is the size it asks for now ("small"
+// resolved to the small size), `place` its spot name, else its saved camera point (the camera's
+// top-left), else null; `saved` is the size and window top-left it worked out when it was saved.
+// A snapshot Scene applies its own `look`; a layout Scene keeps the live one.
+export function describeScene(scene, settings) {
+  const request = sceneRequest(scene)
+  return {
+    kind: sceneKind(scene),
+    followsSmallSize: request.size === 'small',
+    size: resolveLayoutRequest({ size: request.size }, settings).size,
+    place: request.spot ?? request.point ?? null,
+    margin: request.margin,
+    withinRight: request.withinRight,
+    saved: { size: scene.settings.size, position: scene.settings.position },
+    keepsLiveLook: sceneKind(scene) === 'layout',
+    look: sceneKind(scene) === 'layout' ? undefined : sceneLook(scene.settings),
+  }
+}
+
+// What a Scene looks like on camera: a layout Scene keeps the live look at `openSize`, the size it
+// really opens at (`sceneOpening`), or else the size it asks for; a snapshot Scene its saved settings.
+export function sceneLookOnCamera(scene, settings, openSize) {
+  if (sceneKind(scene) === 'snapshot') return scene.settings
+  return { ...settings, size: openSize ?? describeScene(scene, settings).size }
+}
 
 // A hand change of the live look (Inline settings, the toolbar's Shape, dragging or resizing the
 // Overlay). `next` is the full settings after the change; `keys` are the keys the change set
@@ -75,12 +114,14 @@ const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right
 // Scene keeps the live look rather than storing one, so it changes only when the hand change changed
 // a followed value; it then becomes an exact Scene of the live look. Without an active Scene, or
 // with nothing to save, only the settings change. `autosaved` holds the Scene before and after, for
-// Undo.
-export function followLiveLook({ settings, activeSceneId }, next, { keys } = {}) {
+// Undo. `scenePosition`, when given, is the place an exact Scene saves instead of the live one (the
+// Scene is shown away from its saved place, so the live place is not its own; ADR 0038).
+export function followLiveLook({ settings, activeSceneId }, next, { keys, scenePosition } = {}) {
   const active = settings.presets.find((scene) => scene.id === activeSceneId)
   const reference = active?.layout ? settings : active?.settings
+  const saving = scenePosition && active && !active.layout ? { ...next, position: scenePosition } : next
   const set = keys ? FOLLOWED_SETTING_KEYS.filter((key) => keys.includes(key)) : FOLLOWED_SETTING_KEYS
-  const changed = active ? set.filter((key) => !sameValue(reference[key], next[key])) : []
+  const changed = active ? set.filter((key) => !sameValue(reference[key], saving[key])) : []
   if (!active || !changed.length) return { settings: next, activeSceneId: active ? activeSceneId : '' }
   const scene = active.layout
     ? { id: active.id, name: active.name, settings: settingsForPreset(next) }
@@ -89,7 +130,7 @@ export function followLiveLook({ settings, activeSceneId }, next, { keys } = {})
         name: active.name,
         settings: settingsForPreset({
           ...active.settings,
-          ...Object.fromEntries(changed.map((key) => [key, next[key]])),
+          ...Object.fromEntries(changed.map((key) => [key, saving[key]])),
         }),
       }
   const scenes = next.presets.map((candidate) => (candidate.id === scene.id ? scene : candidate))
@@ -159,10 +200,12 @@ export function saveScene(
   const existing =
     live.presets.find((scene) => scene.id === requestedId) ??
     live.presets.find((scene) => sameName(scene.name, name))
+  // A full library refuses a new Scene and stores nothing; it never drops one to make room (B3).
+  if (!existing && live.presets.length >= SCENE_LIMIT) return { error: 'scene-limit', announce: SCENE_LIMIT_MESSAGE }
   const scene = { id: existing?.id ?? createId(), name, settings: settingsForPreset(live) }
   const scenes = existing
     ? live.presets.map((candidate) => (candidate.id === scene.id ? scene : candidate))
-    : [...live.presets.slice(-(SCENE_LIMIT - 1)), scene]
+    : [...live.presets, scene]
   return {
     settings: withScenes(live, scenes),
     activeSceneId: scene.id,
@@ -171,81 +214,23 @@ export function saveScene(
   }
 }
 
-// The size and place a layout Scene gets now, planned with the live shape; else its saved size and
-// place (no work area known, or the display is too small even for the smallest camera). With a work
-// area known, the saved place is kept inside it, so the camera never opens off screen.
-// A layout with a place is planned on the display the Overlay is on or heading to
-// (`context.workArea`). One without a place keeps its saved camera point on the display nearest
-// that point (`context.workAreaAt`), shrunk and kept on screen there.
-export function layoutSceneGeometry(scene, settings, { workArea, workAreaAt } = {}) {
-  const { layout } = scene
-  const requestedSize = layout.size === 'small' ? settings.prompterSmallSize : layout.size
-  const saved = { size: scene.settings.size, position: scene.settings.position }
-  const point =
-    !layout.position && saved.position
-      ? { x: saved.position.x + OVERLAY_CHROME.left, y: saved.position.y + OVERLAY_CHROME.top }
-      : undefined
-  const area = point && workAreaAt ? workAreaAt(point) : workArea
-  const plan =
-    area && (layout.position || point)
-      ? planCompactLayout(
-          {
-            shape: settings.shape,
-            size: requestedSize,
-            spot: layout.position,
-            point,
-            margin: layout.position ? (layout.margin ?? settings.prompterMargin) : 0,
-            withinRight: layout.withinRight,
-          },
-          { workArea: area },
-        )
-      : undefined
-  if (!plan || plan.error) {
-    const window = overlayDimensionsFor({ shape: settings.shape, size: saved.size })
-    const position =
-      area && saved.position
-        ? {
-            x: keepInside(saved.position.x, area.x, area.width, window.width),
-            y: keepInside(saved.position.y, area.y, area.height, window.height),
-          }
-        : saved.position
-    // `clamped` is also true when the Scene's rule could not be met (no room even for the smallest
-    // camera in its place), so a cue answer never reports a clean fit for the fallback.
-    return { ...saved, position, requestedSize, clamped: Boolean(plan?.error) || saved.size !== requestedSize }
-  }
-  return { size: plan.size, position: plan.position, clamped: plan.clamped, requestedSize }
-}
-
-// An exact Scene's saved place, or, when that place is not on screen on the connected displays
-// (`workAreas`, the `isOnScreen` rule), the place kept wholly on the display nearest its camera
-// (`workAreaAt`), so a Scene saved on a display that is gone, or at a higher resolution, opens on
-// screen (TOOLS-156). The Scene keeps its saved place; only where it is shown now changes.
-function exactScenePosition(sceneSettings, { workAreas, workAreaAt } = {}) {
-  const saved = sceneSettings.position
-  if (!saved || !workAreas || !workAreaAt) return saved
-  const size = overlayDimensionsFor(sceneSettings)
-  if (isOnScreen({ ...saved, ...size }, workAreas)) return saved
-  const area = workAreaAt({ x: saved.x + OVERLAY_CHROME.left, y: saved.y + OVERLAY_CHROME.top })
-  return area ? keepOnWorkArea(saved, size, area) : saved
-}
-
 // A layout Scene changes only size and place and keeps the live look; any other Scene applies
-// everything it saved, its place kept on screen. `context` (`workArea`, `workAreaAt`, `workAreas`)
-// lets a Scene fit the right display.
+// everything it saved. Either opens where `sceneOpening` says (`context` is `sceneDisplays()`), so
+// it fits the right display and opens on screen.
 export function applyScene({ settings }, idInput, context = {}) {
   const id = String(idInput ?? '')
   const scene = settings.presets.find((candidate) => candidate.id === id)
   if (!scene) return undefined
-  const geometry = scene.layout ? layoutSceneGeometry(scene, settings, context) : undefined
-  const applied = geometry
-    ? { ...settings, size: geometry.size, position: geometry.position }
-    : { ...settings, ...scene.settings, position: exactScenePosition(scene.settings, context), presets: settings.presets }
+  const opening = sceneOpening(scene, settings, context)
+  const applied = scene.layout
+    ? { ...settings, size: opening.size, position: opening.position }
+    : { ...settings, ...scene.settings, position: opening.position, presets: settings.presets }
   return {
     settings: sanitizeSettings(applied),
     activeSceneId: scene.id,
     announce: scene.name,
     appliedScene: scene,
-    ...(geometry ? { layout: geometry } : {}),
+    ...(scene.layout ? { layout: opening } : {}),
   }
 }
 
@@ -396,7 +381,7 @@ export function createSceneEdits({ now = () => Date.now() } = {}) {
       if (result.autosaved) {
         const { before: scene } = result.autosaved
         const keep = change?.base.id === scene.id
-        const look = Object.fromEntries(LOOK_KEYS.map((key) => [key, before.settings[key]]))
+        const look = Object.fromEntries(FOLLOWED_LOOK_KEYS.map((key) => [key, before.settings[key]]))
         change = keep ? { ...change, endsAt: now() + SCENE_UNDO_MS } : { base: scene, look, endsAt: now() + SCENE_UNDO_MS }
       } else if (result.appliedScene || result.savedSceneId || result.activeSceneId !== before?.activeSceneId) {
         change = undefined
@@ -431,13 +416,13 @@ export function createSceneEdits({ now = () => Date.now() } = {}) {
   }
 }
 
-// Where each Scene's camera is on its display, for the Scenes tab tiles, as shares (0–1) of that
-// display's bounds. An exact Scene uses its saved place (or the first-launch place without one); a
-// layout Scene is planned like applying it would (`context.workArea`, `workAreaAt`), with the live
-// shape. `live` is the camera now: `liveBounds` (the Compact window, without the onboarding reserve)
-// when known, else the stored place. `displayAt(point)` returns the bounds of the display nearest a
-// point.
-export function scenePreviews(settings, { workArea, workAreaAt, displayAt, liveBounds } = {}) {
+// Where each Scene's camera opens on its display, for the Scenes tab tiles, as shares (0–1) of that
+// display's bounds, plus `size`, the camera size it opens at. Each Scene is where applying it opens
+// (`sceneOpening` with `context`'s displays, so a Scene saved on a display that is gone shows where
+// it really opens), or at the first-launch place without a place. `live` is the camera now:
+// `liveBounds` (the Compact window, without the onboarding reserve) when known, else the stored
+// place. `displayAt(point)` returns the bounds of the display nearest a point.
+export function scenePreviews(settings, { displayAt, liveBounds, ...displays } = {}) {
   const share = (window) => {
     const camera = cameraRectFor(window)
     const display = displayAt({ x: camera.x + camera.width / 2, y: camera.y + camera.height / 2 })
@@ -448,13 +433,12 @@ export function scenePreviews(settings, { workArea, workAreaAt, displayAt, liveB
       height: camera.height / display.height,
     }
   }
-  const windowFor = (sceneSettings) => compactBaseBounds({ settings: sceneSettings, workArea })
+  const windowFor = (sceneSettings) => compactBaseBounds({ settings: sceneSettings, workArea: displays.workArea })
   const scenes = {}
   for (const scene of settings.presets) {
-    if (scene.layout) {
-      const planned = layoutSceneGeometry(scene, settings, { workArea, workAreaAt })
-      scenes[scene.id] = share(windowFor({ shape: settings.shape, size: planned.size, position: planned.position }))
-    } else scenes[scene.id] = share(windowFor(scene.settings))
+    const { size, position } = sceneOpening(scene, settings, displays)
+    const { shape } = sceneLookOnCamera(scene, settings, size)
+    scenes[scene.id] = { ...share(windowFor({ shape, size, position })), size }
   }
   const live = liveBounds ? { ...liveBounds, ...overlayDimensionsFor(settings) } : windowFor(settings)
   return { live: share(live), scenes }

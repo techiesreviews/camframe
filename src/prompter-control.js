@@ -1,6 +1,7 @@
 import { overlayDimensionsFor, sanitizeSettings } from './settings.js'
 import * as sceneLibrary from './scenes.js'
-import { cameraRectFor, planCompactLayout } from './overlay-geometry.js'
+import { cameraRectFor } from './overlay-geometry.js'
+import { layoutToSave, planLayoutRequest, sceneDisplays } from './layout-request.js'
 import { cueAction, linkStatusBody, sceneDetail } from './prompter-link.js'
 
 // What the Prompter link's checked requests do to the Overlay. Main supplies the live pieces:
@@ -16,12 +17,6 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
   function compactReference(overlay) {
     return overlay.isFullscreen() ? overlay.fullscreenReturnBounds() : overlay.targetBounds()
   }
-
-  const sceneContext = (overlay) => ({
-    workArea: overlay.currentWorkArea(),
-    workAreaAt: (point) => overlay.workAreaAt(point),
-    workAreas: overlay.workAreas?.(),
-  })
 
   function view() {
     const overlay = geometry()
@@ -62,17 +57,7 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
     const { settings } = sceneState()
     const current = compactReference(overlay)
     const workArea = areaFor(overlay, { point: plan.point, spot: plan.spot, current })
-    const layout = planCompactLayout(
-      {
-        shape: settings.shape,
-        size: plan.size,
-        spot: plan.spot,
-        point: plan.point,
-        margin: plan.margin ?? (plan.spot ? settings.prompterMargin : 0),
-        withinRight: plan.withinRight,
-      },
-      { workArea, current },
-    )
+    const layout = planLayoutRequest(plan, settings, { workArea, current })
     if (layout.error) return { ...layout, status: 422 }
     const unchanged =
       layout.size === settings.size && layout.position.x === current?.x && layout.position.y === current?.y
@@ -88,7 +73,7 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
   }
 
   function applyScene(overlay, id) {
-    const result = sceneLibrary.applyScene(sceneState(), id, sceneContext(overlay))
+    const result = sceneLibrary.applyScene(sceneState(), id, sceneDisplays(overlay))
     if (!result) return { error: 'That Scene is gone.', code: 'unknown-scene', status: 404 }
     commit(result)
     overlay.showCompact()
@@ -128,38 +113,25 @@ export function createPrompterControl({ geometry, sceneState, commit, version })
     const spot = typeof request.position === 'string' && request.position !== 'current' ? request.position : undefined
     const current = compactReference(overlay)
     const workArea = areaFor(overlay, { point, spot, current })
-    const size =
-      request.size === 'small'
-        ? settings.prompterSmallSize
-        : request.size === 'current'
-          ? settings.size
-          : request.size
-    const margin = request.margin ?? (spot ? settings.prompterMargin : 0)
-    const planned = planCompactLayout(
-      { shape: settings.shape, size, spot, point, margin, withinRight: request.withinRight },
-      { workArea, current },
-    )
+    const asked = { size: request.size, spot, point, margin: request.margin, withinRight: request.withinRight }
+    const planned = planLayoutRequest(asked, settings, { workArea, current })
     if (planned.error) return { ...planned, status: 422 }
-    const layout = { size: request.size === 'small' ? 'small' : size }
-    if (spot) layout.position = spot
-    if (request.margin !== undefined) layout.margin = request.margin
-    if (request.withinRight !== undefined) layout.withinRight = request.withinRight
     const saved = sceneLibrary.saveLayoutScene(sceneState(), {
       name: request.name,
       size: planned.size,
       position: planned.position,
-      layout,
+      layout: layoutToSave(asked, settings),
       replace: request.replace,
     })
     if (saved.error) return saved
     commit(saved)
     const answer = {
       ok: true,
-      scene: sceneDetail(saved.scene, { smallSize: saved.settings.prompterSmallSize }),
+      scene: sceneDetail(saved.scene, saved.settings),
       replaced: saved.replaced,
       saved: {
         size: planned.size,
-        requestedSize: size,
+        requestedSize: planned.requestedSize,
         clamped: planned.clamped,
         camera: cameraRectFor({ ...planned.position, ...overlayDimensionsFor(saved.scene.settings) }),
         workArea,

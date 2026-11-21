@@ -6,6 +6,7 @@ import { OVERLAY_BOUNDS_TRANSITION_MS, compactBaseBounds, createOverlayGeometry 
 import { PROMPTER_LINK_HOST, createPrompterLink } from '../src/prompter-link.js'
 import { createPrompterControl } from '../src/prompter-control.js'
 import * as sceneLibrary from '../src/scenes.js'
+import { sceneDisplays } from '../src/layout-request.js'
 
 // The Prompter link end to end in Node: the real HTTP endpoint, the real control, Scene library
 // and Overlay geometry, with a fake window, screen and clock in place of Electron.
@@ -402,6 +403,54 @@ test('with no stored position, Full screen then a bare "small" goes back where t
   assert.equal(after.activeScene, 'Live small corner', 'same size and place keeps the Active Scene')
 })
 
+test('while a Scene moves the Overlay to a smaller display, the tiles already show the size layout Scenes open at there', async (t) => {
+  const laptop = { bounds: { x: 1920, y: 0, width: 1280, height: 720 }, workArea: { x: 1920, y: 0, width: 1280, height: 680 } }
+  const live = await harness(t, { extraDisplays: [laptop] })
+  assert.equal((await live.saveScene({ name: 'Big right', size: 640, position: 'right' })).status, 200)
+  live.state.settings = sanitizeSettings({
+    ...live.state.settings,
+    presets: [
+      ...live.state.settings.presets,
+      { id: 'preset-laptop', name: 'Laptop', settings: { size: 288, shape: 'circle', position: { x: 2100, y: 100 } } },
+    ],
+  })
+  assert.equal((await live.cue({ scene: 'Laptop' })).status, 200)
+  // Mid-move, as main builds the tiles right after the move starts.
+  const displayAt = (point) => (point.x >= 1920 ? laptop : { bounds: { x: 0, y: 0, width: 1920, height: 1080 } }).bounds
+  const previews = sceneLibrary.scenePreviews(live.state.settings, { ...sceneDisplays(live.geometry), displayAt })
+  const big = live.state.settings.presets.find((scene) => scene.name === 'Big right')
+  live.settle()
+  const opened = (await live.cue({ scene: 'Big right' })).body.layout
+  assert.ok(opened.size < 640)
+  assert.equal(previews.scenes[big.id].size, opened.size)
+})
+
+test('when the display a Scene is moving to is unplugged mid-move, the tiles after the heal match the next apply', async (t) => {
+  const laptop = { bounds: { x: 1920, y: 0, width: 1280, height: 720 }, workArea: { x: 1920, y: 0, width: 1280, height: 680 } }
+  const live = await harness(t, { extraDisplays: [laptop] })
+  await live.saveScene({ name: 'Big right', size: 640, position: 'right' })
+  live.state.settings = sanitizeSettings({
+    ...live.state.settings,
+    presets: [
+      ...live.state.settings.presets,
+      { id: 'preset-laptop', name: 'Laptop', settings: { size: 288, shape: 'circle', position: { x: 2100, y: 100 } } },
+    ],
+  })
+  await live.cue({ scene: 'Laptop' })
+  // Main's display handler: the move is checked when it ends, where the window is healed.
+  live.unplug(1)
+  live.geometry.ensureOnScreen()
+  live.settle()
+  const view = (await live.status()).view
+  assert.ok(view.window.x < 1920, 'healed onto the display that is left')
+  const displayAt = () => ({ x: 0, y: 0, width: 1920, height: 1080 })
+  const previews = sceneLibrary.scenePreviews(live.state.settings, { ...sceneDisplays(live.geometry), displayAt })
+  const big = live.state.settings.presets.find((scene) => scene.name === 'Big right')
+  const opened = (await live.cue({ scene: 'Big right' })).body.layout
+  assert.equal(opened.size, 640)
+  assert.equal(previews.scenes[big.id].size, opened.size)
+})
+
 test('in Full screen, a bare "small" after a tray apply of a Scene from another display returns to that display', async (t) => {
   const second = { bounds: { x: 1920, y: 0, width: 1920, height: 1080 }, workArea: { x: 1920, y: 0, width: 1920, height: 1040 } }
   const live = await harness(t, { extraDisplays: [second] })
@@ -546,6 +595,18 @@ test('a layout Scene keeps the live look, even one changed after the Scene was s
   assert.equal(after.view.size, 432)
 })
 
+test('saving a "small" Scene that has to shrink says the size it asked for and the size it saved', async (t) => {
+  const live = await harness(t, { display: { x: 0, y: 0, width: 1280, height: 720 } })
+  await live.setSmallSize({ size: 640 })
+  const saved = (await live.saveScene({ name: 'Big', size: 'small', position: 'right' })).body.saved
+  assert.equal(saved.requestedSize, 640)
+  assert.equal(saved.clamped, true)
+  assert.ok(saved.size < 640)
+  assert.ok(saved.camera.x + saved.camera.width <= 1280 && saved.camera.y + saved.camera.height <= 680)
+  // The Scene keeps asking for the Small size, not the size it was saved at.
+  assert.equal(live.state.settings.presets.find((scene) => scene.name === 'Big').layout.size, 'small')
+})
+
 test('on a narrow display the large Scene shrinks to fit the right 30%; small is unchanged', async (t) => {
   const live = await harness(t, { display: { x: 0, y: 0, width: 1280, height: 720 } })
   await live.saveScene(SMALL_CORNER)
@@ -632,6 +693,17 @@ test('Scene capacity and names: refused with a code, never an eviction', async (
 
   const unique = new Set(live.state.settings.presets.map((scene) => scene.id))
   assert.equal(unique.size, SCENE_LIMIT, 'Scenes saved in the same millisecond still get their own ids')
+
+  // ADR 0040: replacing under another spelling keeps the id and place but takes the name as sent.
+  const respelled = await live.saveScene({ name: 'three', size: 300, replace: true })
+  assert.equal(respelled.status, 200)
+  assert.equal(respelled.body.replaced, true)
+  assert.equal(live.state.settings.presets[4].name, 'three')
+  assert.deepEqual(
+    live.state.settings.presets.map((scene) => scene.id),
+    [...unique],
+    'same ids in the same places',
+  )
 })
 
 test('a look-alike name needs replace, and a cue finds a Scene by either form of an accent', async (t) => {

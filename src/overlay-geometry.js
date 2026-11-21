@@ -127,6 +127,26 @@ export function onScreenBase(base, { workAreas, primaryWorkArea, margin }) {
   return { ...base, ...compactPositionAt('bottom-right', { workArea: primaryWorkArea, size: base, margin }) }
 }
 
+// The work areas of every connected display, or undefined when the screen cannot list them.
+const displayWorkAreas = (screen) => screen.getAllDisplays?.().map((display) => display.workArea ?? display.bounds)
+
+// Compact bounds (without the reserve) moved to the main display when they would be lost.
+function keptOnScreen(base, { screen, margin }) {
+  const workAreas = displayWorkAreas(screen)
+  if (!workAreas) return base
+  return onScreenBase(base, { workAreas, primaryWorkArea: screen.getPrimaryDisplay().workArea, margin })
+}
+
+// Where the Compact window opens at startup, before it exists: the saved place (or the first-launch
+// corner), or the bottom right of the main display when that place would be lost (TOOLS-156).
+// `healed` is the new place when it moved, for Preferences to store; a heal is not a hand change,
+// so no Scene takes it (ADR 0038).
+export function openingCompactBounds({ settings, screen }) {
+  const saved = compactBaseBounds({ settings, workArea: screen.getPrimaryDisplay().workArea, keepCenter: false })
+  const bounds = keptOnScreen(saved, { screen, margin: settings.prompterMargin })
+  return { bounds, healed: bounds === saved ? undefined : { x: bounds.x, y: bounds.y } }
+}
+
 // The Compact window position that puts the camera surface at `spot` in `workArea`, `margin` px
 // from the edges it touches. The whole window (with its transparent chrome) stays inside the work
 // area so the hover toolbar is always reachable; at the top spots that keeps the camera a little
@@ -284,32 +304,30 @@ export function createOverlayGeometry({
         }
       : { ...bounds }
 
-  // The work areas of every connected display, or undefined when the screen cannot list them.
-  const workAreas = () => screen.getAllDisplays?.().map((display) => display.workArea ?? display.bounds)
+  const workAreas = () => displayWorkAreas(screen)
+  const onScreen = (base, from = settings()) => keptOnScreen(base, { screen, margin: from.prompterMargin })
 
-  // Compact bounds (without the reserve) moved to the main display when they would be lost.
-  function onScreen(base) {
-    const areas = workAreas()
-    if (!areas) return base
-    return onScreenBase(base, {
-      workAreas: areas,
-      primaryWorkArea: screen.getPrimaryDisplay().workArea,
-      margin: settings().prompterMargin,
-    })
-  }
-
-  // The settings' Compact bounds, never off screen: a saved place that would be lost is replaced
-  // (and reported, so Preferences store where the Overlay really is).
-  function compactWindowBounds({ keepCenter }) {
+  // The Compact bounds (without the reserve) for the settings `from`: around the live window's
+  // centre (`keepCenter`), else at their position. `healed` is the same bounds kept on screen.
+  function compactBasesFor(from, { keepCenter }) {
     const base = compactBaseBounds({
-      settings: settings(),
+      settings: from,
       current: baseFromWindow(window.getBounds()),
       workArea: screen.getPrimaryDisplay().workArea,
       keepCenter,
     })
-    const healed = onScreen(base)
-    if (healed !== base) onCompactPositionChanged({ x: healed.x, y: healed.y })
-    return windowFromBase(healed)
+    return { base, healed: onScreen(base, from) }
+  }
+
+  // The settings' Compact window bounds, never off screen: a saved place that would be lost is
+  // replaced. `report` tells Preferences where the Overlay really is; callers run it once the
+  // window has its new bounds (or its move has started), so main's broadcast reads them.
+  function compactWindowBounds({ keepCenter }) {
+    const { base, healed } = compactBasesFor(settings(), { keepCenter })
+    const report = () => {
+      if (healed !== base) onCompactPositionChanged({ x: healed.x, y: healed.y })
+    }
+    return { bounds: windowFromBase(healed), report }
   }
 
   // Brings a lost Overlay back (TOOLS-156): a Compact window not substantially on a connected
@@ -428,7 +446,9 @@ export function createOverlayGeometry({
   function apply({ keepCenter = true, updateBounds = true } = {}) {
     if (!alive()) return
     if (updateBounds && !fullscreen && !animation) {
-      window.setBounds(compactWindowBounds({ keepCenter }))
+      const { bounds, report } = compactWindowBounds({ keepCenter })
+      window.setBounds(bounds)
+      report()
     }
     applyZOrder()
     if (settings().overlayVisible) {
@@ -501,12 +521,13 @@ export function createOverlayGeometry({
       apply({ keepCenter: false })
       return
     }
-    const target = base
-      ? windowFromBase(onScreen({ ...base, ...overlayDimensionsFor(settings()) }))
+    const { bounds: target, report } = base
+      ? { bounds: windowFromBase(onScreen({ ...base, ...overlayDimensionsFor(settings()) })), report: () => {} }
       : compactWindowBounds({ keepCenter: false })
     applyZOrder()
     window.showInactive()
     animateTo(target)
+    report()
   }
 
   applyZOrder()
@@ -546,8 +567,8 @@ export function createOverlayGeometry({
       }
       const base = baseFromWindow(window.getBounds())
       reserveOpen = false
-      onCompactPositionChanged({ x: base.x, y: base.y })
       window.setBounds({ ...base, ...overlayDimensionsFor(settings()) })
+      onCompactPositionChanged({ x: base.x, y: base.y })
       return 0
     },
 
@@ -613,6 +634,17 @@ export function createOverlayGeometry({
           keepCenter: false,
         }),
       )
+    },
+
+    // The one answer to where the Compact window lands when the settings become `next` (a Shape or
+    // size change keeps the window's centre), kept on screen, as the window's top-left without the
+    // reserve. The caller stores it with the change in the same step, so the active Scene saves the
+    // real place and `apply({ keepCenter: false })` then lands exactly on it (B1). Undefined when the
+    // window does not move now: in Full screen, while a move is running, or when it is gone.
+    compactPlaceAfter(next) {
+      if (!alive() || fullscreen || animation) return undefined
+      const { healed } = compactBasesFor(next, { keepCenter: true })
+      return { x: healed.x, y: healed.y }
     },
 
     // Called when the window is shown and whenever a display is added, removed or changed.

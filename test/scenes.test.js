@@ -10,20 +10,25 @@ import {
   cycleScene,
   deleteScene,
   importScenes,
-  layoutSceneGeometry,
   patchSettings,
   reorderScene,
   saveScene,
   sceneExport,
   SCENE_DELETE_UNDO_MS,
+  SCENE_LIMIT_MESSAGE,
   SCENE_UNDO_MS,
   createSceneEdits,
+  describeScene,
   followLiveLook,
   renameScene,
   restoreScene,
+  sceneKind,
+  sceneLook,
+  sceneLookOnCamera,
   scenePreviews,
   undoSceneChange,
 } from '../src/scenes.js'
+import { sceneOpening } from '../src/layout-request.js'
 
 const scene = (id, name, settings = {}) => ({ id, name, settings: settingsForPreset(settings) })
 const library = (scenes = [], settings = {}, activeSceneId = '') => ({
@@ -75,11 +80,32 @@ test('saving from Full screen keeps the stored compact position', () => {
   assert.deepEqual(result.settings.presets[0].settings.position, { x: 10, y: 20 })
 })
 
-test('saving beyond the Scene limit drops the oldest Scene', () => {
+test('saving a new Scene at the Scene limit is refused and never drops the oldest Scene', () => {
   const full = Array.from({ length: SCENE_LIMIT }, (_, index) => scene(`s${index}`, `Scene ${index}`))
-  const result = saveScene(library(full), { name: 'Newest', createId: () => 'newest' })
+  const state = library(full, { size: 320 }, 's2')
+  const before = structuredClone(state)
+  const result = saveScene(state, {
+    name: 'Newest',
+    createId: () => assert.fail('a refused save makes no id'),
+  })
 
-  assert.deepEqual(ids(result), ['s1', 's2', 's3', 's4', 's5', 'newest'])
+  assert.deepEqual(result, { error: 'scene-limit', announce: SCENE_LIMIT_MESSAGE })
+  assert.match(SCENE_LIMIT_MESSAGE, new RegExp(`${SCENE_LIMIT} Scenes`))
+  assert.ok(SCENE_LIMIT_MESSAGE.length <= 80, 'the screen reader announcement is cut at 80 characters')
+  assert.deepEqual(state, before, 'the six Scenes, their order and the Active Scene stay as they were')
+})
+
+test('at the Scene limit, saving over an existing name or id still works and keeps all Scenes', () => {
+  const full = Array.from({ length: SCENE_LIMIT }, (_, index) => scene(`s${index}`, `Scene ${index}`))
+  const state = library(full, { size: 400 })
+
+  const byName = saveScene(state, { name: 'scene 0', createId: () => 'unused' })
+  assert.deepEqual(ids(byName), ['s0', 's1', 's2', 's3', 's4', 's5'])
+  assert.equal(byName.settings.presets[0].settings.size, 400)
+
+  const byId = saveScene(state, { name: 'Renamed', id: 's5', createId: () => 'unused' })
+  assert.deepEqual(ids(byId), ['s0', 's1', 's2', 's3', 's4', 's5'])
+  assert.equal(byId.settings.presets[5].name, 'Renamed')
 })
 
 test('saving a matching name or the selected id updates that Scene in place', () => {
@@ -135,7 +161,7 @@ test('the tray and shortcut paths apply a layout Scene like a cue: planned on th
     position: { x: 50, y: 60 },
   })
   const workArea = { x: 0, y: 0, width: 1280, height: 680 }
-  const expected = layoutSceneGeometry(state.settings.presets[0], state.settings, { workArea })
+  const expected = sceneOpening(state.settings.presets[0], state.settings, { workArea })
   for (const [path, result] of [
     ['cycle', cycleScene(state, { workArea })],
     ['numbered shortcut', applySceneAt(state, 0, { workArea })],
@@ -256,12 +282,12 @@ test('a layout Scene without a place plans on the display nearest its saved poin
   const settings = sanitizeSettings({ size: 288 })
   const current = { x: 0, y: 0, width: 1920, height: 1040 }
   const nearest = { x: 1920, y: 0, width: 800, height: 600 }
-  const planned = layoutSceneGeometry(scene, settings, { workArea: current, workAreaAt: () => nearest })
+  const planned = sceneOpening(scene, settings, { workArea: current, workAreaAt: () => nearest })
   // 600 px would not fit 600 px of height with the chrome, so it shrinks inside `nearest`.
   assert.equal(planned.size, 600 - OVERLAY_CHROME.top - OVERLAY_CHROME.bottom)
   assert.equal(planned.clamped, true)
   assert.ok(planned.position.x >= nearest.x && planned.position.x + planned.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= nearest.x + nearest.width)
-  const fallback = layoutSceneGeometry(scene, settings, { workArea: current })
+  const fallback = sceneOpening(scene, settings, { workArea: current })
   assert.ok(fallback.position.x + fallback.size + OVERLAY_CHROME.left + OVERLAY_CHROME.right <= current.width, 'without workAreaAt it uses workArea')
 })
 
@@ -276,12 +302,12 @@ test('a layout Scene that cannot be planned keeps its saved place on the screen'
   const settings = sanitizeSettings({ size: 288 })
   // A lone 1024 px display: 20% of it is too narrow for the smallest camera, so planning fails.
   const lone = { x: 0, y: 0, width: 1024, height: 768 }
-  const geometry = layoutSceneGeometry(scene, settings, { workArea: lone })
+  const geometry = sceneOpening(scene, settings, { workArea: lone })
   const window = overlayDimensionsFor({ shape: settings.shape, size: geometry.size })
   assert.ok(geometry.position.x >= lone.x && geometry.position.x + window.width <= lone.x + lone.width, 'inside horizontally')
   assert.ok(geometry.position.y >= lone.y && geometry.position.y + window.height <= lone.y + lone.height, 'inside vertically')
   // With no work area known there is nothing to keep it inside: the saved place stays.
-  assert.deepEqual(layoutSceneGeometry(scene, settings).position, { x: 1518, y: 300 })
+  assert.deepEqual(sceneOpening(scene, settings).position, { x: 1518, y: 300 })
 })
 
 // --- Scenes tab (ADR 0037): autosave, undo, delete with undo, rename, reorder, tile previews ---
@@ -499,6 +525,7 @@ test('Scene tiles draw the camera where it really is on its display', () => {
     y: (200 + OVERLAY_CHROME.top) / 1080,
     width: 288 / 1920,
     height: 288 / 1080,
+    size: 288,
   })
   const big = previews.scenes.big
   assert.equal(Math.round(big.width * 1920), 540)
@@ -513,6 +540,19 @@ test('Scene tiles draw the camera where it really is on its display', () => {
   // The live window's real bounds win over a stored position that may be older.
   const moved = scenePreviews(settings, { workArea, workAreaAt: () => workArea, displayAt: () => display, liveBounds: { x: 0, y: 0, ...overlayDimensionsFor(settings) } })
   assert.equal(moved.live.x, OVERLAY_CHROME.left / 1920)
+})
+
+test('a Scene tile saved on a display that is gone shows where applying really opens it', () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 }
+  const workArea = { x: 0, y: 0, width: 1920, height: 1040 }
+  // Saved on a second display right of this one, which is unplugged now.
+  const gone = scene('gone', 'Gone', { size: 288, shape: 'circle', position: { x: 2500, y: 300 } })
+  const settings = sanitizeSettings({ size: 288, shape: 'circle', presets: [gone] })
+  const context = { workArea, workAreaAt: () => workArea, workAreas: [workArea] }
+  const applied = applyScene({ settings, activeSceneId: '' }, 'gone', context)
+  const tile = scenePreviews(settings, { ...context, displayAt: () => display }).scenes.gone
+  assert.equal(tile.x, (applied.settings.position.x + OVERLAY_CHROME.left) / 1920)
+  assert.ok(tile.x + tile.width <= 1, 'the tile camera is on the screen, not past its edge')
 })
 
 test('Undo after a rename puts the look back and keeps the new name', () => {
@@ -577,4 +617,95 @@ test('an exact Scene saved off this screen is shown clamped onto the display nea
   }
   // Without the display list (no window yet) the saved spot is used as before.
   assert.deepEqual(applyScene(state, 'desk', { workArea: laptop, workAreaAt: () => laptop }).settings.position, { x: 3000, y: 400 })
+})
+
+// What a Scene is: the Scene library answers the questions about one Scene (its kind, the size it
+// asks for now, its place, its look); the Prompter link status and the Scenes tab only format them.
+const snapshotOf = (settings) => scene('desk', 'Desk', settings)
+const layoutOf = (layout, settings = {}) => ({ ...scene('corner', 'Corner', settings), layout })
+const smallSized = (patch = {}) => sanitizeSettings({ prompterSmallSize: 300, ...patch })
+
+test('a Scene look is everything it stores but its size and place, the camera included', () => {
+  const settings = smallSized({
+    cameraId: 'cam-2',
+    cameraLabel: 'Desk camera',
+    overlayResolution: '1080p',
+    shape: 'portrait',
+    size: 400,
+    position: { x: 10, y: 20 },
+    frameEffect: 'glow',
+    cameraPosition: { x: 40, y: 60 },
+  })
+  const look = sceneLook(settings)
+  assert.deepEqual(Object.keys(look), [
+    'cameraId',
+    'cameraLabel',
+    'shape',
+    'overlayResolution',
+    'frameEffect',
+    'effectColor',
+    'glowStrength',
+    'glowSpread',
+    'blurAmount',
+    'blurOpacity',
+    'borderWidth',
+    'borderColor',
+    'mirror',
+    'cameraZoom',
+    'cameraPosition',
+  ])
+  assert.equal(look.cameraId, 'cam-2')
+  assert.equal(look.overlayResolution, '1080p')
+  assert.equal(look.shape, 'portrait')
+  assert.deepEqual(look.cameraPosition, { x: 40, y: 60 })
+  assert.notEqual(look.cameraPosition, settings.cameraPosition, 'the framing is a copy')
+})
+
+test('a Scene saved through the Prompter link is a layout Scene; any other is a snapshot', () => {
+  assert.equal(sceneKind(layoutOf({ size: 'small', position: 'bottom-right' })), 'layout')
+  assert.equal(sceneKind(snapshotOf({ size: 288 })), 'snapshot')
+})
+
+test('a "small" layout Scene asks for the live small size at its spot and keeps the live look', () => {
+  const corner = layoutOf({ size: 'small', position: 'bottom-right', margin: 24 }, { size: 288, position: { x: 1, y: 2 } })
+  assert.deepEqual(describeScene(corner, smallSized()), {
+    kind: 'layout',
+    followsSmallSize: true,
+    size: 300,
+    place: 'bottom-right',
+    margin: 24,
+    withinRight: undefined,
+    saved: { size: 288, position: { x: 1, y: 2 } },
+    keepsLiveLook: true,
+    look: undefined,
+  })
+})
+
+test('a layout Scene without a spot asks for its saved camera point', () => {
+  const answer = describeScene(layoutOf({ size: 432 }, { size: 432, position: { x: 100, y: 200 } }), smallSized())
+  assert.equal(answer.size, 432)
+  assert.equal(answer.followsSmallSize, false)
+  assert.deepEqual(answer.place, { x: 100 + OVERLAY_CHROME.left, y: 200 + OVERLAY_CHROME.top })
+  assert.equal(describeScene(layoutOf({ size: 432 }), smallSized()).place, null, 'a layout Scene without a place has none')
+})
+
+test('a snapshot Scene asks for its saved size and camera point and applies its own look', () => {
+  const desk = snapshotOf({ size: 400, shape: 'landscape', cameraId: 'cam-2', position: { x: 10, y: 20 } })
+  const answer = describeScene(desk, smallSized())
+  assert.equal(answer.kind, 'snapshot')
+  assert.equal(answer.size, 400)
+  assert.equal(answer.followsSmallSize, false)
+  assert.deepEqual(answer.place, { x: 10 + OVERLAY_CHROME.left, y: 20 + OVERLAY_CHROME.top })
+  assert.equal(answer.keepsLiveLook, false)
+  assert.deepEqual(answer.look, sceneLook(desk.settings))
+  assert.equal(describeScene(snapshotOf({ size: 288 }), smallSized()).place, null, 'a Scene without a place has none')
+})
+
+test('on camera a layout Scene shows the live look at the size it opens at; a snapshot its own', () => {
+  const settings = smallSized({ shape: 'rounded', size: 500, borderWidth: 4 })
+  const corner = layoutOf({ size: 'small', position: 'bottom-right' })
+  assert.deepEqual(sceneLookOnCamera(corner, settings), { ...settings, size: 300 }, 'before a preview: the size it asks for')
+  assert.deepEqual(sceneLookOnCamera(corner, settings, 240), { ...settings, size: 240 }, 'the size it really opens at')
+  const desk = snapshotOf({ shape: 'portrait', size: 400 })
+  assert.equal(sceneLookOnCamera(desk, settings, 240), desk.settings)
 })

@@ -1,0 +1,48 @@
+# Verification run: tools-295-atomic-prefs — 2026-11-15
+
+- **Commit:** 1da331d1559c77565156acdec4f13c7e71b87a0f
+- **Version:** 0.8.0 (unreleased change on `dev`)
+- **Observer:** Claude Opus 5.5 (agent, builder)
+- **Environment:** Linux 7.0.0-43-generic, Wayland session with X11 available, Node 24.22.2, npm 11.19.1, dev (unpackaged)
+- **Cameras:** Chromium's synthetic camera (Electron smoke)
+- **Related change/PR:** Orbit TOOLS-295 pick 0a, ADR 0039
+
+## Automated checks
+
+| Command | Result | Counts/duration | Evidence/notes |
+| --- | --- | --- | --- |
+| `npm ci` | Pass | | Electron binary fetched with `node node_modules/electron/install.js` (npm 11 held back its install script) |
+| `kit unit test/preferences-store.test.js` before the store existed | Fail (expected) | 0/1 files | `ERR_MODULE_NOT_FOUND` for `src/preferences-store.js`: the failing-first run (commit e5ba2a6) |
+| `npm test` (`kit unit`) | Pass | 345 pass, 1 skipped, 0 fail | 7 new tests in `test/preferences-store.test.js`: a cut-off `preferences.json` loads the last good copy and its Scene; no direct write onto `preferences.json`; a crash mid-write leaves the old file whole; the last good copy follows each save; a broken file never replaces it; a missing file still starts fresh; a broken file with no copy still starts from defaults |
+| `npm run test:electron` | Pass | 5/5, about 14 s | The real main process saves, quits and relaunches through the new store (layout Scenes persist, Scenes tab autosave, off-screen place) |
+| Syntax checks | Pass | | `node --check src/main.js` |
+| `git diff --check` | Pass | | |
+
+## Build and artifact checks
+
+| Target/check | Result | Artifact/hash/notes |
+| --- | --- | --- |
+| Windows unpacked | Not run | No packaging change |
+| Windows NSIS | Not run | |
+| Windows portable | Not run | |
+| macOS arm64 DMG/ZIP | Not run | |
+| macOS x64 DMG/ZIP | Not run | |
+| ASAR/locales/fonts/permission metadata | Not run | |
+
+## Manual checks
+
+| ID | Result | Observation/evidence |
+| --- | --- | --- |
+| Windows: Preferences survive a restart | Not run | Needs Lex's Windows laptop: change a setting, quit, start again; `%APPDATA%\CamFrame` then holds `preferences.json` and, after a second save, `preferences.last-good.json` |
+| Windows: rename refused by another program | Not run | The in-place fallback for `EPERM`/`EACCES`/`EBUSY` is checked only by reading the code |
+
+## Regressions and surprises
+
+None seen.
+
+## Release decision
+
+- **Decision:** Documentation baseline only
+- **Reason:** A maintenance change on `dev`; release needs its own run and Lex's go.
+- **Known exceptions accepted by:** —
+- **Follow-ups:** the two Windows rows above in the next release run.

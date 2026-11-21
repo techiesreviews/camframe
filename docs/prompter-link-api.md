@@ -1,15 +1,25 @@
 # Prompter link API 2: sizes, places and layout Scenes
 
-This is the guide for whoever drives CamFrame from the prompter (a person or the prompter's agent). It lists every request the Prompter link accepts, with real request and answer payloads, and the cues for Lex's livestream layouts. The rules are in `docs/data-contracts.md` (Prompter link HTTP contract), the decision is ADR 0035, and the code is `src/prompter-link.js` (wire checks) and `src/prompter-control.js` (what a request does).
+This is the guide for whoever drives CamFrame from the prompter (a person or the prompter's agent), or from any other tool. It lists every request the Prompter link accepts, with real request and answer payloads, and the cues for Lex's livestream layouts. The rules are in `docs/data-contracts.md` (Prompter link HTTP contract), the decisions are ADR 0035 and ADR 0040, and the code is `src/prompter-link.js` (wire checks) and `src/prompter-control.js` (what a request does).
 
 API 2 needs a CamFrame build that contains it. Check before relying on it: `GET /camframe/status` answers `"api": 2`. An older CamFrame has no `api` field, refuses numeric sizes with `400`, and has no `/camframe/scenes` or `/camframe/small-size` (`404`).
+
+## Open on purpose
+
+The Prompter link is a public interface on this computer, not only the prompter's (ADR 0040, Lex 2026-11-15). Anyone may build tools on it: a script, a stream deck button, a page of their own. While it is on:
+
+- A program that sends no `Origin`, the prompter site and any `http://localhost` or `http://127.0.0.1` page may use every request below.
+- A page that sends `Origin: null` (a `file://` copy, or a sandboxed frame on any web site) may send cues and read the Scene names, but not save or read the display layout.
+- It never accepts another computer, never changes the camera or look on its own (only by applying a saved Scene), never deletes or reorders Scenes, never renames one except for the spelling change a `replace` save can make (it takes the name as sent), and cannot hide or quit CamFrame. Turning the link off stops all of it.
+
+A change that narrows this is Lex's decision in a new ADR.
 
 ## Basics
 
 - Base address: `http://127.0.0.1:47833`, only while the Prompter link is on in CamFrame.
 - `POST` bodies are JSON (`Content-Type: application/json`), at most 1024 bytes.
-- Allowed pages: `https://prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, `file://` copies, and local programs that send no `Origin`.
-- `POST /camframe/scenes` and `POST /camframe/small-size` refuse `file://` copies (`Origin: null`, `403`). A `file://` copy may send cues, but its status has only `app`, `version`, `scenes` and `api`, and its cue answers have only `ok` and `cue`.
+- Allowed callers: `https://prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, local programs that send no `Origin`, and, for cues only, pages that send `Origin: null` (`file://` copies and sandboxed frames on any web site).
+- `POST /camframe/scenes` and `POST /camframe/small-size` refuse `Origin: null` (`403`). Such a page may send cues, but its status has only `app`, `version`, `scenes` and `api`, and its cue answers have only `ok` and `cue`.
 - Every answer is JSON. Success is `200 {"ok":true,…}` (except `GET /camframe/status`, which is the status object itself). A refusal is `{"ok":false,"error":"<plain English>","code":"<code>"}`:
 
 | HTTP | `code` | Meaning |
@@ -39,7 +49,7 @@ Read-only. The first three fields are the same as before API 2.
 ```json
 {
   "app": "camframe",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "scenes": ["Interview", "Live small corner", "Live right large"],
   "api": 2,
   "sceneLimit": 6,
