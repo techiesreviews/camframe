@@ -49,17 +49,25 @@ export function sceneDisplays(geometry) {
 
 const cameraPoint = (position) => ({ x: position.x + OVERLAY_CHROME.left, y: position.y + OVERLAY_CHROME.top })
 
+// The request a saved Scene makes (for a layout Scene, the inverse of `layoutToSave`): a layout
+// Scene's size ("small" kept), spot, margin and withinRight, or a snapshot Scene's saved size. Without
+// a spot, the place is the saved camera point (the camera's top-left), or none.
+export function sceneRequest({ layout, settings }) {
+  const point = !layout?.position && settings.position ? cameraPoint(settings.position) : undefined
+  if (!layout) return { size: settings.size, point }
+  return { size: layout.size, spot: layout.position, point, margin: layout.margin, withinRight: layout.withinRight }
+}
+
 // A layout Scene, planned with the live shape; else its saved size and place (no work area known, or
 // the display is too small even for the smallest camera), the place kept inside the work area when
 // one is known. A layout with a place is planned on `workArea`; one without a place keeps its saved
 // camera point on the display nearest that point (`workAreaAt`), shrunk and kept on screen there.
 function layoutSceneOpening(scene, settings, { workArea, workAreaAt }) {
-  const { layout } = scene
   const saved = { size: scene.settings.size, position: scene.settings.position }
-  const point = !layout.position && saved.position ? cameraPoint(saved.position) : undefined
+  const request = sceneRequest(scene)
+  const { point } = request
   const area = point && workAreaAt ? workAreaAt(point) : workArea
-  const request = { size: layout.size, spot: layout.position, point, margin: layout.margin, withinRight: layout.withinRight }
-  const plan = area && (layout.position || point) ? planLayoutRequest(request, settings, { workArea: area }) : undefined
+  const plan = area && (request.spot || point) ? planLayoutRequest(request, settings, { workArea: area }) : undefined
   if (plan && !plan.error) return { size: plan.size, position: plan.position, requestedSize: plan.requestedSize, clamped: plan.clamped }
   const requestedSize = resolveLayoutRequest(request, settings).size
   const window = overlayDimensionsFor({ shape: settings.shape, size: saved.size })
@@ -73,13 +81,13 @@ function layoutSceneOpening(scene, settings, { workArea, workAreaAt }) {
 // connected displays (`workAreas`, the `isOnScreen` rule), with the place kept wholly on the display
 // nearest its camera (`workAreaAt`), so a Scene saved on a display that is gone, or at a higher
 // resolution, opens on screen (TOOLS-156). The Scene keeps its saved place; only where it opens moves.
-function snapshotSceneOpening(sceneSettings, { workAreas, workAreaAt }) {
-  const { size, position: saved } = sceneSettings
+function snapshotSceneOpening(scene, { workAreas, workAreaAt }) {
+  const { size, position: saved } = scene.settings
   const opens = { size, position: saved, requestedSize: size, clamped: false }
   if (!saved || !workAreas || !workAreaAt) return opens
-  const window = overlayDimensionsFor(sceneSettings)
+  const window = overlayDimensionsFor(scene.settings)
   if (isOnScreen({ ...saved, ...window }, workAreas)) return opens
-  const area = workAreaAt(cameraPoint(saved))
+  const area = workAreaAt(sceneRequest(scene).point)
   return area ? { ...opens, position: keepOnWorkArea(saved, window, area) } : opens
 }
 
@@ -87,5 +95,5 @@ function snapshotSceneOpening(sceneSettings, { workAreas, workAreaAt }) {
 // the live shape): `{ size, position, requestedSize, clamped }`. `position` is the Compact window's
 // top-left, or null for a Scene without a place. `context` is `sceneDisplays()`.
 export function sceneOpening(scene, settings, context = {}) {
-  return scene.layout ? layoutSceneOpening(scene, settings, context) : snapshotSceneOpening(scene.settings, context)
+  return scene.layout ? layoutSceneOpening(scene, settings, context) : snapshotSceneOpening(scene, context)
 }

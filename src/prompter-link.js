@@ -4,8 +4,6 @@ import {
   CAMERA_SIZE_MAX,
   CAMERA_SIZE_MIN,
   COMPACT_SPOTS,
-  LOOK_SETTING_KEYS,
-  OVERLAY_CHROME,
   PROMPTER_MARGIN_MAX,
   PROMPTER_MARGIN_MIN,
   SCENE_LIMIT,
@@ -13,7 +11,7 @@ import {
   WITHIN_RIGHT_MIN,
   isWithinRightShare,
 } from './settings.js'
-import { sameName } from './scenes.js'
+import { describeScene, sameName, sceneLook } from './scenes.js'
 
 // The Prompter link: an opt-in HTTP endpoint on this computer that lets the teleprompter
 // (https://prompter.techies.tools, a local copy, or a file:// copy) switch the Overlay between Full
@@ -223,45 +221,35 @@ export function cueAction(cue, settings) {
   return { action: 'compact', size }
 }
 
-// Everything a Scene stores except its size and place: camera, shape, appearance and framing.
-// The camera's device id stays in CamFrame; `signature` changes whenever any of these, the camera
-// included, changes, so the prompter can check that a layout left the look alone.
+// The Scene library's look (`sceneLook`) for the status. The camera's device id stays in CamFrame;
+// `signature` changes whenever any part of the look, the camera included, changes, so the prompter
+// can check that a layout left the look alone.
 export function lookOf(settings) {
-  const look = Object.fromEntries(
-    LOOK_SETTING_KEYS.map((key) => {
-      const value = settings[key]
-      return [key, value && typeof value === 'object' ? { ...value } : value]
-    }),
-  )
+  const look = sceneLook(settings)
   const signature = createHash('sha256').update(JSON.stringify(look)).digest('hex').slice(0, 16)
   delete look.cameraId
   return { ...look, signature }
 }
 
-// `size` and `position` are what the Scene asks for (`size` resolved from the small size when it
-// follows it; `position` a place name, or else the camera's top-left point, the form a cue's point
-// takes); `savedSize` and `savedPosition` (the window's top-left) are what it worked out on the
-// display it was saved on.
-export function sceneDetail(scene, { smallSize } = {}) {
-  const { layout } = scene
-  const followsSmall = layout?.size === 'small'
-  const size = followsSmall ? (smallSize ?? scene.settings.size) : (layout?.size ?? scene.settings.size)
-  const saved = scene.settings.position
-  const cameraPoint = saved ? { x: saved.x + OVERLAY_CHROME.left, y: saved.y + OVERLAY_CHROME.top } : saved
+// The Scene library's answers (`describeScene`) in the status's form: `position` is the place it asks
+// for (a place name, or the camera's top-left point, the form a cue's point takes); `savedSize` and
+// `savedPosition` (the window's top-left) are what it worked out on the display it was saved on.
+export function sceneDetail(scene, settings) {
+  const answer = describeScene(scene, settings)
+  const layout = answer.kind === 'layout'
   return {
     id: scene.id,
     name: scene.name,
-    kind: layout ? 'layout' : 'snapshot',
-    size,
-    ...(layout ? { followsSmallSize: followsSmall } : {}),
-    position: layout?.position ?? cameraPoint,
-    ...(layout?.margin !== undefined ? { margin: layout.margin } : {}),
-    ...(layout?.withinRight !== undefined ? { withinRight: layout.withinRight } : {}),
-    savedSize: scene.settings.size,
-    savedPosition: scene.settings.position,
-    // A layout Scene keeps the live look; any other Scene applies the look it saved.
-    keepsLiveLook: Boolean(layout),
-    ...(layout ? {} : { look: lookOf(scene.settings) }),
+    kind: answer.kind,
+    size: answer.size,
+    ...(layout ? { followsSmallSize: answer.followsSmallSize } : {}),
+    position: answer.place,
+    ...(answer.margin !== undefined ? { margin: answer.margin } : {}),
+    ...(answer.withinRight !== undefined ? { withinRight: answer.withinRight } : {}),
+    savedSize: answer.saved.size,
+    savedPosition: answer.saved.position,
+    keepsLiveLook: answer.keepsLiveLook,
+    ...(answer.look ? { look: lookOf(answer.look) } : {}),
   }
 }
 
@@ -280,7 +268,7 @@ export function linkStatusBody(settings, version, { activeSceneId = '', view = n
     activeScene: active?.name ?? null,
     view,
     look: lookOf(settings),
-    sceneDetails: settings.presets.map((scene) => sceneDetail(scene, { smallSize: settings.prompterSmallSize })),
+    sceneDetails: settings.presets.map((scene) => sceneDetail(scene, settings)),
   }
 }
 

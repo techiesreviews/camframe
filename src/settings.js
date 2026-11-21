@@ -223,12 +223,6 @@ export function isWithinRightShare(value) {
   return Number.isFinite(value) && value >= WITHIN_RIGHT_MIN && value <= WITHIN_RIGHT_MAX
 }
 
-// The camera, shape, appearance and framing of a settings object: everything a Scene stores
-// except its size and place. A layout Scene keeps these from the live settings.
-export const LOOK_SETTING_KEYS = Object.freeze(
-  PRESET_SETTING_KEYS.filter((key) => key !== 'size' && key !== 'position'),
-)
-
 // A corner resize by hand (the geometry reports one only after the pointer moved). It also sets the
 // small size whenever the size changes, so the size let go at always wins.
 export function settingsAfterHandResize(settings, patch) {

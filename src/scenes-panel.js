@@ -1,6 +1,5 @@
 import { SCENE_LIMIT, dimensionsFor } from './settings.js'
-import { sameName } from './scenes.js'
-import { resolveLayoutRequest } from './layout-request.js'
+import { sameName, sceneLookOnCamera } from './scenes.js'
 
 // The Scenes tab of Inline settings (ADR 0037): the saved Scenes as a list or a grid of small
 // screens, a slot that saves the live look, rename, delete with Undo, Undo after a change saved into
@@ -69,14 +68,6 @@ export function tileCamera(look, rect) {
   }
 }
 
-// What a Scene looks like on camera: a layout Scene keeps the live look at the size it really opens
-// at (its tile preview's `size`, which can be smaller than it asks for on a small display). Before the
-// first preview it shows the size it asks for, so a "small" Scene follows the Small size.
-function lookFor(scene, live, preview) {
-  if (!scene.layout) return scene.settings
-  return { ...live, size: preview?.size ?? resolveLayoutRequest({ size: scene.layout.size }, live).size }
-}
-
 // Everything the tab draws, from the Overlay state, the tab's own UI state and the time now.
 export function scenesPanelModel(state, ui, now) {
   const previews = state.scenePreviews ?? { live: undefined, scenes: {} }
@@ -85,7 +76,9 @@ export function scenesPanelModel(state, ui, now) {
   const undo = state.sceneUndo && now < state.sceneUndo.endsAt ? state.sceneUndo : null
   const items = scenes.map((scene, index) => {
     const rect = previews.scenes?.[scene.id]
-    const look = lookFor(scene, state, rect)
+    // The size a tile preview gives is the size the Scene really opens at, which can be smaller than
+    // it asks for on a small display.
+    const look = sceneLookOnCamera(scene, state, rect?.size)
     const description = sceneDescription(look, rect)
     const active = scene.id === state.activePresetId
     const saved = scene.id === flashOn

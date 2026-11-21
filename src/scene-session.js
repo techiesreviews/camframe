@@ -72,7 +72,7 @@ export function createSceneSession({
   //   saved into it), and still opens where it was saved once that display is back (ADR 0038).
   function activeScenePlaceAfter(next, keys) {
     const active = settings.presets.find((scene) => scene.id === activeSceneId)
-    if (!active || active.layout) return undefined
+    if (!active || sceneLibrary.sceneKind(active) === 'layout') return undefined
     const saved = active.settings.position
     if (!saved) return null
     const live = settings.position

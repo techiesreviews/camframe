@@ -1,6 +1,6 @@
 import { PRESET_SETTING_KEYS, SCENE_LIMIT, overlayDimensionsFor, sanitizeSettings, settingsForPreset } from './settings.js'
 import { cameraRectFor, compactBaseBounds } from './overlay-geometry.js'
-import { sceneOpening } from './layout-request.js'
+import { resolveLayoutRequest, sceneOpening, sceneRequest } from './layout-request.js'
 
 // The Scene library owns every Scene rule: naming, ids, the Scene limit, ordering, import/export,
 // and which Scene is active. Each operation takes the current `{ settings, activeSceneId }` and
@@ -44,14 +44,63 @@ export function patchSettings({ settings }, patch) {
   return { settings: sanitizeSettings({ ...settings, ...patch }), activeSceneId: '' }
 }
 
+const PLACE_KEYS = ['size', 'position']
+const CAMERA_KEYS = ['cameraId', 'cameraLabel', 'overlayResolution']
+// A Scene's look: everything it stores except its size and place (the camera and its quality, the
+// shape, the appearance and the framing).
+const SCENE_LOOK_KEYS = PRESET_SETTING_KEYS.filter((key) => !PLACE_KEYS.includes(key))
 // What the active Scene follows when the look changes by hand (ADR 0037): everything a Scene stores
 // except the camera and its quality, so a missing camera falling back to the default one, or a
 // quality the device refused, never rewrites a Scene.
-export const FOLLOWED_SETTING_KEYS = Object.freeze(
-  PRESET_SETTING_KEYS.filter((key) => !['cameraId', 'cameraLabel', 'overlayResolution'].includes(key)),
-)
-const LOOK_KEYS = FOLLOWED_SETTING_KEYS.filter((key) => key !== 'size' && key !== 'position')
+export const FOLLOWED_SETTING_KEYS = Object.freeze(PRESET_SETTING_KEYS.filter((key) => !CAMERA_KEYS.includes(key)))
+// The part of the look that Undo puts back with a layout Scene: the followed part.
+const FOLLOWED_LOOK_KEYS = SCENE_LOOK_KEYS.filter((key) => FOLLOWED_SETTING_KEYS.includes(key))
 const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right)
+
+// ---- What a Scene is ----
+// The Scene library answers the questions about one Scene; the Prompter link status and the Scenes
+// tab format these answers instead of reading the Scene record. Where and how big a Scene really
+// opens is `sceneOpening` (layout-request.js).
+
+// The look of a settings object (`SCENE_LOOK_KEYS`), with the framing copied.
+export function sceneLook(settings) {
+  return Object.fromEntries(
+    SCENE_LOOK_KEYS.map((key) => {
+      const value = settings[key]
+      return [key, value && typeof value === 'object' ? { ...value } : value]
+    }),
+  )
+}
+
+// 'layout' for a Scene saved through the Prompter link (a size and place with the live look),
+// 'snapshot' for any other Scene.
+export const sceneKind = (scene) => (scene.layout ? 'layout' : 'snapshot')
+
+// What a Scene asks for with the live `settings`: `size` is the size it asks for now ("small"
+// resolved to the small size), `place` its spot name, else its saved camera point (the camera's
+// top-left), else null; `saved` is the size and window top-left it worked out when it was saved.
+// A snapshot Scene applies its own `look`; a layout Scene keeps the live one.
+export function describeScene(scene, settings) {
+  const request = sceneRequest(scene)
+  return {
+    kind: sceneKind(scene),
+    followsSmallSize: request.size === 'small',
+    size: resolveLayoutRequest({ size: request.size }, settings).size,
+    place: request.spot ?? request.point ?? null,
+    margin: request.margin,
+    withinRight: request.withinRight,
+    saved: { size: scene.settings.size, position: scene.settings.position },
+    keepsLiveLook: Boolean(scene.layout),
+    look: scene.layout ? undefined : sceneLook(scene.settings),
+  }
+}
+
+// What a Scene looks like on camera: a layout Scene keeps the live look at `openSize`, the size it
+// really opens at (`sceneOpening`), or else the size it asks for; a snapshot Scene its saved settings.
+export function sceneLookOnCamera(scene, settings, openSize) {
+  if (!scene.layout) return scene.settings
+  return { ...settings, size: openSize ?? describeScene(scene, settings).size }
+}
 
 // A hand change of the live look (Inline settings, the toolbar's Shape, dragging or resizing the
 // Overlay). `next` is the full settings after the change; `keys` are the keys the change set
@@ -327,7 +376,7 @@ export function createSceneEdits({ now = () => Date.now() } = {}) {
       if (result.autosaved) {
         const { before: scene } = result.autosaved
         const keep = change?.base.id === scene.id
-        const look = Object.fromEntries(LOOK_KEYS.map((key) => [key, before.settings[key]]))
+        const look = Object.fromEntries(FOLLOWED_LOOK_KEYS.map((key) => [key, before.settings[key]]))
         change = keep ? { ...change, endsAt: now() + SCENE_UNDO_MS } : { base: scene, look, endsAt: now() + SCENE_UNDO_MS }
       } else if (result.appliedScene || result.savedSceneId || result.activeSceneId !== before?.activeSceneId) {
         change = undefined
@@ -383,7 +432,7 @@ export function scenePreviews(settings, { displayAt, liveBounds, ...displays } =
   const scenes = {}
   for (const scene of settings.presets) {
     const { size, position } = sceneOpening(scene, settings, displays)
-    const shape = scene.layout ? settings.shape : scene.settings.shape
+    const { shape } = sceneLookOnCamera(scene, settings, size)
     scenes[scene.id] = { ...share(windowFor({ shape, size, position })), size }
   }
   const live = liveBounds ? { ...liveBounds, ...overlayDimensionsFor(settings) } : windowFor(settings)
