@@ -404,9 +404,13 @@ app.whenReady().then(() => {
 
   createOverlayWindow()
   createTray()
-  // A screen added or removed, a new resolution or scale, or docking: a lost Overlay comes back.
+  // A screen added or removed, a new resolution or scale, or docking: a lost Overlay comes back, and
+  // the Scenes tab tiles are sent again for the displays there are now.
   for (const event of ['display-added', 'display-removed', 'display-metrics-changed']) {
-    screen.on(event, () => overlayGeometry?.ensureOnScreen())
+    screen.on(event, () => {
+      overlayGeometry?.ensureOnScreen()
+      emitState()
+    })
   }
 
   const prompterControl = createPrompterControl({
