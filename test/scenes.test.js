@@ -17,9 +17,13 @@ import {
   SCENE_DELETE_UNDO_MS,
   SCENE_UNDO_MS,
   createSceneEdits,
+  describeScene,
   followLiveLook,
   renameScene,
   restoreScene,
+  sceneKind,
+  sceneLook,
+  sceneLookOnCamera,
   scenePreviews,
   undoSceneChange,
 } from '../src/scenes.js'
@@ -591,4 +595,95 @@ test('an exact Scene saved off this screen is shown clamped onto the display nea
   }
   // Without the display list (no window yet) the saved spot is used as before.
   assert.deepEqual(applyScene(state, 'desk', { workArea: laptop, workAreaAt: () => laptop }).settings.position, { x: 3000, y: 400 })
+})
+
+// What a Scene is: the Scene library answers the questions about one Scene (its kind, the size it
+// asks for now, its place, its look); the Prompter link status and the Scenes tab only format them.
+const snapshotOf = (settings) => scene('desk', 'Desk', settings)
+const layoutOf = (layout, settings = {}) => ({ ...scene('corner', 'Corner', settings), layout })
+const smallSized = (patch = {}) => sanitizeSettings({ prompterSmallSize: 300, ...patch })
+
+test('a Scene look is everything it stores but its size and place, the camera included', () => {
+  const settings = smallSized({
+    cameraId: 'cam-2',
+    cameraLabel: 'Desk camera',
+    overlayResolution: '1080p',
+    shape: 'portrait',
+    size: 400,
+    position: { x: 10, y: 20 },
+    frameEffect: 'glow',
+    cameraPosition: { x: 40, y: 60 },
+  })
+  const look = sceneLook(settings)
+  assert.deepEqual(Object.keys(look), [
+    'cameraId',
+    'cameraLabel',
+    'shape',
+    'overlayResolution',
+    'frameEffect',
+    'effectColor',
+    'glowStrength',
+    'glowSpread',
+    'blurAmount',
+    'blurOpacity',
+    'borderWidth',
+    'borderColor',
+    'mirror',
+    'cameraZoom',
+    'cameraPosition',
+  ])
+  assert.equal(look.cameraId, 'cam-2')
+  assert.equal(look.overlayResolution, '1080p')
+  assert.equal(look.shape, 'portrait')
+  assert.deepEqual(look.cameraPosition, { x: 40, y: 60 })
+  assert.notEqual(look.cameraPosition, settings.cameraPosition, 'the framing is a copy')
+})
+
+test('a Scene saved through the Prompter link is a layout Scene; any other is a snapshot', () => {
+  assert.equal(sceneKind(layoutOf({ size: 'small', position: 'bottom-right' })), 'layout')
+  assert.equal(sceneKind(snapshotOf({ size: 288 })), 'snapshot')
+})
+
+test('a "small" layout Scene asks for the live small size at its spot and keeps the live look', () => {
+  const corner = layoutOf({ size: 'small', position: 'bottom-right', margin: 24 }, { size: 288, position: { x: 1, y: 2 } })
+  assert.deepEqual(describeScene(corner, smallSized()), {
+    kind: 'layout',
+    followsSmallSize: true,
+    size: 300,
+    place: 'bottom-right',
+    margin: 24,
+    withinRight: undefined,
+    saved: { size: 288, position: { x: 1, y: 2 } },
+    keepsLiveLook: true,
+    look: undefined,
+  })
+})
+
+test('a layout Scene without a spot asks for its saved camera point', () => {
+  const answer = describeScene(layoutOf({ size: 432 }, { size: 432, position: { x: 100, y: 200 } }), smallSized())
+  assert.equal(answer.size, 432)
+  assert.equal(answer.followsSmallSize, false)
+  assert.deepEqual(answer.place, { x: 100 + OVERLAY_CHROME.left, y: 200 + OVERLAY_CHROME.top })
+  assert.equal(describeScene(layoutOf({ size: 432 }), smallSized()).place, null, 'a layout Scene without a place has none')
+})
+
+test('a snapshot Scene asks for its saved size and camera point and applies its own look', () => {
+  const desk = snapshotOf({ size: 400, shape: 'landscape', cameraId: 'cam-2', position: { x: 10, y: 20 } })
+  const answer = describeScene(desk, smallSized())
+  assert.equal(answer.kind, 'snapshot')
+  assert.equal(answer.size, 400)
+  assert.equal(answer.followsSmallSize, false)
+  assert.deepEqual(answer.place, { x: 10 + OVERLAY_CHROME.left, y: 20 + OVERLAY_CHROME.top })
+  assert.equal(answer.keepsLiveLook, false)
+  assert.deepEqual(answer.look, sceneLook(desk.settings))
+  assert.equal(describeScene(snapshotOf({ size: 288 }), smallSized()).place, null, 'a Scene without a place has none')
+})
+
+test('on camera a layout Scene shows the live look at the size it opens at; a snapshot its own', () => {
+  const settings = smallSized({ shape: 'rounded', size: 500, borderWidth: 4 })
+  const corner = layoutOf({ size: 'small', position: 'bottom-right' })
+  assert.deepEqual(sceneLookOnCamera(corner, settings), { ...settings, size: 300 }, 'before a preview: the size it asks for')
+  assert.deepEqual(sceneLookOnCamera(corner, settings, 240), { ...settings, size: 240 }, 'the size it really opens at')
+  const desk = snapshotOf({ shape: 'portrait', size: 400 })
+  assert.equal(sceneLookOnCamera(desk, settings, 240), desk.settings)
 })

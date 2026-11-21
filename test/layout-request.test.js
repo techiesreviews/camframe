@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { OVERLAY_CHROME, sanitizeSceneLayout, sanitizeSettings, settingsForPreset } from '../src/settings.js'
-import { layoutToSave, planLayoutRequest, resolveLayoutRequest, sceneDisplays, sceneOpening } from '../src/layout-request.js'
+import { layoutToSave, planLayoutRequest, resolveLayoutRequest, sceneDisplays, sceneOpening, sceneRequest } from '../src/layout-request.js'
 import { applyScene, scenePreviews } from '../src/scenes.js'
 
 // One answer to "where and how big does this Scene really open": applying the Scene and its Scenes
@@ -201,4 +201,24 @@ test('the displays a Scene is fitted to come from the Overlay geometry', () => {
   assert.deepEqual(displays.workAreas, [desktop.workArea, laptop.workArea])
   assert.deepEqual(displays.workAreaAt({ x: 1, y: 2 }).point, { x: 1, y: 2 })
   assert.deepEqual(sceneDisplays(undefined), {})
+})
+
+test('a saved layout makes the request it was saved from', () => {
+  const settings = sanitizeSettings({ prompterSmallSize: 300 })
+  for (const asked of [
+    { size: 'small', spot: 'bottom-right' },
+    { size: 432, spot: 'right', margin: 0, withinRight: 0.3 },
+    { size: 'current', spot: 'top-left', margin: 48 },
+  ]) {
+    const scene = layoutScene('saved', layoutToSave(asked, settings), { size: 288, position: { x: 5, y: 6 } })
+    const size = asked.size === 'current' ? settings.size : asked.size
+    assert.deepEqual(sceneRequest(scene), { size, spot: asked.spot, point: undefined, margin: asked.margin, withinRight: asked.withinRight })
+  }
+  const point = layoutScene('point', { size: 400 }, { size: 400, position: { x: 5, y: 6 } })
+  assert.deepEqual(sceneRequest(point).point, { x: 5 + OVERLAY_CHROME.left, y: 6 + OVERLAY_CHROME.top })
+  assert.deepEqual(sceneRequest(exact('desk', { size: 360, position: { x: 7, y: 8 } })), {
+    size: 360,
+    point: { x: 7 + OVERLAY_CHROME.left, y: 8 + OVERLAY_CHROME.top },
+  })
+  assert.deepEqual(sceneRequest(exact('desk', { size: 360 })), { size: 360, point: undefined })
 })
