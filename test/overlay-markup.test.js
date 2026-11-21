@@ -262,6 +262,8 @@ test('Scene tiles are sent after the window starts moving to the display it is h
   assert.match(mainSource, /applyCue: thenSendTiles\(prompterControl\.applyCue\),\s*saveScene: thenSendTiles\(prompterControl\.saveScene\),/)
   // A display plugged in or out: the tiles are sent again for the displays there are now.
   assert.match(mainSource, /screen\.on\(event, \(\) => \{\s*overlayGeometry\?\.ensureOnScreen\(\)\s*emitState\(\)\s*\}\)/)
+  // A place the window reached by itself, such as the heal after a move whose display was unplugged.
+  assert.match(mainSource, /function compactPlaceReached\(position\) \{\s*sceneSession\.record\(\{ position \}\)\s*emitState\(\)/)
 })
 
 test('the toolbar Prompter link button turns the link on and off', () => {
