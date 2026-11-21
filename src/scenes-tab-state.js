@@ -506,10 +506,12 @@ export function createScenesTabState({ camFrame, now = () => Date.now() }) {
     send(event) {
       const outer = step
       step = emptyStep()
-      handlers[event.type]?.(event)
-      const done = step
-      step = outer
-      return done
+      try {
+        handlers[event.type]?.(event)
+        return step
+      } finally {
+        step = outer
+      }
     },
   }
 }
