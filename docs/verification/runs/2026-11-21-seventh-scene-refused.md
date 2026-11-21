@@ -16,7 +16,7 @@
 | New tests on the old code | Fail as expected | `saving a new Scene at the Scene limit is refused and never drops the oldest Scene` (the old code made an id for the new Scene and dropped `s0`) and `a seventh Scene is refused: the six Scenes stay and screen readers hear why` | run with only `SCENE_LIMIT_MESSAGE` added, before the refusal |
 | `kit shots` | Pass | 25 screenshots, byte for byte the same as before the change | every PNG compared with `cmp` against a run on 880183c; nothing drawn changed, the Scenes tab already showed Full at six |
 | `kit ux` | Not run | | the repo has no `docs/agents/features.md` list for it to try |
-| `npm run test:electron` | Not run | | the brief says not to run the Electron smoke on Lex's screen |
+| `npm run test:electron` | Not run | | it opens camera windows on Lex's screen and is not wrapped by the kit; the change is in the pure Scene library and session, covered by unit tests |
 | `git diff --check` | Pass | | |
 
 ## What changed for the user
