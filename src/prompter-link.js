@@ -18,8 +18,8 @@ import { describeScene, sameName, sceneLook } from './scenes.js'
 // screen, Compact mode at a chosen spot or exact size and place, and a saved Scene when its reading
 // line reaches a cue line. It can also save layout Scenes and the size "small" restores, and
 // reports the live view so the prompter can check what it got.
-// It binds 127.0.0.1 only, answers only the prompter's origins, and never changes the camera
-// itself. `prompter-control.js` (wired by main) acts on checked requests through `applyCue`,
+// It binds 127.0.0.1 only, is open on purpose to any local tool, not only the prompter (ADR 0040),
+// and never changes the camera itself. `prompter-control.js` (wired by main) acts on checked requests through `applyCue`,
 // `saveScene` and `setSmallSize`; this module owns the wire protocol.
 
 export const PROMPTER_LINK_HOST = '127.0.0.1'
@@ -52,7 +52,8 @@ const isPlainObject = (value) =>
 
 const PROMPTER_ORIGINS = new Set([PROMPTER_SITE, 'null'])
 
-// Browsers send `Origin` on every cross-origin request. `null` is a file:// copy of the prompter.
+// Browsers send `Origin` on every cross-origin request. `null` is a file:// copy of the prompter
+// or a sandboxed frame on any site: it may cue, but not save or see the display layout.
 // A request without `Origin` comes from a program on this computer, not from a web page.
 export function originAllowed(origin) {
   if (origin === undefined) return true
