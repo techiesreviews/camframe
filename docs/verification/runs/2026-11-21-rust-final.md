@@ -132,9 +132,11 @@ for the quality-decision adapter, shortcut table, full presentation table, cue a
 drag dispatch, repeated refusal and the pixel counter. The reviewer explicitly ended the loop
 because only nits and test gaps remain. No P1/P2 finding is waived.
 
-The first `kit pr --no-merge` stopped because two standard MIT-license lines in the Phosphor
-notice matched lines indexed from a local skill. The complete license and copyright remain;
-only two line breaks were moved. No skill content was copied, and the guard stays enabled.
+`kit pr --no-merge` stopped because two standard MIT-license lines in the Phosphor notice
+matched lines indexed from a local skill. Rewrapping did not resolve that false match. The Rust
+icons' 2023 copyright is now consolidated into the repository's MIT `LICENSE`, with its complete
+terms unchanged, and linked from the Rust README. The older Electron notice stays in place.
+No skill content was copied, and the guard stays enabled.
 
 ## Release decision
 

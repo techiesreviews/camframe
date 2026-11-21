@@ -1,5 +1,8 @@
 # CamFrame Rust
 
+The Rust app's Phosphor icon assets use the MIT license; their copyright notice and the complete
+terms are in the repository [LICENSE](../LICENSE). The older Electron icons retain their own notice.
+
 CamFrame rebuilt in Rust with GPUI: the floating camera bubble, for Windows (`camframe-rust.exe`)
 and macOS (`CamFrame Rust.app`, beta until a person has tried it). It is being built feature by
 feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
