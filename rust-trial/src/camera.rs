@@ -94,15 +94,15 @@ impl CameraWorker {
                 if demo_pattern {
                     run_demo_loop(&stop_flag, &slot, &wake);
                 } else {
-                    let camera_unavailable = run_webcam_loop(&stop_flag, &slot, &wake);
+                    let ended = run_webcam_loop(&stop_flag, &slot, &wake);
                     // On macOS a missing camera or a denied permission shows the demo pattern
-                    // instead of an empty bubble.
+                    // instead of an empty bubble; other camera errors keep their message on screen.
                     #[cfg(target_os = "macos")]
-                    if camera_unavailable && !stop_flag.load(Ordering::Relaxed) {
+                    if ended.falls_back_to_demo() && !stop_flag.load(Ordering::Relaxed) {
                         run_demo_loop(&stop_flag, &slot, &wake);
                     }
                     #[cfg(not(target_os = "macos"))]
-                    let _ = camera_unavailable;
+                    let _ = ended;
                 }
             })
             .ok();
@@ -142,25 +142,55 @@ fn run_demo_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sen
     }
 }
 
-/// Streams the first camera until `stop` is set. Returns `true` when it ended because the camera
-/// could not be found, opened or read (the status already says why).
-fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sender<()>) -> bool {
+/// Why the webcam loop ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WebcamEnd {
+    /// The app asked the capture thread to stop.
+    Stopped,
+    /// No camera is connected.
+    NoCamera,
+    /// Camera access is blocked in the system settings or the permission prompt said no.
+    Denied,
+    /// The camera exists but could not be opened or read (busy, unplugged, driver error).
+    Failed,
+}
+
+impl WebcamEnd {
+    fn from_message(message: &str) -> Self {
+        if message == CAMERA_BLOCKED_MESSAGE { Self::Denied } else { Self::Failed }
+    }
+
+    /// Only a missing camera or a denied permission swaps in the demo pattern (macOS); every other
+    /// error keeps its message on screen so the person knows what went wrong.
+    #[cfg(any(target_os = "macos", test))]
+    fn falls_back_to_demo(self) -> bool {
+        matches!(self, Self::NoCamera | Self::Denied)
+    }
+}
+
+/// Publishes why the camera is unavailable and returns the matching end reason.
+fn camera_unavailable(slot: &CameraSlot, wake: &async_channel::Sender<()>, message: String) -> WebcamEnd {
+    let ended = WebcamEnd::from_message(&message);
+    publish_status(slot, wake, CameraStatus::Unavailable(message));
+    ended
+}
+
+/// Streams the first camera until `stop` is set, and says why it ended (the status already shows
+/// the message).
+fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sender<()>) -> WebcamEnd {
     #[cfg(target_os = "macos")]
     if let Err(msg) = wait_for_camera_permission(stop) {
         publish_status(slot, wake, CameraStatus::Unavailable(msg));
-        return true;
+        return WebcamEnd::Denied;
     }
 
     let cameras = match nokhwa::query(ApiBackend::Auto) {
         Ok(list) if !list.is_empty() => list,
         Ok(_) => {
             publish_status(slot, wake, CameraStatus::Unavailable("No camera found".into()));
-            return true;
+            return WebcamEnd::NoCamera;
         }
-        Err(err) => {
-            publish_status(slot, wake, CameraStatus::Unavailable(classify_error(&err.to_string())));
-            return true;
-        }
+        Err(err) => return camera_unavailable(slot, wake, classify_error(&err.to_string())),
     };
 
     let info = &cameras[0];
@@ -168,21 +198,17 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
 
     let mut camera = match open_preferred_camera(index) {
         Ok(cam) => cam,
-        Err(msg) => {
-            publish_status(slot, wake, CameraStatus::Unavailable(msg));
-            return true;
-        }
+        Err(msg) => return camera_unavailable(slot, wake, msg),
     };
 
     if let Err(err) = camera.open_stream() {
-        publish_status(slot, wake, CameraStatus::Unavailable(classify_error(&err.to_string())));
-        return true;
+        return camera_unavailable(slot, wake, classify_error(&err.to_string()));
     }
 
     publish_status(slot, wake, CameraStatus::Live);
 
     let mut failures = 0u32;
-    let mut camera_unavailable = false;
+    let mut ended = WebcamEnd::Stopped;
     while !stop.load(Ordering::Relaxed) {
         match camera.frame() {
             Ok(buffer) => {
@@ -201,12 +227,7 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
             Err(err) => {
                 failures += 1;
                 if failures >= MAX_CONSECUTIVE_FAILURES {
-                    publish_status(
-                        slot,
-                        wake,
-                        CameraStatus::Unavailable(classify_error(&err.to_string())),
-                    );
-                    camera_unavailable = true;
+                    ended = camera_unavailable(slot, wake, classify_error(&err.to_string()));
                     break;
                 }
                 std::thread::sleep(Duration::from_millis(16));
@@ -215,7 +236,7 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
     }
 
     let _ = camera.stop_stream();
-    camera_unavailable
+    ended
 }
 
 /// Asks macOS for camera access (the system prompt shows once per app) and waits for the answer.
@@ -225,9 +246,8 @@ fn wait_for_camera_permission(stop: &AtomicBool) -> Result<(), String> {
         return Ok(());
     }
     let (answer_tx, answer_rx) = std::sync::mpsc::channel::<bool>();
-    let answer_tx = Mutex::new(answer_tx);
     nokhwa::nokhwa_initialize(move |granted| {
-        let _ = lock_unpoisoned(&answer_tx).send(granted);
+        let _ = answer_tx.send(granted);
     });
     // The prompt waits for the person, so keep waiting (in short steps) until they answer or quit.
     while !stop.load(Ordering::Relaxed) {
@@ -485,6 +505,24 @@ pub fn generate_demo_pattern(width: u32, height: u32, tick: u32) -> BgraFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_missing_or_blocked_camera_falls_back_to_the_demo_pattern() {
+        assert!(WebcamEnd::NoCamera.falls_back_to_demo());
+        assert!(WebcamEnd::Denied.falls_back_to_demo());
+        assert!(!WebcamEnd::Failed.falls_back_to_demo());
+        assert!(!WebcamEnd::Stopped.falls_back_to_demo());
+    }
+
+    #[test]
+    fn camera_errors_map_to_end_reasons() {
+        let blocked = classify_error("Access is denied by the system");
+        assert_eq!(WebcamEnd::from_message(&blocked), WebcamEnd::Denied);
+        let busy = classify_error("device busy");
+        assert_eq!(WebcamEnd::from_message(&busy), WebcamEnd::Failed);
+        let other = classify_error("stream ended");
+        assert_eq!(WebcamEnd::from_message(&other), WebcamEnd::Failed);
+    }
 
     #[test]
     fn decodes_raw_rgb_to_bgra() {

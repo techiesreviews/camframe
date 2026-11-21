@@ -85,8 +85,10 @@ jobs:
           </dict>
           </plist>
           PLIST
-          codesign --force --deep --sign - "$app"
+          codesign --force --sign - "$app"
           codesign --verify --verbose "$app"
+          # Start the signed app's binary too, so the download Lex gets is the one that was checked.
+          ./verify-macos --exe "$app/Contents/MacOS/camframe-trial" --out trial-verification-macos/packaged-app
           cp rust-trial/README.md trial-dist/README.txt
           (cd trial-dist && ditto -c -k --keepParent "CamFrame Trial.app" CamFrame-Trial-macOS-arm64.zip)
           rm -rf "$app"

@@ -143,6 +143,11 @@ mod tests {
         assert!(BubbleShape::Circle.contains_window_point(30.0, 200.0));
         assert!(!BubbleShape::Portrait.contains_window_point(30.0, 200.0));
         assert!(BubbleShape::Portrait.contains_window_point(162.0, 200.0));
+        // Top and bottom strips: inside the circle, outside the shorter landscape shape.
+        for y in [80.0, 320.0] {
+            assert!(BubbleShape::Circle.contains_window_point(162.0, y));
+            assert!(!BubbleShape::Landscape.contains_window_point(162.0, y));
+        }
     }
 
     #[test]

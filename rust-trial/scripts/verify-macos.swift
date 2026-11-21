@@ -238,8 +238,9 @@ func checks() -> Int32 {
     pixels["circle.BR"] = "\(expectClear(circle, "circle BR", 316, 354, backdrop))"
     pixels["circle.probe"] = "\(expectClear(circle, "circle corner probe", 48, 86, backdrop))"
     pixels["circle.shadowProbe"] = "\(expectClear(circle, "circle shadow probe below bubble", 162, 352, backdrop))"
-    pixels["circle.belowWindow"] = "\(circle.pixel(pad + 162, pad + outerHeight + 6))"
-    if !circle.pixel(pad + 162, pad + outerHeight + 6).near(backdrop) {
+    let belowWindow = circle.pixel(pad + 162, pad + outerHeight + 6)
+    pixels["circle.belowWindow"] = "\(belowWindow)"
+    if !belowWindow.near(backdrop) {
         failures.append("pixel 6pt below the window is not the backdrop (window shadow?)")
     }
     pixels["circle.center"] = "\(expectDrawn(circle, "circle center", 162, 200, backdrop))"

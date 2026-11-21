@@ -15,3 +15,4 @@ Never delete a completed record merely because the attempt failed. Remove tempor
 Current backfilled records:
 
 - [`2026-08-12-fullscreen-capture-renegotiation.md`](2026-08-12-fullscreen-capture-renegotiation.md) — dynamic profile switching and the unsuccessful canvas workaround.
+- [`2026-11-21-rust-gpui-bubble-macos.md`](2026-11-21-rust-gpui-bubble-macos.md) — trial only: the Rust GPUI see-through bubble on macOS.
