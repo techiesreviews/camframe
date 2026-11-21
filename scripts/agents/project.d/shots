@@ -20,7 +20,7 @@ tab: the grid and list views with the two starter Scenes, no Scenes and six Scen
 size (324x390) and a tall 324x820 view; a Scene put on camera with the settings staying open; a shape change
 saved into it with its check and Undo; Ctrl+Z; a delete with Undo (focus on Undo) and Undo from the keyboard;
 rename (F2) with the name selected, Escape back to the Scene, an arrow key to the one before and Alt+Down
-moving it a place later (focus stays on it, the page stays); the save form with a taken name (Replace);
+moving it a place later (focus stays on it, both keys' defaults stopped); the save form with a taken name (Replace);
 Escape closing the settings; keyboard focus in high contrast. Then the toolbar's Prompter link button off, on (from the keyboard) and busy, checking all six
 toolbar buttons fit the default Overlay. Fails on page errors, a removed control coming back (Start at
 login, the shortcut list, the Prompter link section) or a missing or wrong state.
@@ -166,15 +166,22 @@ try {
     await page.keyboard.press('Escape')
     const sceneFocus = () => page.evaluate(() => document.activeElement?.closest('[data-id]')?.querySelector('.scene-name')?.textContent)
     if ((await sceneFocus()) !== 'Big right') fail(`Escape in the rename field left focus on ${await sceneFocus()} (${layout})`)
-    await page.keyboard.press(layout === 'grid' ? 'ArrowLeft' : 'ArrowUp')
+    // A listener on document runs after the tab's own and sees whether the arrow's default was stopped.
+    await page.evaluate(() => document.addEventListener('keydown', (event) => {
+      if (event.key.startsWith('Arrow')) window.__prevented = event.defaultPrevented
+    }))
+    const pressPrevented = async (key) => {
+      await page.evaluate(() => (window.__prevented = undefined))
+      await page.keyboard.press(key)
+      return page.evaluate(() => window.__prevented)
+    }
+    if (!(await pressPrevented(layout === 'grid' ? 'ArrowLeft' : 'ArrowUp'))) fail(`an arrow key between Scenes kept its default (${layout})`)
     if ((await sceneFocus()) !== 'Small bottom') fail(`an arrow key moved focus to ${await sceneFocus()}, not Small bottom (${layout})`)
-    const urlBefore = page.url()
-    await page.keyboard.press('Alt+ArrowDown')
+    if (!(await pressPrevented('Alt+ArrowDown'))) fail(`Alt+Down kept its default (${layout})`)
     await page.waitForTimeout(80)
     const order = (await page.locator('.scene-name').allTextContents()).slice(0, 2)
     if (order.join() !== 'Big right,Small bottom') fail(`Alt+Down left the order ${JSON.stringify(order)} (${layout})`)
     if ((await sceneFocus()) !== 'Small bottom') fail(`Alt+Down moved focus to ${await sceneFocus()} (${layout})`)
-    if (page.url() !== urlBefore) fail(`Alt+Down navigated the page to ${page.url()} (${layout})`)
     await page.keyboard.press('Alt+ArrowUp')
     await page.waitForTimeout(80)
     await page.locator('[data-act="save-open"]').click()
