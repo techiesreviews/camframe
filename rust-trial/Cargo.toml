@@ -2,7 +2,7 @@
 name = "camframe-trial"
 version = "0.1.0"
 edition = "2024"
-description = "Trial Rust + GPUI floating webcam bubble with live shape switching on Windows."
+description = "Trial Rust + GPUI floating webcam bubble with live shape switching on Windows and macOS."
 publish = false
 
 [dependencies]
@@ -24,6 +24,9 @@ windows = { version = "0.62", features = [
     "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
 
 [profile.release]
 opt-level = "s"

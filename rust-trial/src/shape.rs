@@ -133,6 +133,19 @@ mod tests {
     }
 
     #[test]
+    fn macos_pixel_probes_match_the_shapes() {
+        // `scripts/verify-macos.swift` reads these window points; keep them in step with the geometry.
+        // 8px below the bubble: outside every shape, so a window shadow would show up there.
+        for shape in BubbleShape::ALL {
+            assert!(!shape.contains_window_point(162.0, 352.0));
+        }
+        // Left side strip: inside the circle, outside the narrower portrait shape.
+        assert!(BubbleShape::Circle.contains_window_point(30.0, 200.0));
+        assert!(!BubbleShape::Portrait.contains_window_point(30.0, 200.0));
+        assert!(BubbleShape::Portrait.contains_window_point(162.0, 200.0));
+    }
+
+    #[test]
     fn cycle_wraps_through_all_four_shapes() {
         let mut s = BubbleShape::Circle;
         s = s.next();

@@ -18,7 +18,10 @@ use crate::camera::{CameraSlot, CameraStatus, CameraWorker, OutputView, lock_unp
 use crate::shape::{
     BubbleShape, DEFAULT_CAMERA_SIZE, OUTER_HEIGHT, OUTER_WIDTH, TOOLBAR_RESERVE_TOP,
 };
-use crate::win32_overlay;
+#[cfg(target_os = "macos")]
+use crate::mac_overlay as platform_overlay;
+#[cfg(not(target_os = "macos"))]
+use crate::win32_overlay as platform_overlay;
 
 actions!(
     camframe_trial,
@@ -85,8 +88,8 @@ pub fn open(config: LaunchConfig, cx: &mut App) -> anyhow::Result<()> {
 
     let position = config.position;
     cx.open_window(options, |window, cx| {
-        if let Err(err) = win32_overlay::configure_transparent_overlay(window, position) {
-            eprintln!("win32 transparent overlay configuration failed: {err}");
+        if let Err(err) = platform_overlay::configure_transparent_overlay(window, position) {
+            eprintln!("transparent overlay configuration failed: {err}");
         }
         cx.new(|cx| BubbleOverlay::new(config, window, cx))
     })?;
@@ -350,6 +353,15 @@ impl BubbleOverlay {
                     this.set_shape(next, window, cx);
                 }),
             );
+
+        // `gpui_macos` ignores `WindowControlArea::Drag` (its hit-test hook is a no-op), so on
+        // macOS the bubble starts the native window drag itself.
+        #[cfg(target_os = "macos")]
+        {
+            bubble = bubble.on_mouse_down(MouseButton::Left, |_event, window, _cx| {
+                window.start_window_move();
+            });
+        }
 
         if let Some(render_image) = frame {
             bubble = bubble.child(

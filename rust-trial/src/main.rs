@@ -1,8 +1,11 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 
 mod camera;
+#[cfg(target_os = "macos")]
+mod mac_overlay;
 mod overlay;
 mod shape;
+#[cfg(not(target_os = "macos"))]
 mod win32_overlay;
 
 use std::path::PathBuf;
@@ -59,9 +62,8 @@ fn main() {
     let launch_instant = Instant::now();
     let config = parse_args(launch_instant);
 
-    #[cfg(target_os = "macos")]
-    nokhwa::nokhwa_initialize(|_| {});
-
+    // On macOS the camera permission is requested by the capture thread (`camera.rs`), so the
+    // demo pattern never touches AVFoundation and a denied camera falls back to the demo pattern.
     gpui_platform::application().run(move |cx| {
         overlay::bind_keys(cx);
         if let Err(err) = overlay::open(config, cx) {

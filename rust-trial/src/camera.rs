@@ -24,6 +24,11 @@ const MIN_FRAME_RATE: u32 = 30;
 const SMOOTH_FRAME_RATE: u32 = 50;
 const MAX_CONSECUTIVE_FAILURES: u32 = 30;
 
+#[cfg(not(target_os = "macos"))]
+const CAMERA_BLOCKED_MESSAGE: &str = "Camera blocked in Windows Settings";
+#[cfg(target_os = "macos")]
+const CAMERA_BLOCKED_MESSAGE: &str = "Camera blocked in System Settings";
+
 const DECODABLE_FORMATS: [FrameFormat; 6] = [
     FrameFormat::MJPEG,
     FrameFormat::YUYV,
@@ -87,9 +92,17 @@ impl CameraWorker {
             .name("camframe-capture".into())
             .spawn(move || {
                 if demo_pattern {
-                    run_demo_loop(stop_flag, slot, wake);
+                    run_demo_loop(&stop_flag, &slot, &wake);
                 } else {
-                    run_webcam_loop(stop_flag, slot, wake);
+                    let camera_unavailable = run_webcam_loop(&stop_flag, &slot, &wake);
+                    // On macOS a missing camera or a denied permission shows the demo pattern
+                    // instead of an empty bubble.
+                    #[cfg(target_os = "macos")]
+                    if camera_unavailable && !stop_flag.load(Ordering::Relaxed) {
+                        run_demo_loop(&stop_flag, &slot, &wake);
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    let _ = camera_unavailable;
                 }
             })
             .ok();
@@ -116,41 +129,37 @@ fn publish_frame(slot: &CameraSlot, wake: &async_channel::Sender<()>, frame: Bgr
     let _ = wake.try_send(());
 }
 
-fn run_demo_loop(
-    stop: Arc<AtomicBool>,
-    slot: Arc<CameraSlot>,
-    wake: async_channel::Sender<()>,
-) {
-    publish_status(&slot, &wake, CameraStatus::DemoPattern);
+fn run_demo_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sender<()>) {
+    publish_status(slot, wake, CameraStatus::DemoPattern);
     let mut tick: u32 = 0;
     while !stop.load(Ordering::Relaxed) {
         let view = lock_unpoisoned(&slot.view)
             .unwrap_or(OutputView { width: 288, height: 288, mirror: true });
         let frame = generate_demo_pattern(view.width.max(1), view.height.max(1), tick);
-        publish_frame(&slot, &wake, frame);
+        publish_frame(slot, wake, frame);
         tick = tick.wrapping_add(1);
         std::thread::sleep(Duration::from_millis(33));
     }
 }
 
-fn run_webcam_loop(
-    stop: Arc<AtomicBool>,
-    slot: Arc<CameraSlot>,
-    wake: async_channel::Sender<()>,
-) {
+/// Streams the first camera until `stop` is set. Returns `true` when it ended because the camera
+/// could not be found, opened or read (the status already says why).
+fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sender<()>) -> bool {
+    #[cfg(target_os = "macos")]
+    if let Err(msg) = wait_for_camera_permission(stop) {
+        publish_status(slot, wake, CameraStatus::Unavailable(msg));
+        return true;
+    }
+
     let cameras = match nokhwa::query(ApiBackend::Auto) {
         Ok(list) if !list.is_empty() => list,
         Ok(_) => {
-            publish_status(
-                &slot,
-                &wake,
-                CameraStatus::Unavailable("No camera found".into()),
-            );
-            return;
+            publish_status(slot, wake, CameraStatus::Unavailable("No camera found".into()));
+            return true;
         }
         Err(err) => {
-            publish_status(&slot, &wake, CameraStatus::Unavailable(classify_error(&err.to_string())));
-            return;
+            publish_status(slot, wake, CameraStatus::Unavailable(classify_error(&err.to_string())));
+            return true;
         }
     };
 
@@ -160,19 +169,20 @@ fn run_webcam_loop(
     let mut camera = match open_preferred_camera(index) {
         Ok(cam) => cam,
         Err(msg) => {
-            publish_status(&slot, &wake, CameraStatus::Unavailable(msg));
-            return;
+            publish_status(slot, wake, CameraStatus::Unavailable(msg));
+            return true;
         }
     };
 
     if let Err(err) = camera.open_stream() {
-        publish_status(&slot, &wake, CameraStatus::Unavailable(classify_error(&err.to_string())));
-        return;
+        publish_status(slot, wake, CameraStatus::Unavailable(classify_error(&err.to_string())));
+        return true;
     }
 
-    publish_status(&slot, &wake, CameraStatus::Live);
+    publish_status(slot, wake, CameraStatus::Live);
 
     let mut failures = 0u32;
+    let mut camera_unavailable = false;
     while !stop.load(Ordering::Relaxed) {
         match camera.frame() {
             Ok(buffer) => {
@@ -183,7 +193,7 @@ fn run_webcam_loop(
                     let view = lock_unpoisoned(&slot.view)
                         .unwrap_or(OutputView { width: 288, height: 288, mirror: true });
                     let framed = cover_resample(&decoded, view);
-                    publish_frame(&slot, &wake, framed);
+                    publish_frame(slot, wake, framed);
                 } else {
                     failures += 1;
                 }
@@ -192,10 +202,11 @@ fn run_webcam_loop(
                 failures += 1;
                 if failures >= MAX_CONSECUTIVE_FAILURES {
                     publish_status(
-                        &slot,
-                        &wake,
+                        slot,
+                        wake,
                         CameraStatus::Unavailable(classify_error(&err.to_string())),
                     );
+                    camera_unavailable = true;
                     break;
                 }
                 std::thread::sleep(Duration::from_millis(16));
@@ -204,6 +215,32 @@ fn run_webcam_loop(
     }
 
     let _ = camera.stop_stream();
+    camera_unavailable
+}
+
+/// Asks macOS for camera access (the system prompt shows once per app) and waits for the answer.
+#[cfg(target_os = "macos")]
+fn wait_for_camera_permission(stop: &AtomicBool) -> Result<(), String> {
+    if nokhwa::nokhwa_check() {
+        return Ok(());
+    }
+    let (answer_tx, answer_rx) = std::sync::mpsc::channel::<bool>();
+    let answer_tx = Mutex::new(answer_tx);
+    nokhwa::nokhwa_initialize(move |granted| {
+        let _ = lock_unpoisoned(&answer_tx).send(granted);
+    });
+    // The prompt waits for the person, so keep waiting (in short steps) until they answer or quit.
+    while !stop.load(Ordering::Relaxed) {
+        match answer_rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(true) => return Ok(()),
+            Ok(false) => return Err(CAMERA_BLOCKED_MESSAGE.into()),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(CAMERA_BLOCKED_MESSAGE.into());
+            }
+        }
+    }
+    Err("Camera permission prompt closed".into())
 }
 
 fn open_preferred_camera(index: CameraIndex) -> Result<Camera, String> {
@@ -254,7 +291,7 @@ fn classify_error(raw: &str) -> String {
         .iter()
         .any(|needle| lower.contains(needle))
     {
-        "Camera blocked in Windows Settings".into()
+        CAMERA_BLOCKED_MESSAGE.into()
     } else if ["busy", "in use", "ebusy"]
         .iter()
         .any(|needle| lower.contains(needle))

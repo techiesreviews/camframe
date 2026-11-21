@@ -1,0 +1,108 @@
+name: Trial Rust GPUI Bubble (macOS)
+
+# TRIAL ONLY: builds and verifies rust-trial/ on macOS (Apple Silicon) and uploads a downloadable
+# CI artifact. Never publishes a release, never creates a tag, never merges to main or dev.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'trial/rust-gpui-bubble'
+    paths:
+      - 'rust-trial/**'
+      - '.github/workflows/trial-rust-gpui-macos.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    name: Build & verify camframe-trial (macos-arm64)
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+          components: clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-trial
+
+      - name: Make sure the Metal shader compiler is available
+        run: |
+          sw_vers
+          xcodebuild -version
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Run Rust unit tests
+        working-directory: rust-trial
+        run: cargo test --locked
+
+      - name: Run Clippy
+        working-directory: rust-trial
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Build release binary
+        working-directory: rust-trial
+        run: cargo build --release --locked
+
+      - name: Build the screen check
+        run: swiftc -O rust-trial/scripts/verify-macos.swift -o verify-macos
+
+      - name: Verify real desktop transparency, live shape switch, and measure
+        run: ./verify-macos --exe rust-trial/target/release/camframe-trial --out trial-verification-macos
+
+      - name: Package trial app for Lex
+        run: |
+          app="trial-dist/CamFrame Trial.app"
+          mkdir -p "$app/Contents/MacOS"
+          cp rust-trial/target/release/camframe-trial "$app/Contents/MacOS/camframe-trial"
+          cat > "$app/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>camframe-trial</string>
+            <key>CFBundleIdentifier</key><string>review.techies.camframe.trial</string>
+            <key>CFBundleName</key><string>CamFrame Trial</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>0.1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
+            <key>LSUIElement</key><true/>
+            <key>NSCameraUsageDescription</key><string>CamFrame shows your camera in a floating bubble.</string>
+          </dict>
+          </plist>
+          PLIST
+          codesign --force --deep --sign - "$app"
+          codesign --verify --verbose "$app"
+          cp rust-trial/README.md trial-dist/README.txt
+          (cd trial-dist && ditto -c -k --keepParent "CamFrame Trial.app" CamFrame-Trial-macOS-arm64.zip)
+          rm -rf "$app"
+          ls -l trial-dist
+
+      - name: Upload macOS trial build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-rust-gpui-trial-macos-arm64
+          path: trial-dist/
+          if-no-files-found: error
+
+      - name: Upload desktop verification screenshots and benchmark
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-rust-gpui-trial-verification-macos
+          path: trial-verification-macos/
+          if-no-files-found: warn
