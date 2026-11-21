@@ -85,8 +85,15 @@ jobs:
           </dict>
           </plist>
           PLIST
+          plutil -lint "$app/Contents/Info.plist"
           codesign --force --sign - "$app"
           codesign --verify --verbose "$app"
+          # Start the app the way Finder does (reads Info.plist), then quit it.
+          open -n "$app" --args --demo-pattern
+          sleep 4
+          pgrep -f "CamFrame Trial.app/Contents/MacOS/camframe-trial"
+          pkill -f "CamFrame Trial.app/Contents/MacOS/camframe-trial"
+          sleep 1
           # Start the signed app's binary too, so the download Lex gets is the one that was checked.
           ./verify-macos --exe "$app/Contents/MacOS/camframe-trial" --out trial-verification-macos/packaged-app
           cp rust-trial/README.md trial-dist/README.txt

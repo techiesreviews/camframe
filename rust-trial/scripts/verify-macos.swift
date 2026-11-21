@@ -311,7 +311,11 @@ func checks() -> Int32 {
         let outsideBL = shot.at(bubble.bounds, -6, 354)
         pixels["otherApp.TL"] = "\(expectClear(shot, "other app active TL", 8, 8, outsideTL))"
         pixels["otherApp.BL"] = "\(expectClear(shot, "other app active BL", 8, 354, outsideBL))"
-        pixels["otherApp.center"] = "\(expectDrawn(shot, "other app active center", 162, 200, backdrop))"
+        let drawnCenter = expectDrawn(shot, "other app active center", 162, 200, backdrop)
+        pixels["otherApp.center"] = "\(drawnCenter)"
+        if drawnCenter.near(outsideTL) {
+            failures.append("other app active center shows the screen behind the bubble: nothing drawn")
+        }
     } else {
         failures.append("capture with another app active failed")
     }
