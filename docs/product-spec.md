@@ -196,7 +196,7 @@ Start at login is removed (ADR 0037). A packaged build whose loaded Preferences 
 - Both BrowserWindow definitions use context isolation, sandboxing, and no Node integration.
 - The preload exposes a narrow IPC bridge; renderers do not receive `ipcRenderer` directly.
 - Media permission is granted only to the Overlay web contents and only for `media`.
-- The only network listener is the opt-in Prompter link: `127.0.0.1` only, view changes only, strict origin, host, and body checks, no logging (ADR 0031; the preview origin, ADR 0033).
+- The only network listener is the opt-in Prompter link: `127.0.0.1` only, view changes and layout Scene saves only, strict origin, host, and body checks, no logging (ADR 0031; the preview origin, ADR 0033; API 2, ADR 0035). It stays open on purpose to local programs, local pages, the prompter site and, for cues only, `Origin: null` pages, so anyone can build tools on it (ADR 0040).
 - Release contents are limited to `src/**/*` and `package.json` inside ASAR, with English Chromium locale only.
 - Windows targets are NSIS and portable executables. macOS targets are unsigned DMG and ZIP for Intel and Apple Silicon and include the camera usage description.
 - GPU acceleration remains enabled.

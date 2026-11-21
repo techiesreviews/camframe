@@ -195,7 +195,7 @@ Callback registration returns an unsubscribe function. Current renderer code reg
 
 ## Prompter link HTTP contract
 
-Served by `src/prompter-link.js` only while `prompterLink` is `true`, on `http://127.0.0.1:47833` (never another interface). ADR 0031 records the link, ADR 0035 API 2. `docs/prompter-link-api.md` has real payloads and the livestream cues.
+Served by `src/prompter-link.js` only while `prompterLink` is `true`, on `http://127.0.0.1:47833` (never another interface). ADR 0031 records the link, ADR 0035 API 2, and ADR 0040 that it stays open on purpose as a public interface (who may call it, and what it does not allow). `docs/prompter-link-api.md` has real payloads and the livestream cues.
 
 | Request | Answer |
 | --- | --- |
