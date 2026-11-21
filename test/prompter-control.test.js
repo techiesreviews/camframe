@@ -693,6 +693,17 @@ test('Scene capacity and names: refused with a code, never an eviction', async (
 
   const unique = new Set(live.state.settings.presets.map((scene) => scene.id))
   assert.equal(unique.size, SCENE_LIMIT, 'Scenes saved in the same millisecond still get their own ids')
+
+  // ADR 0040: replacing under another spelling keeps the id and place but takes the name as sent.
+  const respelled = await live.saveScene({ name: 'three', size: 300, replace: true })
+  assert.equal(respelled.status, 200)
+  assert.equal(respelled.body.replaced, true)
+  assert.equal(live.state.settings.presets[4].name, 'three')
+  assert.deepEqual(
+    live.state.settings.presets.map((scene) => scene.id),
+    [...unique],
+    'same ids in the same places',
+  )
 })
 
 test('a look-alike name needs replace, and a cue finds a Scene by either form of an accent', async (t) => {
