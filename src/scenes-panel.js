@@ -22,7 +22,8 @@ function element(tag, attributes = {}, children = []) {
 
 const icon = (name) => element('i', { class: `ph ph-${name}`, 'aria-hidden': 'true' })
 
-// A button's `data-act` is its tab state event; only these, so a button can never send an inner one.
+// A button's `data-act` is its tab state event. Only these, so a button never sends `state`, `tick`,
+// `focused`, `reset` or another event only this adapter sends.
 const BUTTON_ACTS = new Set([
   'apply', 'rename', 'rename-ok', 'rename-cancel', 'delete', 'undo-delete', 'undo-change', 'save-open', 'save-ok', 'import', 'export',
 ])
