@@ -305,7 +305,12 @@ func checks() -> Int32 {
     if bubbleWindow(of: pid) == nil {
         failures.append("bubble disappeared when \(frontApp) became the active app")
     } else if let shot = capture(around: bubble.bounds, name: "other-app-active") {
-        pixels["otherApp.TL"] = "\(expectClear(shot, "other app active TL", 8, 8, backdrop))"
+        // The other app's window may now sit behind the bubble, so compare each corner with the
+        // screen just outside the bubble window instead of with the magenta backdrop.
+        let outsideTL = shot.at(bubble.bounds, -6, 8)
+        let outsideBL = shot.at(bubble.bounds, -6, 354)
+        pixels["otherApp.TL"] = "\(expectClear(shot, "other app active TL", 8, 8, outsideTL))"
+        pixels["otherApp.BL"] = "\(expectClear(shot, "other app active BL", 8, 354, outsideBL))"
         pixels["otherApp.center"] = "\(expectDrawn(shot, "other app active center", 162, 200, backdrop))"
     } else {
         failures.append("capture with another app active failed")
