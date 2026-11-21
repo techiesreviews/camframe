@@ -45,7 +45,7 @@ Each request is a JSON object of at most 1024 bytes with only the known fields; 
 - No deleting, renaming or reordering Scenes. Saving never deletes another Scene: a seventh Scene is refused (`409 scene-limit`). Saving over an existing name needs `"replace": true`, and then it does replace that Scene, also one saved by hand in CamFrame, with a layout Scene.
 - A cue never changes a saved Scene: a cue that moves the camera clears the active Scene instead of saving into it.
 - No other settings: not Face full, Face small or the Corner margin, not the Prompter link itself, not click-through, always on top or onboarding. It cannot hide CamFrame or quit it.
-- No pictures: it never records, streams or reads the camera's video, and the status never shows the camera's device id (only a hash of the look).
+- No pictures: it never records, streams or reads the camera's video, and the status shows the look without the camera's device id (the camera's label is shown), plus a hash of the whole look.
 - No log of requests.
 
 ## Consequences
