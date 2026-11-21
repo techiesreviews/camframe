@@ -5,15 +5,23 @@ name: Rust app (Windows)
 
 on:
   workflow_dispatch:
+  # The Preferences fixtures and 0.9.0's settings and Scenes rules are the Rust app's contract
+  # (ADR 0041), so a change there runs this job too.
   pull_request:
     paths:
       - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
       - '.github/workflows/rust-windows.yml'
   push:
     branches:
       - 'build/tools-393-**'
     paths:
       - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
       - '.github/workflows/rust-windows.yml'
 
 permissions:

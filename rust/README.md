@@ -18,8 +18,11 @@ feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
 - Hover the bubble: the toolbar and the four corner handles appear. The toolbar has **Close** and
   **Shape** (steps through Circle, Rounded square, Portrait, Landscape and keeps the bubble's
   centre). Drag a corner handle to resize, as in 0.9.0.
-- Clicks pass through the empty corners around the circle and every other empty part of the window
-  (allowed improvement 1). Only the camera shape, the toolbar and the handles take clicks.
+- Clicks pass through the empty corners around the circle, the room around the toolbar and every
+  other empty part of the window (allowed improvement 1). Only the camera shape, the toolbar and
+  the handles take clicks.
+- Without a camera, or when it is blocked or busy, the bubble shows 0.9.0's message; the moving
+  test picture appears only with `--demo-pattern`.
 - The tray (menu bar on macOS): **Show camera** and **Quit CamFrame**.
 - Camera messages in the bubble ("Starting camera.", or why the camera cannot start).
 

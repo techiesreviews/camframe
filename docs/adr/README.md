@@ -41,6 +41,7 @@ ADRs explain what CamFrame has committed to. They are not experiment diaries. Pu
 - [`0038-keep-absolute-positions-and-heal-a-lost-overlay.md`](0038-keep-absolute-positions-and-heal-a-lost-overlay.md)
 - [`0039-save-preferences-in-one-step-and-keep-a-last-good-copy.md`](0039-save-preferences-in-one-step-and-keep-a-last-good-copy.md)
 - [`0040-keep-the-prompter-link-open-as-a-public-interface.md`](0040-keep-the-prompter-link-open-as-a-public-interface.md)
+- [`0041-rebuild-camframe-in-rust-beside-0-9-0.md`](0041-rebuild-camframe-in-rust-beside-0-9-0.md)
 - [`0013-establish-overlay-accessibility-contract.md`](0013-establish-overlay-accessibility-contract.md)
 - [`0014-add-scoped-custom-frame-effects.md`](0014-add-scoped-custom-frame-effects.md)
 - [`0015-sign-releases-before-enabling-updates.md`](0015-sign-releases-before-enabling-updates.md)

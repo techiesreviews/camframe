@@ -25,10 +25,19 @@ const MIN_FRAME_RATE: u32 = 30;
 const SMOOTH_FRAME_RATE: u32 = 50;
 const MAX_CONSECUTIVE_FAILURES: u32 = 30;
 
-#[cfg(not(target_os = "macos"))]
-const CAMERA_BLOCKED_MESSAGE: &str = "Camera blocked in Windows Settings";
+// The camera messages use CamFrame 0.9.0's exact words (src/camera-session.js `cameraErrorMessage`).
 #[cfg(target_os = "macos")]
-const CAMERA_BLOCKED_MESSAGE: &str = "Camera blocked in System Settings";
+const CAMERA_BLOCKED_MESSAGE: &str = "Camera access is blocked. In System Settings, allow CamFrame to use the camera.";
+#[cfg(target_os = "windows")]
+const CAMERA_BLOCKED_MESSAGE: &str =
+    "Camera access is blocked. In Windows Settings, allow camera access for desktop apps.";
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const CAMERA_BLOCKED_MESSAGE: &str =
+    "Camera access is blocked. Allow CamFrame to use the camera in system privacy settings.";
+const CAMERA_IN_USE_MESSAGE: &str = "This camera is already in use by another app.";
+const CAMERA_FAILED_MESSAGE: &str = "CamFrame could not start this camera.";
+/// 0.9.0 has no separate message for "no camera connected": it shows its general one.
+const NO_CAMERA_MESSAGE: &str = CAMERA_FAILED_MESSAGE;
 
 const DECODABLE_FORMATS: [FrameFormat; 6] = [
     FrameFormat::MJPEG,
@@ -101,18 +110,12 @@ impl CameraWorker {
         let handle = std::thread::Builder::new()
             .name("camframe-capture".into())
             .spawn(move || {
+                // Without a camera the bubble keeps the message on screen, as in 0.9.0; the
+                // test picture shows only when asked for with --demo-pattern.
                 if demo_pattern {
                     run_demo_loop(&stop_flag, &slot, &wake);
                 } else {
-                    let ended = run_webcam_loop(&stop_flag, &slot, &wake);
-                    // On macOS a missing camera or a denied permission shows the demo pattern
-                    // instead of an empty bubble; other camera errors keep their message on screen.
-                    #[cfg(target_os = "macos")]
-                    if ended.falls_back_to_demo() && !stop_flag.load(Ordering::Relaxed) {
-                        run_demo_loop(&stop_flag, &slot, &wake);
-                    }
-                    #[cfg(not(target_os = "macos"))]
-                    let _ = ended;
+                    run_webcam_loop(&stop_flag, &slot, &wake);
                 }
             })
             .ok();
@@ -151,54 +154,37 @@ fn run_demo_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sen
     }
 }
 
-/// Why the webcam loop ended.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum WebcamEnd {
-    /// The app asked the capture thread to stop.
-    Stopped,
-    /// No camera is connected.
-    NoCamera,
-    /// Camera access is blocked in the system settings or the permission prompt said no.
-    Denied,
-    /// The camera exists but could not be opened or read (busy, unplugged, driver error).
-    Failed,
-}
+/// Counts camera frames in a row that could not be read or decoded.
+#[derive(Default)]
+struct FailureCount(u32);
 
-impl WebcamEnd {
-    fn from_message(message: &str) -> Self {
-        if message == CAMERA_BLOCKED_MESSAGE { Self::Denied } else { Self::Failed }
+impl FailureCount {
+    /// Adds one failure and says whether the camera should now give up.
+    fn add(&mut self) -> bool {
+        self.0 += 1;
+        self.0 >= MAX_CONSECUTIVE_FAILURES
     }
 
-    /// Only a missing camera or a denied permission swaps in the demo pattern (macOS); every other
-    /// error keeps its message on screen so the person knows what went wrong.
-    #[cfg(any(target_os = "macos", test))]
-    fn falls_back_to_demo(self) -> bool {
-        matches!(self, Self::NoCamera | Self::Denied)
+    fn reset(&mut self) {
+        self.0 = 0;
     }
 }
 
-/// Publishes why the camera is unavailable and returns the matching end reason.
-fn camera_unavailable(slot: &CameraSlot, wake: &async_channel::Sender<()>, message: String) -> WebcamEnd {
-    let ended = WebcamEnd::from_message(&message);
-    publish_status(slot, wake, CameraStatus::Unavailable(message));
-    ended
+fn camera_unavailable(slot: &CameraSlot, wake: &async_channel::Sender<()>, message: impl Into<String>) {
+    publish_status(slot, wake, CameraStatus::Unavailable(message.into()));
 }
 
-/// Streams the first camera until `stop` is set, and says why it ended (the status already shows
-/// the message).
-fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sender<()>) -> WebcamEnd {
+/// Streams the first camera until `stop` is set. When the camera cannot start, or stops sending
+/// usable frames, the status shows why.
+fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sender<()>) {
     #[cfg(target_os = "macos")]
     if let Err(msg) = wait_for_camera_permission(stop) {
-        publish_status(slot, wake, CameraStatus::Unavailable(msg));
-        return WebcamEnd::Denied;
+        return camera_unavailable(slot, wake, msg);
     }
 
     let cameras = match nokhwa::query(ApiBackend::Auto) {
         Ok(list) if !list.is_empty() => list,
-        Ok(_) => {
-            publish_status(slot, wake, CameraStatus::Unavailable("No camera found".into()));
-            return WebcamEnd::NoCamera;
-        }
+        Ok(_) => return camera_unavailable(slot, wake, NO_CAMERA_MESSAGE),
         Err(err) => return camera_unavailable(slot, wake, classify_error(&err.to_string())),
     };
 
@@ -216,35 +202,32 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
 
     publish_status(slot, wake, CameraStatus::Live);
 
-    let mut failures = 0u32;
-    let mut ended = WebcamEnd::Stopped;
+    let mut failures = FailureCount::default();
     while !stop.load(Ordering::Relaxed) {
-        match camera.frame() {
+        let failure = match camera.frame() {
             Ok(buffer) => {
                 let res = buffer.resolution();
                 let format = buffer.source_frame_format();
-                if let Some(decoded) = decode_to_bgra(format, buffer.buffer(), res.width(), res.height()) {
-                    failures = 0;
-                    let view = lock_unpoisoned(&slot.view).unwrap_or_default();
-                    let framed = cover_resample(&decoded, view);
-                    publish_frame(slot, wake, framed);
-                } else {
-                    failures += 1;
+                match decode_to_bgra(format, buffer.buffer(), res.width(), res.height()) {
+                    Some(decoded) => {
+                        failures.reset();
+                        let view = lock_unpoisoned(&slot.view).unwrap_or_default();
+                        publish_frame(slot, wake, cover_resample(&decoded, view));
+                        continue;
+                    }
+                    None => CAMERA_FAILED_MESSAGE.to_string(),
                 }
             }
-            Err(err) => {
-                failures += 1;
-                if failures >= MAX_CONSECUTIVE_FAILURES {
-                    ended = camera_unavailable(slot, wake, classify_error(&err.to_string()));
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(16));
-            }
+            Err(err) => classify_error(&err.to_string()),
+        };
+        if failures.add() {
+            camera_unavailable(slot, wake, failure);
+            break;
         }
+        std::thread::sleep(Duration::from_millis(16));
     }
 
     let _ = camera.stop_stream();
-    ended
 }
 
 /// Asks macOS for camera access (the system prompt shows once per app) and waits for the answer.
@@ -312,9 +295,9 @@ fn classify_error(raw: &str) -> String {
     if ["permission", "denied", "access is denied", "not authorized"].iter().any(|needle| lower.contains(needle)) {
         CAMERA_BLOCKED_MESSAGE.into()
     } else if ["busy", "in use", "ebusy"].iter().any(|needle| lower.contains(needle)) {
-        "Camera is in use by another app".into()
+        CAMERA_IN_USE_MESSAGE.into()
     } else {
-        "Could not open camera".into()
+        CAMERA_FAILED_MESSAGE.into()
     }
 }
 
@@ -493,21 +476,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_a_missing_or_blocked_camera_falls_back_to_the_demo_pattern() {
-        assert!(WebcamEnd::NoCamera.falls_back_to_demo());
-        assert!(WebcamEnd::Denied.falls_back_to_demo());
-        assert!(!WebcamEnd::Failed.falls_back_to_demo());
-        assert!(!WebcamEnd::Stopped.falls_back_to_demo());
+    fn camera_errors_use_the_same_words_as_camframe_090() {
+        assert_eq!(classify_error("Access is denied by the system"), CAMERA_BLOCKED_MESSAGE);
+        assert_eq!(classify_error("Permission not authorized"), CAMERA_BLOCKED_MESSAGE);
+        assert_eq!(classify_error("device busy"), "This camera is already in use by another app.");
+        assert_eq!(classify_error("stream ended"), "CamFrame could not start this camera.");
+        assert_eq!(NO_CAMERA_MESSAGE, "CamFrame could not start this camera.");
     }
 
     #[test]
-    fn camera_errors_map_to_end_reasons() {
-        let blocked = classify_error("Access is denied by the system");
-        assert_eq!(WebcamEnd::from_message(&blocked), WebcamEnd::Denied);
-        let busy = classify_error("device busy");
-        assert_eq!(WebcamEnd::from_message(&busy), WebcamEnd::Failed);
-        let other = classify_error("stream ended");
-        assert_eq!(WebcamEnd::from_message(&other), WebcamEnd::Failed);
+    fn the_blocked_camera_message_names_the_right_settings_app() {
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            CAMERA_BLOCKED_MESSAGE,
+            "Camera access is blocked. In System Settings, allow CamFrame to use the camera."
+        );
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            CAMERA_BLOCKED_MESSAGE,
+            "Camera access is blocked. In Windows Settings, allow camera access for desktop apps."
+        );
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        assert_eq!(
+            CAMERA_BLOCKED_MESSAGE,
+            "Camera access is blocked. Allow CamFrame to use the camera in system privacy settings."
+        );
+    }
+
+    #[test]
+    fn the_camera_gives_up_after_too_many_bad_frames_in_a_row() {
+        let mut failures = FailureCount::default();
+        for _ in 1..MAX_CONSECUTIVE_FAILURES {
+            assert!(!failures.add());
+        }
+        assert!(failures.add(), "the limit is reached on the last allowed failure");
+        failures.reset();
+        assert!(!failures.add(), "a good frame starts the count again");
     }
 
     #[test]

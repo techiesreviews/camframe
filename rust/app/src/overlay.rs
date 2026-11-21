@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use camframe_core::geometry::{self, Corner, Rect};
-use camframe_core::interaction::{Interaction, Target, target_at};
+use camframe_core::interaction::{Interaction, Target, target_at, toolbar_box};
 use camframe_core::settings::{OVERLAY_CHROME, Point, Settings, Shape, dimensions_for, overlay_dimensions_for};
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -39,10 +39,8 @@ const POINTER_POLL_RESIZING: Duration = Duration::from_millis(16);
 /// A moved window is saved once it has stood still this long.
 const POSITION_SAVE_DELAY_MS: u64 = 400;
 
-// 0.9.0's toolbar (`.hover-toolbar` in `src/overlay.css`).
-const TOOLBAR_TOP: f32 = 22.0;
-const TOOLBAR_MAX_WIDTH: f32 = 234.0;
-const TOOLBAR_HEIGHT: f32 = 44.0;
+// 0.9.0's toolbar buttons (`.hover-toolbar` in `src/overlay.css`); the toolbar box is
+// `camframe_core::interaction::toolbar_box`.
 const TOOLBAR_BUTTON: f32 = 36.0;
 const TOOLBAR_ICON: f32 = 20.0;
 const HANDLE_SIZE: f32 = 14.0;
@@ -446,16 +444,15 @@ impl BubbleOverlay {
         });
     }
 
-    fn render_toolbar(&self, camera_width: f32, cx: &mut Context<Self>) -> impl IntoElement {
-        let width = TOOLBAR_MAX_WIDTH.min(camera_width - 8.0);
-        let left = OVERLAY_CHROME.left as f32 + (camera_width - width) / 2.0;
+    fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (left, top, width, height) = toolbar_box(self.settings.shape, self.size());
         div()
             .id("hover-toolbar")
             .absolute()
-            .top(px(TOOLBAR_TOP))
-            .left(px(left))
-            .w(px(width))
-            .h(px(TOOLBAR_HEIGHT))
+            .top(px(top as f32))
+            .left(px(left as f32))
+            .w(px(width as f32))
+            .h(px(height as f32))
             .flex()
             .items_center()
             .justify_center()
@@ -470,7 +467,7 @@ impl BubbleOverlay {
             })))
     }
 
-    fn render_camera(&self, camera_width: f32, camera_height: f32, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_camera(&self, camera_width: f32, camera_height: f32) -> impl IntoElement {
         let radius = geometry::corner_radius(self.settings.shape, self.size()) as f32;
         let status_label: Option<SharedString> = match &self.status {
             CameraStatus::Starting if self.frame.is_none() => Some("Starting camera.".into()),
@@ -522,7 +519,6 @@ impl BubbleOverlay {
                     .border_color(rgb(hex_color(&self.settings.border_color).unwrap_or(0xffffff))),
             );
         }
-        let _ = cx;
         camera
     }
 
@@ -602,13 +598,9 @@ impl Render for BubbleOverlay {
             .on_action(cx.listener(|this, _: &ShapeRounded, window, cx| this.set_shape(Shape::Rounded, window, cx)))
             .on_action(cx.listener(|this, _: &ShapePortrait, window, cx| this.set_shape(Shape::Portrait, window, cx)))
             .on_action(cx.listener(|this, _: &ShapeLandscape, window, cx| this.set_shape(Shape::Landscape, window, cx)))
-            .child(self.render_camera(camera_width, camera_height, cx))
+            .child(self.render_camera(camera_width, camera_height))
             .when(show_chrome, |root| {
-                root.child(self.render_toolbar(camera_width, cx)).children(self.render_handles(
-                    camera_width,
-                    camera_height,
-                    cx,
-                ))
+                root.child(self.render_toolbar(cx)).children(self.render_handles(camera_width, camera_height, cx))
             })
     }
 }

@@ -281,6 +281,11 @@ try {
     $cornerBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir "hover-empty-corner.png")
     $hEmptyCorner = Sample-Rel $cornerBmp 43 109
     $cornerBmp.Dispose()
+    # (30, 44) is beside the toolbar (which spans x 45 to 279): the toolbar stays shown, but
+    # clicks pass through.
+    Move-To 162 228
+    Move-To 30 44
+    $passesBesideToolbar = ((Ex-Style) -band $WS_EX_TRANSPARENT) -ne 0
     # A real click on the toolbar's Shape button (the two buttons sit centred: Close, then Shape
     # at x 163 to 199) switches the circle to the rounded square.
     Move-To 162 228
@@ -297,9 +302,10 @@ try {
     Start-Sleep -Milliseconds 600
     $clickThroughAfterLeave = ((Ex-Style) -band $WS_EX_TRANSPARENT) -ne 0
 
-    Write-Host ("HOVER: atRest={0} camera={1} emptyCorner={2} afterLeave={3} toolbar={4} handle={5} emptyCornerPixel={6} afterShapeButton={7}" -f `
+    Write-Host ("HOVER: atRest={0} camera={1} emptyCorner={2} afterLeave={3} toolbar={4} handle={5} emptyCornerPixel={6} afterShapeButton={7} besideToolbar={8}" -f `
         $clickThroughAtRest, $takesClicksOnCamera, $passesInEmptyCorner, $clickThroughAfterLeave, `
-        (Format-Color $hToolbar), (Format-Color $hHandle), (Format-Color $hEmptyCorner), (Format-Color $bCornerProbe))
+        (Format-Color $hToolbar), (Format-Color $hHandle), (Format-Color $hEmptyCorner), (Format-Color $bCornerProbe), `
+        $passesBesideToolbar)
 
     # Assert transparency & live shape switching
     $failures = @()
@@ -325,6 +331,7 @@ try {
     if (-not $clickThroughAtRest)        { $failures += "Clicks do not pass through the window at rest" }
     if (-not $takesClicksOnCamera)       { $failures += "The window does not take clicks on the camera" }
     if (-not $passesInEmptyCorner)       { $failures += "Clicks do not pass through the empty corner around the circle" }
+    if (-not $passesBesideToolbar)       { $failures += "Clicks do not pass through the empty room beside the toolbar" }
     if (-not $clickThroughAfterLeave)    { $failures += "Clicks do not pass through again after the pointer left" }
     if (Is-Magenta $hToolbar)            { $failures += "The toolbar did not show on hover" }
     if (Is-Magenta $hHandle)             { $failures += "The corner handle did not show on hover" }

@@ -314,6 +314,14 @@ func checks() -> Int32 {
     if !cameraTakesClicks {
         failures.append("a click on the camera went through to the window behind")
     }
+    // Beside the toolbar (which spans x 45 to 279) the toolbar stays shown, but clicks go through.
+    moveMouse(global(30, 44))
+    leftClick(global(30, 44))
+    let clicksAfterBesideToolbar = backdropClicks()
+    let besideToolbarPassesClicks = clicksAfterBesideToolbar == clicksAfterCorner + 1
+    if !besideToolbarPassesClicks {
+        failures.append("a click beside the toolbar did not reach the window behind (\(clicksAfterBesideToolbar - clicksAfterCorner) clicks arrived)")
+    }
 
     // 4. Shape switch by real clicks on the toolbar's Shape button. The two buttons sit centred
     // (Close, then Shape), so the Shape button's middle is 19 pt right of the window's middle.
@@ -451,6 +459,7 @@ func checks() -> Int32 {
     report["shapeSwitchInput"] = "toolbar Shape button"
     report["emptyCornerPassesClicks"] = emptyCornerPassesClicks
     report["cameraTakesClicks"] = cameraTakesClicks
+    report["besideToolbarPassesClicks"] = besideToolbarPassesClicks
     report["keyboardShapeSwitch"] = keyboardShapeSwitch
     report["activeAppDuringOtherAppCheck"] = frontApp
     report["pixels"] = pixels

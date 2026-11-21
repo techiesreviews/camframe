@@ -50,3 +50,7 @@ GPUI's Metal renderer handles per-pixel transparency on macOS once the panel is 
 ## Disposition
 
 Inconclusive: the see-through, always-on-top bubble and the shape switch passed on a macOS CI desktop, but the real camera, the permission prompt and Gatekeeper are unproven. The code stays on `trial/rust-gpui-bubble` only (TRIAL ONLY, never merged into main or dev). Code: `rust-trial/src/mac_overlay.rs`, macOS parts of `camera.rs` and `overlay.rs`, `rust-trial/scripts/verify-macos.swift`, `.github/workflows/trial-rust-gpui-macos.yml`. Artifacts: the CI run's `camframe-rust-gpui-trial-macos-arm64` and `camframe-rust-gpui-trial-verification-macos` downloads. Next discriminating test: open the downloaded app on a real Mac with a camera and check the Gatekeeper steps, the permission prompt, live video and that the hover pill hides when the mouse leaves.
+
+## Follow-up
+
+2026-11-21: the trial code moved on into the full Rust rebuild (Orbit TOOLS-393, ADR 0041). Its successor lives in `rust/` (`rust/app/src/mac_overlay.rs`, `rust/scripts/verify-macos.swift`) and is checked by `.github/workflows/rust-macos.yml`; the open questions above (real camera, permission prompt, Gatekeeper, hover pill hiding) are carried over to that work.

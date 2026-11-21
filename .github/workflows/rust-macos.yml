@@ -6,15 +6,23 @@ name: Rust app (macOS)
 
 on:
   workflow_dispatch:
+  # The Preferences fixtures and 0.9.0's settings and Scenes rules are the Rust app's contract
+  # (ADR 0041), so a change there runs this job too.
   pull_request:
     paths:
       - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
       - '.github/workflows/rust-macos.yml'
   push:
     branches:
       - 'build/tools-393-**'
     paths:
       - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
       - '.github/workflows/rust-macos.yml'
 
 permissions:
@@ -38,7 +46,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.98.1
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
@@ -53,6 +61,10 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain
             xcrun -sdk macosx metal --version
           fi
+
+      - name: Check formatting
+        working-directory: rust
+        run: cargo fmt --all --check
 
       - name: Run Rust unit tests
         working-directory: rust
