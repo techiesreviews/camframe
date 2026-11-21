@@ -286,6 +286,9 @@ try {
     Move-To 162 228
     Move-To 30 44
     $passesBesideToolbar = ((Ex-Style) -band $WS_EX_TRANSPARENT) -ne 0
+    $besideBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir "hover-beside-toolbar.png")
+    $hToolbarFromBeside = Sample-Rel $besideBmp 162 44
+    $besideBmp.Dispose()
     # A real click on the toolbar's Shape button (the two buttons sit centred: Close, then Shape
     # at x 163 to 199) switches the circle to the rounded square.
     Move-To 162 228
@@ -332,6 +335,7 @@ try {
     if (-not $takesClicksOnCamera)       { $failures += "The window does not take clicks on the camera" }
     if (-not $passesInEmptyCorner)       { $failures += "Clicks do not pass through the empty corner around the circle" }
     if (-not $passesBesideToolbar)       { $failures += "Clicks do not pass through the empty room beside the toolbar" }
+    if (Is-Magenta $hToolbarFromBeside)  { $failures += "The toolbar hid while the pointer was beside it" }
     if (-not $clickThroughAfterLeave)    { $failures += "Clicks do not pass through again after the pointer left" }
     if (Is-Magenta $hToolbar)            { $failures += "The toolbar did not show on hover" }
     if (Is-Magenta $hHandle)             { $failures += "The corner handle did not show on hover" }

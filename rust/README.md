@@ -21,10 +21,14 @@ feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
 - Clicks pass through the empty corners around the circle, the room around the toolbar and every
   other empty part of the window (allowed improvement 1). Only the camera shape, the toolbar and
   the handles take clicks.
-- Without a camera, or when it is blocked or busy, the bubble shows 0.9.0's message; the moving
-  test picture appears only with `--demo-pattern`.
+- Camera messages in the bubble, in 0.9.0's words: "Starting camera.", or why the camera cannot
+  start (blocked, busy, or none found). The moving test picture appears only with
+  `--demo-pattern`.
 - The tray (menu bar on macOS): **Show camera** and **Quit CamFrame**.
-- Camera messages in the bubble ("Starting camera.", or why the camera cannot start).
+
+Not yet: the camera and Camera quality chosen in Preferences (the app always opens the first
+camera at up to 1280×720), and everything else in 0.9.0's settings panel, shortcuts, Full screen,
+Scenes, the Prompter link and the first-run tips. They come in the next parts of TOOLS-393.
 
 ## Layout
 
@@ -42,7 +46,7 @@ feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
 - `.github/workflows/rust-windows.yml` and `rust-macos.yml` build, test and check the app on real
   Windows and macOS desktops. A magenta window sits behind the bubble and the checks read real
   screen pixels: everything around each shape is see-through, hovering shows the toolbar and
-  handles, the empty corner lets clicks through, real clicks on the Shape button switch the shape
+  handles, the empty corner and the room beside the toolbar let clicks through, real clicks on the Shape button switch the shape
   with the centre kept, the last shape is saved in the app's own Preferences file, and on macOS
   the bubble stays visible with another app active and moves when dragged. They also measure size,
   start time and memory against CamFrame 0.9.0 and upload the unsigned builds.

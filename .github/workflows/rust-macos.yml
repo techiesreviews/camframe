@@ -14,6 +14,7 @@ on:
       - 'test/fixtures/preferences/**'
       - 'src/settings.js'
       - 'src/scenes.js'
+      - 'src/camera-session.js'
       - '.github/workflows/rust-macos.yml'
   push:
     branches:
@@ -23,6 +24,7 @@ on:
       - 'test/fixtures/preferences/**'
       - 'src/settings.js'
       - 'src/scenes.js'
+      - 'src/camera-session.js'
       - '.github/workflows/rust-macos.yml'
 
 permissions:
