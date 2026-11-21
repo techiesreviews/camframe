@@ -107,7 +107,7 @@ function overlay({ settings: initial = {}, reducedMotion = false } = {}) {
     getPrimaryDisplay: () => ({ workArea: WORK_AREA }),
     getDisplayMatching: () => ({ bounds: DISPLAY }),
   }
-  const events = { fullscreen: [], positions: [], resizes: [], dragEnds: [] }
+  const events = { fullscreen: [], positions: [], resizes: [], dragEnds: [], windowAtReport: [] }
   const geometry = createOverlayGeometry({
     window,
     screen,
@@ -122,6 +122,8 @@ function overlay({ settings: initial = {}, reducedMotion = false } = {}) {
     onCompactPositionChanged(position) {
       settings = { ...settings, position }
       events.positions.push(position)
+      // Main broadcasts the tiles from here, so they read the window (or its move target) as it is now.
+      events.windowAtReport.push(geometry.targetBounds())
     },
     onFullscreenChanged: (fullscreen) => events.fullscreen.push(fullscreen),
     onDragEnd: (position) => events.dragEnds.push(position),
@@ -271,6 +273,17 @@ test('the onboarding reserve grows the window upward without moving the camera',
   assert.equal(geometry.setOnboardingReserve(false), 0)
   assert.deepEqual(window.bounds, base)
   assert.deepEqual(settings().position, { x: base.x, y: base.y })
+})
+
+test('closing a reopened Help tour reports the place after the reserve is gone, so the tiles read the final window', () => {
+  const { geometry, window, events } = overlay({ settings: { position: { x: 1500, y: 600 } } })
+  const base = window.getBounds()
+
+  geometry.setOnboardingReserve(true)
+  geometry.setOnboardingReserve(false)
+
+  assert.deepEqual(window.bounds, base)
+  assert.deepEqual(events.windowAtReport, [base], 'no moved event needed: the report already sees the final bounds')
 })
 
 test('moving the Overlay records its compact position, including during onboarding', () => {
@@ -1041,6 +1054,21 @@ test('showing the Overlay at a saved place on a display that is gone brings it b
   assert.equal(isOnScreen(view.window.bounds, [LAPTOP]), true)
   assert.deepEqual(view.window.bounds, onScreenBase(compact(sanitizeSettings({ position: { x: 3000, y: 400 } })), { workAreas: [LAPTOP], primaryWorkArea: LAPTOP, margin: 32 }))
   assert.deepEqual(view.settings().position, { x: view.window.bounds.x, y: view.window.bounds.y }, 'the new place is stored')
+  assert.deepEqual(view.events.windowAtReport, [view.window.bounds], 'reported once the window is there')
+})
+
+test('a Scene shown at a place on a display that is gone reports the heal once its move has started', () => {
+  const view = overlay({ settings: { position: { x: 400, y: 500 }, overlayVisible: true } })
+  screenWith(view, [LAPTOP])
+  view.patch({ position: { x: 3000, y: 400 } })
+  view.geometry.showScene()
+
+  assert.equal(view.geometry.isSettled(), false, 'still on its way')
+  const heading = view.geometry.targetBounds()
+  assert.equal(isOnScreen(heading, [LAPTOP]), true)
+  assert.deepEqual(view.events.windowAtReport, [heading], 'the report reads where the window is heading')
+  view.settle()
+  assert.deepEqual(view.window.bounds, heading)
 })
 
 test('a display removed while the Overlay is on it brings the Overlay back; a reachable one stays put', () => {
