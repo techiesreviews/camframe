@@ -41,6 +41,12 @@ public static class Win32Verify {
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT {
         public int Left;
@@ -106,6 +112,13 @@ $backdropProc = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoPro
 Start-Sleep -Milliseconds 1200
 
 $metricsFile = Join-Path $OutDir "rust-startup.txt"
+# Preferences go to a fresh folder so the check never touches a real CamFrame setup.
+$settingsDir = Join-Path $OutDir "settings"
+if (Test-Path $settingsDir) { Remove-Item -Recurse -Force $settingsDir }
+New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
+$prefsFile = Join-Path $settingsDir "CamFrame Rust\preferences.json"
+# WS_EX_TRANSPARENT: set while clicks pass through the window.
+$WS_EX_TRANSPARENT = 0x20
 $winX = 200
 $winY = 150
 $cropX = 150
@@ -117,11 +130,15 @@ $rustExeSize = (Get-Item $ExePath).Length
 $rustProc = $null
 
 try {
+    # Keep the pointer away from the bubble so the toolbar stays hidden for the first pictures.
+    [void][Win32Verify]::SetCursorPos($cropX + $cropW + 200, 40)
+
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $rustProc = Start-Process -FilePath $ExePath -ArgumentList @(
         "--demo-pattern",
         "--position", "$winX,$winY",
-        "--metrics-file", $metricsFile
+        "--metrics-file", $metricsFile,
+        "--settings-dir", $settingsDir
     ) -PassThru
 
     $hwnd = [IntPtr]::Zero
@@ -135,7 +152,7 @@ try {
         Start-Sleep -Milliseconds 50
     }
     if ($hwnd -eq [IntPtr]::Zero) {
-        throw "camframe-trial.exe window did not become visible within 5 seconds"
+        throw "camframe-rust.exe window did not become visible within 5 seconds"
     }
 
     Start-Sleep -Milliseconds 2000
@@ -170,18 +187,32 @@ try {
         return $Bmp.GetPixel($sx, $sy)
     }
 
+    function Refresh-Rect {
+        [void][Win32Verify]::GetWindowRect($hwnd, [ref]$script:rect)
+    }
+
+    function Ex-Style {
+        return [Win32Verify]::GetWindowLong($hwnd, -20)
+    }
+
+    # Window layout at the default size 288 (0.9.0): 84 px of room above the camera and 18 px on
+    # the other sides, so a circle window is 324 x 390 with the camera at (18, 84).
+    # (58, 94) is inside the camera's bounding box but outside the circle, and inside a rounded
+    # square (corner radius 46).
+    $clickThroughAtRest = ((Ex-Style) -band $WS_EX_TRANSPARENT) -ne 0
+
     # 1. Verify CIRCLE shape
     $circlePath = Join-Path $OutDir "circle.png"
     $circleBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path $circlePath
     $cTopLeft = Sample-Rel $circleBmp 8 8
     $cTopRight = Sample-Rel $circleBmp 316 8
-    $cBottomLeft = Sample-Rel $circleBmp 8 354
-    $cBottomRight = Sample-Rel $circleBmp 316 354
-    $cCornerProbe = Sample-Rel $circleBmp 48 86
-    $cCenter = Sample-Rel $circleBmp 162 200
+    $cBottomLeft = Sample-Rel $circleBmp 8 380
+    $cBottomRight = Sample-Rel $circleBmp 316 380
+    $cCornerProbe = Sample-Rel $circleBmp 58 94
+    $cCenter = Sample-Rel $circleBmp 162 228
     $circleBmp.Dispose()
 
-    Write-Host ("CIRCLE pixels: TL={0} TR={1} BL={2} BR={3} Probe(48,86)={4} Center={5}" -f `
+    Write-Host ("CIRCLE pixels: TL={0} TR={1} BL={2} BR={3} Probe(58,94)={4} Center={5}" -f `
         (Format-Color $cTopLeft), (Format-Color $cTopRight), (Format-Color $cBottomLeft), `
         (Format-Color $cBottomRight), (Format-Color $cCornerProbe), (Format-Color $cCenter))
 
@@ -193,15 +224,16 @@ try {
 
     $roundedPath = Join-Path $OutDir "rounded.png"
     $roundedBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path $roundedPath
+    Refresh-Rect
     $rTopLeft = Sample-Rel $roundedBmp 8 8
     $rTopRight = Sample-Rel $roundedBmp 316 8
-    $rBottomLeft = Sample-Rel $roundedBmp 8 354
-    $rBottomRight = Sample-Rel $roundedBmp 316 354
-    $rCornerProbe = Sample-Rel $roundedBmp 48 86
-    $rCenter = Sample-Rel $roundedBmp 162 200
+    $rBottomLeft = Sample-Rel $roundedBmp 8 380
+    $rBottomRight = Sample-Rel $roundedBmp 316 380
+    $rCornerProbe = Sample-Rel $roundedBmp 58 94
+    $rCenter = Sample-Rel $roundedBmp 162 228
     $roundedBmp.Dispose()
 
-    Write-Host ("ROUNDED pixels: TL={0} TR={1} BL={2} BR={3} Probe(48,86)={4} Center={5}" -f `
+    Write-Host ("ROUNDED pixels: TL={0} TR={1} BL={2} BR={3} Probe(58,94)={4} Center={5}" -f `
         (Format-Color $rTopLeft), (Format-Color $rTopRight), (Format-Color $rBottomLeft), `
         (Format-Color $rBottomRight), (Format-Color $rCornerProbe), (Format-Color $rCenter))
 
@@ -212,14 +244,62 @@ try {
     Start-Sleep -Milliseconds 700
 
     $landscapePath = Join-Path $OutDir "landscape.png"
+    # Landscape keeps the window's centre: 324 x 264, camera 288 x 162 at (18, 84).
     $landscapeBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path $landscapePath
-    $lTopStrip = Sample-Rel $landscapeBmp 162 80
-    $lBottomStrip = Sample-Rel $landscapeBmp 162 320
-    $lCenter = Sample-Rel $landscapeBmp 162 200
+    Refresh-Rect
+    $landscapeHeight = [math]::Round(($rect.Bottom - $rect.Top) / $scale)
+    $lTopStrip = Sample-Rel $landscapeBmp 162 60
+    $lBottomStrip = Sample-Rel $landscapeBmp 162 255
+    $lCenter = Sample-Rel $landscapeBmp 162 165
     $landscapeBmp.Dispose()
 
-    Write-Host ("LANDSCAPE pixels: TopStrip(162,80)={0} BottomStrip(162,320)={1} Center={2}" -f `
-        (Format-Color $lTopStrip), (Format-Color $lBottomStrip), (Format-Color $lCenter))
+    Write-Host ("LANDSCAPE pixels: TopStrip(162,60)={0} BottomStrip(162,255)={1} Center={2} height={3}" -f `
+        (Format-Color $lTopStrip), (Format-Color $lBottomStrip), (Format-Color $lCenter), $landscapeHeight)
+
+    # 4. Back to the circle, then hover: the toolbar shows, the window takes clicks on the camera
+    # and lets them through in the empty corner around the circle (allowed improvement 1).
+    [void][Win32Verify]::SetForegroundWindow($hwnd)
+    Start-Sleep -Milliseconds 200
+    [System.Windows.Forms.SendKeys]::SendWait("1")
+    Start-Sleep -Milliseconds 700
+    Refresh-Rect
+    function Move-To {
+        param([double]$RelX, [double]$RelY)
+        [void][Win32Verify]::SetCursorPos([int][math]::Round($rect.Left + $RelX * $scale), [int][math]::Round($rect.Top + $RelY * $scale))
+        Start-Sleep -Milliseconds 400
+    }
+    Move-To 162 228
+    $takesClicksOnCamera = ((Ex-Style) -band $WS_EX_TRANSPARENT) -eq 0
+    $hoverPath = Join-Path $OutDir "hover.png"
+    $hoverBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path $hoverPath
+    $hToolbar = Sample-Rel $hoverBmp 162 44
+    $hHandle = Sample-Rel $hoverBmp 18 84
+    $hoverBmp.Dispose()
+    # (43, 109) is in the empty corner of the circle, away from the corner handle.
+    Move-To 43 109
+    $passesInEmptyCorner = ((Ex-Style) -band $WS_EX_TRANSPARENT) -ne 0
+    $cornerBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir "hover-empty-corner.png")
+    $hEmptyCorner = Sample-Rel $cornerBmp 43 109
+    $cornerBmp.Dispose()
+    # A real click on the toolbar's Shape button (the two buttons sit centred: Close, then Shape
+    # at x 163 to 199) switches the circle to the rounded square.
+    Move-To 162 228
+    Move-To 181 44
+    [Win32Verify]::mouse_event(0x02, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 60
+    [Win32Verify]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 700
+    Refresh-Rect
+    $buttonBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir "shape-button.png")
+    $bCornerProbe = Sample-Rel $buttonBmp 58 94
+    $buttonBmp.Dispose()
+    [void][Win32Verify]::SetCursorPos($cropX + $cropW + 200, 40)
+    Start-Sleep -Milliseconds 600
+    $clickThroughAfterLeave = ((Ex-Style) -band $WS_EX_TRANSPARENT) -ne 0
+
+    Write-Host ("HOVER: atRest={0} camera={1} emptyCorner={2} afterLeave={3} toolbar={4} handle={5} emptyCornerPixel={6} afterShapeButton={7}" -f `
+        $clickThroughAtRest, $takesClicksOnCamera, $passesInEmptyCorner, $clickThroughAfterLeave, `
+        (Format-Color $hToolbar), (Format-Color $hHandle), (Format-Color $hEmptyCorner), (Format-Color $bCornerProbe))
 
     # Assert transparency & live shape switching
     $failures = @()
@@ -227,19 +307,35 @@ try {
     if (-not (Is-Magenta $cTopRight))    { $failures += "Circle outer TR not transparent: $(Format-Color $cTopRight)" }
     if (-not (Is-Magenta $cBottomLeft))  { $failures += "Circle outer BL not transparent: $(Format-Color $cBottomLeft)" }
     if (-not (Is-Magenta $cBottomRight)) { $failures += "Circle outer BR not transparent: $(Format-Color $cBottomRight)" }
-    if (-not (Is-Magenta $cCornerProbe)) { $failures += "Circle corner probe (48,86) not transparent: $(Format-Color $cCornerProbe)" }
+    if (-not (Is-Magenta $cCornerProbe)) { $failures += "Circle corner probe (58,94) not transparent: $(Format-Color $cCornerProbe)" }
     if (Is-Magenta $cCenter)             { $failures += "Circle center is transparent (nothing drawn)" }
 
     if (-not (Is-Magenta $rTopLeft))     { $failures += "Rounded outer TL not transparent: $(Format-Color $rTopLeft)" }
     if (-not (Is-Magenta $rTopRight))    { $failures += "Rounded outer TR not transparent: $(Format-Color $rTopRight)" }
     if (-not (Is-Magenta $rBottomLeft))  { $failures += "Rounded outer BL not transparent: $(Format-Color $rBottomLeft)" }
     if (-not (Is-Magenta $rBottomRight)) { $failures += "Rounded outer BR not transparent: $(Format-Color $rBottomRight)" }
-    if (Is-Magenta $rCornerProbe)        { $failures += "Rounded corner probe (48,86) stayed transparent (shape did not change!)" }
+    if (Is-Magenta $rCornerProbe)        { $failures += "Rounded corner probe (58,94) stayed transparent (shape did not change!)" }
     if (Is-Magenta $rCenter)             { $failures += "Rounded center is transparent" }
 
-    if (-not (Is-Magenta $lTopStrip))    { $failures += "Landscape top strip (162,80) not transparent: $(Format-Color $lTopStrip)" }
-    if (-not (Is-Magenta $lBottomStrip)) { $failures += "Landscape bottom strip (162,320) not transparent: $(Format-Color $lBottomStrip)" }
+    if (-not (Is-Magenta $lTopStrip))    { $failures += "Landscape top strip (162,60) not transparent: $(Format-Color $lTopStrip)" }
+    if (-not (Is-Magenta $lBottomStrip)) { $failures += "Landscape bottom strip (162,255) not transparent: $(Format-Color $lBottomStrip)" }
     if (Is-Magenta $lCenter)             { $failures += "Landscape center is transparent" }
+    if ($landscapeHeight -ne 264)        { $failures += "Landscape window height is $landscapeHeight, expected 264" }
+
+    if (-not $clickThroughAtRest)        { $failures += "Clicks do not pass through the window at rest" }
+    if (-not $takesClicksOnCamera)       { $failures += "The window does not take clicks on the camera" }
+    if (-not $passesInEmptyCorner)       { $failures += "Clicks do not pass through the empty corner around the circle" }
+    if (-not $clickThroughAfterLeave)    { $failures += "Clicks do not pass through again after the pointer left" }
+    if (Is-Magenta $hToolbar)            { $failures += "The toolbar did not show on hover" }
+    if (Is-Magenta $hHandle)             { $failures += "The corner handle did not show on hover" }
+    if (-not (Is-Magenta $hEmptyCorner)) { $failures += "Something is drawn in the empty corner on hover: $(Format-Color $hEmptyCorner)" }
+    if (Is-Magenta $bCornerProbe)        { $failures += "Clicking the Shape button did not switch the circle to the rounded square" }
+
+    # Preferences: saved in the app's own folder, in 0.9.0's layout, with the last shape.
+    $prefsText = if (Test-Path $prefsFile) { Get-Content $prefsFile -Raw } else { "" }
+    if (-not $prefsText.StartsWith("{`n  `"schemaVersion`": 15,")) { $failures += "Preferences missing or not in 0.9.0's layout: $prefsFile" }
+    if ($prefsText -notmatch '"shape": "rounded"') { $failures += "Preferences did not save the last shape" }
+    if ($prefsText -match '"position": \{') { $failures += "Preferences saved a place although --position pinned it" }
 
     # Stop Rust process
     if (-not $rustProc.HasExited) {
@@ -298,7 +394,7 @@ try {
     $report = [ordered]@{
         transparencyVerified = ($failures.Count -eq 0)
         failures = $failures
-        rustTrial = [ordered]@{
+        rust = [ordered]@{
             exeBytes = $rustExeSize
             exeMb = [math]::Round($rustExeSize / 1MB, 2)
             windowVisibleMs = $windowVisibleMs

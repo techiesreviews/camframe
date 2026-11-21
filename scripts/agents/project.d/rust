@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# kit: run the Rust app's tests and Clippy (rust/), the same as its Windows and macOS CI jobs
+# Usage: kit rust [--help]
+# Runs `cargo fmt --all --check`, `cargo test --workspace --locked` and
+# `cargo clippy --workspace --all-targets --locked -- -D warnings` in rust/. On Linux this covers the shared core and the app's portable code; the Windows and macOS
+# window code is built and checked only by .github/workflows/rust-windows.yml and rust-macos.yml.
+set -euo pipefail
+
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+  sed -n '3,7p' "$0" | sed 's/^# \{0,1\}//'
+  exit 0
+fi
+
+root=$(git rev-parse --show-toplevel)
+cd "$root/rust"
+command -v cargo >/dev/null || { echo "RESULT: fail cargo is not installed"; exit 2; }
+
+if ! cargo fmt --all --check; then
+  echo "RESULT: fail cargo fmt (run 'cargo fmt --all' in rust/)"
+  exit 1
+fi
+if ! cargo test --workspace --locked; then
+  echo "RESULT: fail cargo test"
+  exit 1
+fi
+if ! cargo clippy --workspace --all-targets --locked -- -D warnings; then
+  echo "RESULT: fail cargo clippy"
+  exit 1
+fi
+echo "RESULT: pass cargo test and clippy (rust/)"

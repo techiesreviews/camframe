@@ -8,10 +8,11 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
+use camframe_core::framing::visible_source_rect;
+use camframe_core::settings::CameraPosition;
+
 use nokhwa::Camera;
-use nokhwa::utils::{
-    ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType,
-};
+use nokhwa::utils::{ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType};
 use zune_jpeg::JpegDecoder;
 use zune_jpeg::zune_core::bytestream::ZCursor;
 use zune_jpeg::zune_core::colorspace::ColorSpace;
@@ -46,12 +47,21 @@ pub struct BgraFrame {
     pub bytes: Vec<u8>,
 }
 
-/// Desired output framing for the camera surface.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Desired output framing for the camera surface: its size in device pixels, the mirror, and the
+/// framing origin (percent) and zoom (percent) from Preferences.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OutputView {
     pub width: u32,
     pub height: u32,
     pub mirror: bool,
+    pub position: CameraPosition,
+    pub zoom: u32,
+}
+
+impl Default for OutputView {
+    fn default() -> Self {
+        OutputView { width: 288, height: 288, mirror: true, position: CameraPosition { x: 50.0, y: 50.0 }, zoom: 100 }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -133,8 +143,7 @@ fn run_demo_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::Sen
     publish_status(slot, wake, CameraStatus::DemoPattern);
     let mut tick: u32 = 0;
     while !stop.load(Ordering::Relaxed) {
-        let view = lock_unpoisoned(&slot.view)
-            .unwrap_or(OutputView { width: 288, height: 288, mirror: true });
+        let view = lock_unpoisoned(&slot.view).unwrap_or_default();
         let frame = generate_demo_pattern(view.width.max(1), view.height.max(1), tick);
         publish_frame(slot, wake, frame);
         tick = tick.wrapping_add(1);
@@ -216,8 +225,7 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
                 let format = buffer.source_frame_format();
                 if let Some(decoded) = decode_to_bgra(format, buffer.buffer(), res.width(), res.height()) {
                     failures = 0;
-                    let view = lock_unpoisoned(&slot.view)
-                        .unwrap_or(OutputView { width: 288, height: 288, mirror: true });
+                    let view = lock_unpoisoned(&slot.view).unwrap_or_default();
                     let framed = cover_resample(&decoded, view);
                     publish_frame(slot, wake, framed);
                 } else {
@@ -264,18 +272,14 @@ fn wait_for_camera_permission(stop: &AtomicBool) -> Result<(), String> {
 }
 
 fn open_preferred_camera(index: CameraIndex) -> Result<Camera, String> {
-    let initial_request = RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
-        RequestedFormatType::AbsoluteHighestFrameRate,
-    );
-    let mut camera = Camera::new(index, initial_request)
-        .map_err(|err| classify_error(&err.to_string()))?;
+    let initial_request =
+        RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+    let mut camera = Camera::new(index, initial_request).map_err(|err| classify_error(&err.to_string()))?;
 
     if let Ok(formats) = camera.compatible_camera_formats()
         && let Some(best) = pick_best_format(&formats)
     {
-        let exact = RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(
-            RequestedFormatType::Exact(best),
-        );
+        let exact = RequestedFormat::new::<nokhwa::pixel_format::RgbFormat>(RequestedFormatType::Exact(best));
         let _ = camera.set_camera_requset(exact);
     }
 
@@ -293,9 +297,7 @@ fn pick_best_format(formats: &[CameraFormat]) -> Option<CameraFormat> {
             2
         }
     };
-    let distance = |f: &CameraFormat| {
-        f.width().abs_diff(TARGET_WIDTH) + f.height().abs_diff(TARGET_HEIGHT)
-    };
+    let distance = |f: &CameraFormat| f.width().abs_diff(TARGET_WIDTH) + f.height().abs_diff(TARGET_HEIGHT);
     let decode_cost = |f: &CameraFormat| u8::from(f.format() == FrameFormat::MJPEG);
 
     formats
@@ -307,15 +309,9 @@ fn pick_best_format(formats: &[CameraFormat]) -> Option<CameraFormat> {
 
 fn classify_error(raw: &str) -> String {
     let lower = raw.to_ascii_lowercase();
-    if ["permission", "denied", "access is denied", "not authorized"]
-        .iter()
-        .any(|needle| lower.contains(needle))
-    {
+    if ["permission", "denied", "access is denied", "not authorized"].iter().any(|needle| lower.contains(needle)) {
         CAMERA_BLOCKED_MESSAGE.into()
-    } else if ["busy", "in use", "ebusy"]
-        .iter()
-        .any(|needle| lower.contains(needle))
-    {
+    } else if ["busy", "in use", "ebusy"].iter().any(|needle| lower.contains(needle)) {
         "Camera is in use by another app".into()
     } else {
         "Could not open camera".into()
@@ -323,20 +319,18 @@ fn classify_error(raw: &str) -> String {
 }
 
 /// Decodes a camera frame buffer straight into BGRA8.
-pub fn decode_to_bgra(
-    format: FrameFormat,
-    data: &[u8],
-    width: u32,
-    height: u32,
-) -> Option<BgraFrame> {
+pub fn decode_to_bgra(format: FrameFormat, data: &[u8], width: u32, height: u32) -> Option<BgraFrame> {
     if format == FrameFormat::MJPEG {
         let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::BGRA);
         let mut decoder = JpegDecoder::new_with_options(ZCursor::new(data), options);
         let bytes = decoder.decode().ok()?;
         let info = decoder.info()?;
         let (w, h) = (u32::from(info.width), u32::from(info.height));
-        return (w > 0 && h > 0 && bytes.len() == w as usize * h as usize * 4)
-            .then_some(BgraFrame { width: w, height: h, bytes });
+        return (w > 0 && h > 0 && bytes.len() == w as usize * h as usize * 4).then_some(BgraFrame {
+            width: w,
+            height: h,
+            bytes,
+        });
     }
 
     let pixels = (width as usize).checked_mul(height as usize)?;
@@ -367,11 +361,7 @@ pub fn decode_to_bgra(
             for row in 0..h {
                 for col in 0..w {
                     let uv = (row / 2) * w + (col / 2) * 2;
-                    out.extend_from_slice(&yuv_to_bgra(
-                        luma[row * w + col],
-                        chroma[uv],
-                        chroma[uv + 1],
-                    ));
+                    out.extend_from_slice(&yuv_to_bgra(luma[row * w + col], chroma[uv], chroma[uv + 1]));
                 }
             }
             out
@@ -422,19 +412,19 @@ fn yuv_to_bgra(y: u8, u: u8, v: u8) -> [u8; 4] {
     [b, g, r, 255]
 }
 
-/// Center-crops (`object-fit: cover`), resamples to `view.width × view.height`, and optionally
-/// mirrors horizontally so the webcam looks natural inside any bubble aspect ratio.
+/// Cuts out the part of the frame the framing shows (cover crop at the framing origin, then zoom
+/// around it), resamples it to `view.width × view.height`, and mirrors the cut-out as a whole, so
+/// a mirrored, off-centre framing still fills the bubble (known gap KG-10 of 0.9.0).
 pub fn cover_resample(source: &BgraFrame, view: OutputView) -> BgraFrame {
     let dst_w = view.width.max(1);
     let dst_h = view.height.max(1);
     let src_w = source.width.max(1);
     let src_h = source.height.max(1);
 
-    let scale = (dst_w as f32 / src_w as f32).max(dst_h as f32 / src_h as f32);
-    let visible_src_w = dst_w as f32 / scale;
-    let visible_src_h = dst_h as f32 / scale;
-    let crop_x0 = (src_w as f32 - visible_src_w) * 0.5;
-    let crop_y0 = (src_h as f32 - visible_src_h) * 0.5;
+    let (left, top, width, height) =
+        visible_source_rect((src_w, src_h), (f64::from(dst_w), f64::from(dst_h)), view.position, view.zoom);
+    let (crop_x0, crop_y0) = (left as f32, top as f32);
+    let (visible_src_w, visible_src_h) = (width as f32, height as f32);
 
     let mut x_map = Vec::with_capacity(dst_w as usize);
     for dx in 0..dst_w {
@@ -459,11 +449,7 @@ pub fn cover_resample(source: &BgraFrame, view: OutputView) -> BgraFrame {
         }
     }
 
-    BgraFrame {
-        width: dst_w,
-        height: dst_h,
-        bytes: out,
-    }
+    BgraFrame { width: dst_w, height: dst_h, bytes: out }
 }
 
 /// Deterministic animated BGRA test pattern (deep ocean-blue / cyan / warm amber; never magenta).
@@ -545,18 +531,39 @@ mod tests {
     #[test]
     fn cover_resample_mirrors_horizontally_and_preserves_dimensions() {
         // 2x1 source: left pixel = blue [255,0,0,255], right pixel = red [0,0,255,255]
-        let src = BgraFrame {
-            width: 2,
-            height: 1,
-            bytes: vec![255, 0, 0, 255, 0, 0, 255, 255],
-        };
-        let mirrored = cover_resample(&src, OutputView { width: 2, height: 1, mirror: true });
+        let src = BgraFrame { width: 2, height: 1, bytes: vec![255, 0, 0, 255, 0, 0, 255, 255] };
+        let mirrored = cover_resample(&src, view(2, 1));
         assert_eq!(&mirrored.bytes[0..4], &[0, 0, 255, 255]);
         assert_eq!(&mirrored.bytes[4..8], &[255, 0, 0, 255]);
 
-        let unmirrored = cover_resample(&src, OutputView { width: 2, height: 1, mirror: false });
+        let unmirrored = cover_resample(&src, OutputView { mirror: false, ..view(2, 1) });
         assert_eq!(&unmirrored.bytes[0..4], &[255, 0, 0, 255]);
         assert_eq!(&unmirrored.bytes[4..8], &[0, 0, 255, 255]);
+    }
+
+    fn view(width: u32, height: u32) -> OutputView {
+        OutputView { width, height, mirror: true, position: CameraPosition { x: 50.0, y: 50.0 }, zoom: 100 }
+    }
+
+    /// Known gap KG-10: a mirrored, off-centre framing must still fill the bubble with the part of
+    /// the picture the framing points at, flipped as a whole.
+    #[test]
+    fn mirrored_framing_keeps_the_chosen_part_and_covers_the_bubble() {
+        // 4x1 source: A B C D, shown on a 2x1 surface.
+        let a = [10, 0, 0, 255];
+        let b = [20, 0, 0, 255];
+        let c = [30, 0, 0, 255];
+        let d = [40, 0, 0, 255];
+        let src = BgraFrame { width: 4, height: 1, bytes: [a, b, c, d].concat() };
+        let left = cover_resample(&src, OutputView { position: CameraPosition { x: 0.0, y: 50.0 }, ..view(2, 1) });
+        assert_eq!(left.bytes, [b, a].concat());
+        let right = cover_resample(&src, OutputView { position: CameraPosition { x: 100.0, y: 50.0 }, ..view(2, 1) });
+        assert_eq!(right.bytes, [d, c].concat());
+        let zoomed = cover_resample(
+            &src,
+            OutputView { position: CameraPosition { x: 100.0, y: 50.0 }, zoom: 200, ..view(1, 1) },
+        );
+        assert_eq!(zoomed.bytes, d.to_vec());
     }
 
     #[test]

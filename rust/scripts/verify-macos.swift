@@ -1,15 +1,20 @@
-// macOS counterpart of verify-windows.ps1 (TRIAL ONLY).
+// macOS counterpart of verify-windows.ps1.
 //
-// Puts a full-screen magenta window behind the bubble, starts camframe-trial with the demo
-// pattern, and checks real screen pixels: everything around the circle shows the magenta behind
-// it (no title bar, no background, no shadow), the window floats above normal windows, a real
-// right-click on the bubble switches the shape while the outside stays see-through, the bubble
-// stays visible when another app is active, and dragging the bubble moves the window. Also
-// measures size, start time and memory.
+// Puts a full-screen magenta window behind the bubble, starts camframe-rust with the demo pattern
+// and its own settings folder, and checks real screen pixels and real mouse input:
+// - everything around the camera shape shows the magenta behind it (no title bar, no background,
+//   no shadow), and the window floats above normal windows;
+// - hovering shows the toolbar and the corner handles;
+// - a click in the empty corner around the circle reaches the window behind (allowed
+//   improvement 1), while a click on the camera does not;
+// - real clicks on the toolbar's Shape button step through the four shapes, keeping the window
+//   centre, and the last shape is saved in the app's own preferences file;
+// - the bubble stays visible when another app is active, and dragging the bubble moves it.
+// Also measures size, start time and memory.
 //
 // Build and run:
 //   swiftc -O scripts/verify-macos.swift -o verify-macos
-//   ./verify-macos --exe target/release/camframe-trial --out trial-verification-macos
+//   ./verify-macos --exe target/release/camframe-rust --out verification-macos
 
 import AppKit
 import CoreGraphics
@@ -27,9 +32,12 @@ guard let exePath = argument("--exe"), let outDir = argument("--out") else {
 }
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
-// Window geometry from src/shape.rs (logical points).
-let outerWidth = 324.0
-let outerHeight = 362.0
+// Window layout at the default size 288, as in 0.9.0 (logical points): 84 pt of room above the
+// camera for the toolbar and 18 pt on the other sides. A circle window is 324 x 390.
+let chromeTop = 84.0
+let chromeSide = 18.0
+let circleWidth = 324.0
+let circleHeight = 390.0
 let windowX = 200.0
 let windowY = 150.0
 // Extra screen area captured around the window, so the shot also holds plain backdrop pixels.
@@ -86,6 +94,11 @@ func bubbleWindow(of pid: pid_t) -> WindowInfo? {
     windows(of: pid).first { $0.bounds.width > 50 && $0.bounds.height > 50 }
 }
 
+/// The middle of the camera, relative to the window's top-left corner.
+func cameraCenter(_ window: CGRect) -> (Double, Double) {
+    (window.width / 2, chromeTop + (window.height - chromeTop - chromeSide) / 2)
+}
+
 struct Shot {
     let rep: NSBitmapImageRep
     let origin: CGPoint  // top-left of the capture, global points
@@ -124,17 +137,19 @@ func postMouse(_ type: CGEventType, _ p: CGPoint, _ button: CGMouseButton = .lef
         .post(tap: .cghidEventTap)
 }
 
-func moveMouseAway(from window: CGRect) {
-    postMouse(.mouseMoved, CGPoint(x: window.maxX + 200, y: window.maxY + 80))
-    sleepMs(700)
+func moveMouse(_ p: CGPoint, settleMs: Int = 400) {
+    postMouse(.mouseMoved, p)
+    sleepMs(settleMs)
 }
 
-func rightClick(_ p: CGPoint) {
-    postMouse(.mouseMoved, p)
-    sleepMs(300)
-    postMouse(.rightMouseDown, p, .right)
+func moveMouseAway(from window: CGRect) {
+    moveMouse(CGPoint(x: window.maxX + 200, y: window.maxY + 80), settleMs: 700)
+}
+
+func leftClick(_ p: CGPoint) {
+    postMouse(.leftMouseDown, p)
     sleepMs(60)
-    postMouse(.rightMouseUp, p, .right)
+    postMouse(.leftMouseUp, p)
     sleepMs(500)
 }
 
@@ -148,18 +163,40 @@ func pressKey(_ keyCode: CGKeyCode, pid: pid_t) {
 // kVK_ANSI_1 ... kVK_ANSI_4
 let keyForShape: [String: CGKeyCode] = ["circle": 0x12, "rounded": 0x13, "portrait": 0x14, "landscape": 0x15]
 
+/// The magenta backdrop counts the clicks that reach it, to prove clicks pass through the bubble.
+final class ClickCounter: NSView {
+    static var clicks = 0
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { ClickCounter.clicks += 1 }
+}
+
+func backdropClicks() -> Int { DispatchQueue.main.sync { ClickCounter.clicks } }
+
 func checks() -> Int32 {
     var failures: [String] = []
     var report: [String: Any] = [:]
     let exeBytes = (try? FileManager.default.attributesOfItem(atPath: exePath)[.size] as? Int) ?? -1
     let metricsFile = (outDir as NSString).appendingPathComponent("rust-startup.txt")
-    let appLog = (outDir as NSString).appendingPathComponent("camframe-trial-output.txt")
+    let appLog = (outDir as NSString).appendingPathComponent("camframe-rust-output.txt")
+    // Preferences go to a fresh folder so the check never touches a real CamFrame setup.
+    let settingsDir = (outDir as NSString).appendingPathComponent("settings")
+    try? FileManager.default.removeItem(atPath: settingsDir)
+    try? FileManager.default.createDirectory(atPath: settingsDir, withIntermediateDirectories: true)
+    let prefsFile = (settingsDir as NSString).appendingPathComponent("CamFrame Rust/preferences.json")
     FileManager.default.createFile(atPath: appLog, contents: nil)
+
+    // Keep the pointer away from the bubble so the toolbar stays hidden for the first pictures.
+    moveMouse(CGPoint(x: windowX + circleWidth + 240, y: windowY + circleHeight + 80), settleMs: 100)
 
     let started = Date()
     let app = Process()
     app.executableURL = URL(fileURLWithPath: exePath)
-    app.arguments = ["--demo-pattern", "--position", "\(Int(windowX)),\(Int(windowY))", "--metrics-file", metricsFile]
+    app.arguments = [
+        "--demo-pattern",
+        "--position", "\(Int(windowX)),\(Int(windowY))",
+        "--metrics-file", metricsFile,
+        "--settings-dir", settingsDir,
+    ]
     if let handle = FileHandle(forWritingAtPath: appLog) {
         app.standardOutput = handle
         app.standardError = handle
@@ -182,12 +219,13 @@ func checks() -> Int32 {
         sleepMs(50)
     }
     guard var bubble = info else {
-        log("camframe-trial window did not appear within 10 seconds")
+        log("camframe-rust window did not appear within 10 seconds")
         log((try? String(contentsOfFile: appLog, encoding: .utf8)) ?? "")
         return 1
     }
     sleepMs(2000)
-    bubble = bubbleWindow(of: pid) ?? bubble
+    func refresh() { bubble = bubbleWindow(of: pid) ?? bubble }
+    refresh()
     let allWindows = windows(of: pid)
     log("bubble window bounds=\(bubble.bounds) layer=\(bubble.layer) alpha=\(bubble.alpha) windows=\(allWindows.count)")
 
@@ -200,8 +238,8 @@ func checks() -> Int32 {
         return Double(value.trimmingCharacters(in: .whitespacesAndNewlines)) ?? -1
     }()
 
-    if abs(bubble.bounds.width - outerWidth) > 1 || abs(bubble.bounds.height - outerHeight) > 1 {
-        failures.append("window is \(bubble.bounds.width)x\(bubble.bounds.height), expected \(outerWidth)x\(outerHeight) (title bar left over?)")
+    if abs(bubble.bounds.width - circleWidth) > 1 || abs(bubble.bounds.height - circleHeight) > 1 {
+        failures.append("window is \(bubble.bounds.width)x\(bubble.bounds.height), expected \(circleWidth)x\(circleHeight) (title bar left over?)")
     }
     if bubble.layer < 3 {
         failures.append("window layer \(bubble.layer) is not above normal windows (always on top)")
@@ -220,10 +258,13 @@ func checks() -> Int32 {
         if c.near(backdrop) { failures.append("\(label) (\(Int(x)),\(Int(y))) shows the backdrop: nothing drawn") }
         return c
     }
+    func global(_ x: Double, _ y: Double) -> CGPoint {
+        CGPoint(x: bubble.bounds.minX + x, y: bubble.bounds.minY + y)
+    }
 
     var pixels: [String: String] = [:]
 
-    // 1. Circle.
+    // 1. Circle at rest. (58, 94) is inside the camera's bounding box but outside the circle.
     guard let circle = capture(around: bubble.bounds, name: "circle") else {
         log("screencapture failed (screen recording permission?)")
         return 1
@@ -236,82 +277,141 @@ func checks() -> Int32 {
     }
     pixels["circle.TL"] = "\(expectClear(circle, "circle TL", 8, 8, backdrop))"
     pixels["circle.TR"] = "\(expectClear(circle, "circle TR", 316, 8, backdrop))"
-    pixels["circle.BL"] = "\(expectClear(circle, "circle BL", 8, 354, backdrop))"
-    pixels["circle.BR"] = "\(expectClear(circle, "circle BR", 316, 354, backdrop))"
-    pixels["circle.probe"] = "\(expectClear(circle, "circle corner probe", 48, 86, backdrop))"
-    pixels["circle.shadowProbe"] = "\(expectClear(circle, "circle shadow probe below bubble", 162, 352, backdrop))"
-    let belowWindow = circle.pixel(pad + 162, pad + outerHeight + 6)
+    pixels["circle.BL"] = "\(expectClear(circle, "circle BL", 8, 380, backdrop))"
+    pixels["circle.BR"] = "\(expectClear(circle, "circle BR", 316, 380, backdrop))"
+    pixels["circle.toolbarRoom"] = "\(expectClear(circle, "circle toolbar room (no toolbar at rest)", 162, 44, backdrop))"
+    pixels["circle.probe"] = "\(expectClear(circle, "circle corner probe", 58, 94, backdrop))"
+    pixels["circle.shadowProbe"] = "\(expectClear(circle, "circle shadow probe below bubble", 162, 381, backdrop))"
+    let belowWindow = circle.pixel(pad + 162, pad + circleHeight + 6)
     pixels["circle.belowWindow"] = "\(belowWindow)"
     if !belowWindow.near(backdrop) {
         failures.append("pixel 6pt below the window is not the backdrop (window shadow?)")
     }
-    pixels["circle.center"] = "\(expectDrawn(circle, "circle center", 162, 200, backdrop))"
+    pixels["circle.center"] = "\(expectDrawn(circle, "circle center", 162, 228, backdrop))"
 
-    // 2. Shape switch by a real right-click on the bubble. It must work by itself: no keyboard rescue.
-    let center = CGPoint(x: bubble.bounds.minX + 162, y: bubble.bounds.minY + 200)
-    func nextShapeByRightClick() {
-        rightClick(center)
-        moveMouseAway(from: bubble.bounds)
+    // 2. Clicks: one in the empty corner around the circle must reach the backdrop behind it,
+    // one on the camera must not.
+    let clicksBefore = backdropClicks()
+    moveMouse(global(43, 109))
+    leftClick(global(43, 109))
+    let clicksAfterCorner = backdropClicks()
+    let emptyCornerPassesClicks = clicksAfterCorner == clicksBefore + 1
+    if !emptyCornerPassesClicks {
+        failures.append("a click in the empty corner around the circle did not reach the window behind (\(clicksAfterCorner - clicksBefore) clicks arrived)")
     }
-    nextShapeByRightClick()
+
+    // 3. Hover: the toolbar and the corner handles show; the empty corner stays see-through.
+    moveMouse(global(162, 228))
+    if let shot = capture(around: bubble.bounds, name: "hover") {
+        pixels["hover.toolbar"] = "\(expectDrawn(shot, "hover toolbar", 162, 44, backdrop))"
+        pixels["hover.handle"] = "\(expectDrawn(shot, "hover corner handle", 18, 84, backdrop))"
+        pixels["hover.emptyCorner"] = "\(expectClear(shot, "hover empty corner", 43, 109, backdrop))"
+    } else {
+        failures.append("hover capture failed")
+    }
+    leftClick(global(162, 228))
+    let cameraTakesClicks = backdropClicks() == clicksAfterCorner
+    if !cameraTakesClicks {
+        failures.append("a click on the camera went through to the window behind")
+    }
+
+    // 4. Shape switch by real clicks on the toolbar's Shape button. The two buttons sit centred
+    // (Close, then Shape), so the Shape button's middle is 19 pt right of the window's middle.
+    func clickShapeButton() {
+        let (cx, cy) = cameraCenter(bubble.bounds)
+        moveMouse(global(cx, cy))
+        moveMouse(global(bubble.bounds.width / 2 + 19, 44), settleMs: 300)
+        leftClick(global(bubble.bounds.width / 2 + 19, 44))
+        let before = bubble.bounds
+        moveMouseAway(from: before)
+        refresh()
+    }
+    func keptCentre(_ before: CGRect, _ label: String) {
+        if abs(before.midX - bubble.bounds.midX) > 1.5 || abs(before.midY - bubble.bounds.midY) > 1.5 {
+            failures.append("\(label): the window centre moved from (\(before.midX),\(before.midY)) to (\(bubble.bounds.midX),\(bubble.bounds.midY))")
+        }
+    }
+
+    var previous = bubble.bounds
+    clickShapeButton()
+    keptCentre(previous, "rounded")
     if let shot = capture(around: bubble.bounds, name: "rounded") {
         pixels["rounded.TL"] = "\(expectClear(shot, "rounded TL", 8, 8, backdrop))"
-        pixels["rounded.TR"] = "\(expectClear(shot, "rounded TR", 316, 8, backdrop))"
-        pixels["rounded.BL"] = "\(expectClear(shot, "rounded BL", 8, 354, backdrop))"
-        pixels["rounded.BR"] = "\(expectClear(shot, "rounded BR", 316, 354, backdrop))"
-        pixels["rounded.shadowProbe"] = "\(expectClear(shot, "rounded shadow probe below bubble", 162, 352, backdrop))"
-        let probe = shot.at(bubble.bounds, 48, 86)
+        pixels["rounded.BR"] = "\(expectClear(shot, "rounded BR", 316, 380, backdrop))"
+        let probe = shot.at(bubble.bounds, 58, 94)
         pixels["rounded.probe"] = "\(probe)"
-        if probe.near(backdrop) { failures.append("rounded corner probe (48,86) stayed see-through: shape did not change") }
-        pixels["rounded.center"] = "\(expectDrawn(shot, "rounded center", 162, 200, backdrop))"
+        if probe.near(backdrop) { failures.append("rounded corner probe (58,94) stayed see-through: the Shape button did not switch") }
+        pixels["rounded.center"] = "\(expectDrawn(shot, "rounded center", 162, 228, backdrop))"
     } else {
         failures.append("rounded capture failed")
     }
 
-    // 3. Portrait and landscape, by more right-clicks.
-    nextShapeByRightClick()
+    // Portrait: a 216 x 288 camera in a 252 x 390 window.
+    previous = bubble.bounds
+    clickShapeButton()
+    keptCentre(previous, "portrait")
+    if abs(bubble.bounds.width - 252) > 1 { failures.append("portrait window is \(bubble.bounds.width) wide, expected 252") }
     if let shot = capture(around: bubble.bounds, name: "portrait") {
-        pixels["portrait.side"] = "\(expectClear(shot, "portrait side strip", 30, 200, backdrop))"
-        pixels["portrait.center"] = "\(expectDrawn(shot, "portrait center", 162, 200, backdrop))"
+        pixels["portrait.side"] = "\(expectClear(shot, "portrait side strip", 8, 228, backdrop))"
+        pixels["portrait.center"] = "\(expectDrawn(shot, "portrait center", 126, 228, backdrop))"
     } else {
         failures.append("portrait capture failed")
     }
-    nextShapeByRightClick()
+
+    // Landscape: a 288 x 162 camera in a 324 x 264 window.
+    previous = bubble.bounds
+    clickShapeButton()
+    keptCentre(previous, "landscape")
+    if abs(bubble.bounds.height - 264) > 1 { failures.append("landscape window is \(bubble.bounds.height) high, expected 264") }
     if let shot = capture(around: bubble.bounds, name: "landscape") {
-        pixels["landscape.top"] = "\(expectClear(shot, "landscape top strip", 162, 80, backdrop))"
-        pixels["landscape.bottom"] = "\(expectClear(shot, "landscape bottom strip", 162, 320, backdrop))"
-        pixels["landscape.center"] = "\(expectDrawn(shot, "landscape center", 162, 200, backdrop))"
+        pixels["landscape.top"] = "\(expectClear(shot, "landscape top strip", 162, 60, backdrop))"
+        pixels["landscape.bottom"] = "\(expectClear(shot, "landscape bottom strip", 162, 255, backdrop))"
+        pixels["landscape.center"] = "\(expectDrawn(shot, "landscape center", 162, 165, backdrop))"
     } else {
         failures.append("landscape capture failed")
     }
 
-    // 3b. Keyboard shortcut "1" back to the circle, checked on its own (reported, not required:
-    // keys sent to another app's process can be filtered by macOS on CI runners).
+    // The last shape is saved in the app's own folder, in 0.9.0's file layout.
+    let prefsText = (try? String(contentsOfFile: prefsFile, encoding: .utf8)) ?? ""
+    if !prefsText.hasPrefix("{\n  \"schemaVersion\": 15,") {
+        failures.append("preferences missing or not in 0.9.0's layout: \(prefsFile)")
+    }
+    if !prefsText.contains("\"shape\": \"landscape\"") {
+        failures.append("preferences did not save the last shape")
+    }
+
+    // 4b. Keyboard "1" back to the circle, checked on its own (reported, not required: keys sent
+    // to another app's process can be filtered by macOS on CI runners). The 1 to 4 keys exist only
+    // with --demo-pattern.
     pressKey(keyForShape["circle"]!, pid: pid)
     moveMouseAway(from: bubble.bounds)
+    refresh()
     var keyboardShapeSwitch = false
     if let shot = capture(around: bubble.bounds, name: "key-circle") {
-        // Back in the circle, the top strip is drawn again and the corner probe is see-through.
-        keyboardShapeSwitch = !shot.at(bubble.bounds, 162, 80).near(backdrop)
-            && shot.at(bubble.bounds, 48, 86).near(backdrop)
+        keyboardShapeSwitch = abs(bubble.bounds.height - circleHeight) <= 1
+            && shot.at(bubble.bounds, 58, 94).near(backdrop)
+            && !shot.at(bubble.bounds, 162, 228).near(backdrop)
     }
     log("keyboard shape switch (1 key): \(keyboardShapeSwitch ? "worked" : "did not work")")
 
-    // 3c. Another app in front: the bubble must stay visible and see-through.
+    // 5. Another app in front: the bubble must stay visible and see-through.
     _ = run("/usr/bin/open", ["-a", "Finder"])
     sleepMs(1200)
     let frontApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown"
     moveMouseAway(from: bubble.bounds)
+    refresh()
     if bubbleWindow(of: pid) == nil {
         failures.append("bubble disappeared when \(frontApp) became the active app")
     } else if let shot = capture(around: bubble.bounds, name: "other-app-active") {
         // The other app's window may now sit behind the bubble, so compare each corner with the
         // screen just outside the bubble window instead of with the magenta backdrop.
+        let bottom = bubble.bounds.height - 10
         let outsideTL = shot.at(bubble.bounds, -6, 8)
-        let outsideBL = shot.at(bubble.bounds, -6, 354)
+        let outsideBL = shot.at(bubble.bounds, -6, bottom)
         pixels["otherApp.TL"] = "\(expectClear(shot, "other app active TL", 8, 8, outsideTL))"
-        pixels["otherApp.BL"] = "\(expectClear(shot, "other app active BL", 8, 354, outsideBL))"
-        let drawnCenter = expectDrawn(shot, "other app active center", 162, 200, backdrop)
+        pixels["otherApp.BL"] = "\(expectClear(shot, "other app active BL", 8, bottom, outsideBL))"
+        let (cx, cy) = cameraCenter(bubble.bounds)
+        let drawnCenter = expectDrawn(shot, "other app active center", cx, cy, backdrop)
         pixels["otherApp.center"] = "\(drawnCenter)"
         if drawnCenter.near(outsideTL) {
             failures.append("other app active center shows the screen behind the bubble: nothing drawn")
@@ -321,11 +421,11 @@ func checks() -> Int32 {
     }
     log("active app during the check: \(frontApp)")
 
-    // 4. Dragging the bubble moves the window.
+    // 6. Dragging the bubble moves the window.
     let before = bubble.bounds
-    let grab = CGPoint(x: before.minX + 162, y: before.minY + 200)
-    postMouse(.mouseMoved, grab)
-    sleepMs(300)
+    let (gx, gy) = cameraCenter(before)
+    let grab = CGPoint(x: before.minX + gx, y: before.minY + gy)
+    moveMouse(grab, settleMs: 400)
     postMouse(.leftMouseDown, grab)
     sleepMs(80)
     for step in 1...12 {
@@ -348,13 +448,15 @@ func checks() -> Int32 {
 
     report["seeThroughAndShapeSwitchVerified"] = failures.isEmpty
     report["failures"] = failures
-    report["shapeSwitchInput"] = "right-click"
+    report["shapeSwitchInput"] = "toolbar Shape button"
+    report["emptyCornerPassesClicks"] = emptyCornerPassesClicks
+    report["cameraTakesClicks"] = cameraTakesClicks
     report["keyboardShapeSwitch"] = keyboardShapeSwitch
     report["activeAppDuringOtherAppCheck"] = frontApp
     report["pixels"] = pixels
     report["backdrop"] = "\(backdrop)"
     report["captureScale"] = circle.scale
-    report["rustTrial"] = [
+    report["rust"] = [
         "exeBytes": exeBytes,
         "exeMb": (Double(exeBytes) / 1_048_576 * 100).rounded() / 100,
         "windowVisibleMs": windowVisibleMs,
@@ -377,13 +479,16 @@ func checks() -> Int32 {
     if !failures.isEmpty {
         log("macOS see-through / shape-switch verification FAILED:")
         failures.forEach { log("  - \($0)") }
+        log("--- app output ---")
+        log((try? String(contentsOfFile: appLog, encoding: .utf8)) ?? "")
         return 1
     }
     log("ALL MACOS SEE-THROUGH AND SHAPE-SWITCH CHECKS PASSED!")
     return 0
 }
 
-// A full-screen magenta window at the normal level is the known colour behind the bubble.
+// A full-screen magenta window at the normal level is the known colour behind the bubble. It
+// counts the clicks that reach it.
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
 let screenFrame = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
@@ -392,7 +497,8 @@ backdropWindow.backgroundColor = NSColor(srgbRed: 1, green: 0, blue: 1, alpha: 1
 backdropWindow.isOpaque = true
 backdropWindow.hasShadow = false
 backdropWindow.level = .normal
-backdropWindow.ignoresMouseEvents = true
+backdropWindow.contentView = ClickCounter(frame: NSRect(origin: .zero, size: screenFrame.size))
+backdropWindow.ignoresMouseEvents = false
 backdropWindow.orderFrontRegardless()
 
 DispatchQueue.global().async {
