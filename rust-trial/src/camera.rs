@@ -52,7 +52,7 @@ pub struct OutputView {
 #[derive(Clone, Debug)]
 pub enum CameraStatus {
     Starting,
-    Live(String),
+    Live,
     DemoPattern,
     Unavailable(String),
 }
@@ -155,7 +155,6 @@ fn run_webcam_loop(
     };
 
     let info = &cameras[0];
-    let camera_name = info.human_name();
     let index = info.index().clone();
 
     let mut camera = match open_preferred_camera(index) {
@@ -171,18 +170,7 @@ fn run_webcam_loop(
         return;
     }
 
-    let fmt = camera.camera_format();
-    publish_status(
-        &slot,
-        &wake,
-        CameraStatus::Live(format!(
-            "{} ({}×{} {} fps)",
-            camera_name,
-            fmt.width(),
-            fmt.height(),
-            fmt.frame_rate()
-        )),
-    );
+    publish_status(&slot, &wake, CameraStatus::Live);
 
     let mut failures = 0u32;
     while !stop.load(Ordering::Relaxed) {
@@ -306,9 +294,9 @@ pub fn decode_to_bgra(
                 return None;
             }
             let mut out = Vec::with_capacity(pixels * 4);
-            for chunk in data[..pixels * 2].chunks_exact(4) {
-                out.extend_from_slice(&yuv_to_bgra(chunk[0], chunk[1], chunk[3]));
-                out.extend_from_slice(&yuv_to_bgra(chunk[2], chunk[1], chunk[3]));
+            for &[y0, u, y1, v] in data[..pixels * 2].as_chunks::<4>().0 {
+                out.extend_from_slice(&yuv_to_bgra(y0, u, v));
+                out.extend_from_slice(&yuv_to_bgra(y1, u, v));
             }
             out
         }
@@ -336,8 +324,8 @@ pub fn decode_to_bgra(
                 return None;
             }
             let mut out = Vec::with_capacity(pixels * 4);
-            for px in data[..pixels * 3].chunks_exact(3) {
-                out.extend_from_slice(&[px[2], px[1], px[0], 255]);
+            for &[r, g, b] in data[..pixels * 3].as_chunks::<3>().0 {
+                out.extend_from_slice(&[b, g, r, 255]);
             }
             out
         }
@@ -346,8 +334,8 @@ pub fn decode_to_bgra(
                 return None;
             }
             let mut out = Vec::with_capacity(pixels * 4);
-            for px in data[..pixels * 3].chunks_exact(3) {
-                out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+            for &[b, g, r] in data[..pixels * 3].as_chunks::<3>().0 {
+                out.extend_from_slice(&[b, g, r, 255]);
             }
             out
         }
@@ -500,6 +488,6 @@ mod tests {
     fn demo_pattern_has_expected_size_and_full_alpha() {
         let frame = generate_demo_pattern(64, 48, 0);
         assert_eq!(frame.bytes.len(), 64 * 48 * 4);
-        assert!(frame.bytes.chunks_exact(4).all(|px| px[3] == 255));
+        assert!(frame.bytes.as_chunks::<4>().0.iter().all(|px| px[3] == 255));
     }
 }
