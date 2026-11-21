@@ -66,6 +66,23 @@ test('Undo puts the Active Scene back as it went on camera, and only once', () =
   assert.equal(session.settings(), before, 'a second Undo changes nothing')
 })
 
+test('Undo on a layout Scene puts its look back and keeps the camera and quality picked since', () => {
+  const corner = scene('corner', 'Corner', { size: 288 }, { size: 288, position: 'bottom-right' })
+  const { session } = sessionWith({ scenes: [corner], settings: { ...corner.settings, cameraId: 'built-in', overlayResolution: '720p' }, activeSceneId: 'corner' })
+  session.handChange({ frameEffect: 'glow' })
+  session.handChange({ cameraId: 'usb-cam', cameraLabel: 'USB camera', overlayResolution: '1080p' })
+
+  session.undoChange()
+
+  const { settings, activeSceneId } = session.state()
+  assert.equal(activeSceneId, 'corner')
+  assert.equal(settings.frameEffect, 'none', 'the look comes back')
+  assert.deepEqual(settings.presets[0].layout, corner.layout, 'still a layout Scene')
+  assert.equal(settings.cameraId, 'usb-cam')
+  assert.equal(settings.cameraLabel, 'USB camera')
+  assert.equal(settings.overlayResolution, '1080p')
+})
+
 test('the Undo window closes after its time', () => {
   const { session, clock, changes } = sessionWith({ scenes: [desk], settings: desk.settings, activeSceneId: 'desk' })
   session.handChange({ borderWidth: 9 })

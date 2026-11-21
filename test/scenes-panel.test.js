@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { sanitizeSettings, settingsForPreset } from '../src/settings.js'
-import { placeLabel, sceneDescription, scenesPanelModel, tileCamera } from '../src/scenes-panel.js'
+import { placeLabel, sceneDescription, scenesPanelModel, tileCamera } from '../src/scenes-tab-state.js'
 
 const scene = (id, name, settings = {}) => ({ id, name, settings: settingsForPreset(settings) })
 const rect = (x, y, width = 0.15, height = 0.27) => ({ x, y, width, height })

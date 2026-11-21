@@ -47,7 +47,8 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 - `src/settings.js`: the Preferences schema, sanitizing, loading (`preferencesFromDocument`), and camera/window dimensions.
 - `src/scenes.js`: the Scene library: save, apply, cycle, delete and restore, reorder, rename, autosave, Undo windows, tile previews, import, export, the active Scene, and what a Scene is (its kind, its look, the size and place it asks for now, and its look on camera), which the Prompter link status and the Scenes tab only format.
 - `src/scene-session.js`: the Scene session: holds the live Preferences, the Active Scene and the Undo windows, and runs every Scene and hand change through the Scene library against an injected geometry port.
-- `src/scenes-panel.js`: the Scenes tab: list and grid, the Save look slot, rename, delete and Undo, keyboard and drag.
+- `src/scenes-tab-state.js`: the Scenes tab state: what the tab draws and its interaction (a rename or a save in progress, where focus goes next, typing with an input method, the saved check, Import/Export results, keys and drag), as events in and steps out, without a DOM.
+- `src/scenes-panel.js`: the Scenes tab's DOM: builds list and grid, the Save look slot, rename, delete and Undo from what the tab state says, and passes it the clicks, keys, typing and drags.
 - `src/overlay-geometry.js`: Overlay window geometry in main: Compact placement, Full screen, the onboarding reserve, drag/resize, bounds animation, z-order, and mouse pass-through.
 - `src/overlay-interaction.js`: when the Overlay chrome shows and when the window is interactive.
 - `src/camera-session.js`: the camera session: one MediaStream, Camera quality, the blur halo video, device scans, and camera error copy.
