@@ -266,6 +266,23 @@ test('no Scene request closes the settings', () => {
   for (const step of steps) assert.equal(step.closeSettings, false, step.requests[0][0])
 })
 
+test('an inner event that throws gives the outer event its own step back', () => {
+  let tab
+  const camFrame = {
+    reorderPreset() {
+      try {
+        tab.send({ type: 'state', state: null })
+      } catch {
+        // The bridge swallows it; the key that asked for the move still has to be handled.
+      }
+    },
+  }
+  tab = createScenesTabState({ camFrame, now: () => 1_000 })
+  tab.send({ type: 'state', state: stateWith([scene('a', 'Intro'), scene('b', 'Talk')], { activePresetId: 'a' }) })
+  const step = tab.send({ type: 'keydown', key: 'ArrowUp', altKey: true, role: 'scene', id: 'b' })
+  assert.equal(step.preventDefault, true)
+})
+
 test('a bridge call that throws leaves the next step whole', () => {
   const scenes = [scene('a', 'Intro'), scene('b', 'Talk')]
   let tab

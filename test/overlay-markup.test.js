@@ -84,6 +84,17 @@ test('the Scenes tab holds only Scenes; Start at login, the shortcut list and th
   assert.doesNotMatch(read('scenes-tab-state.js'), /setControlsOpen|closeSettings\(\)/)
 })
 
+test('every Scenes tab button reaches a tab state handler', () => {
+  const panel = read('scenes-panel.js')
+  const allowed = [...panel.match(/const BUTTON_ACTS = new Set\(\[([^\]]+)\]\)/)[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
+  // Literal `data-act`s, plus the ones the confirm and file button helpers are called with.
+  const drawn = new Set([...panel.matchAll(/'data-act': '([^']+)'|(?:confirmButton|fileButton)\('([^']+)'/g)].map((match) => match[1] ?? match[2]))
+  assert.ok(['rename-ok', 'import', 'export'].every((act) => drawn.has(act)))
+  for (const act of drawn) assert.ok(allowed.includes(act), `${act} is drawn but not in BUTTON_ACTS, so its clicks are ignored`)
+  const handlers = read('scenes-tab-state.js')
+  for (const act of allowed) assert.match(handlers, new RegExp(`\\n {4}('${act}'|${act}): `), `${act} has no tab state handler`)
+})
+
 test('the Scenes tab uses only Phosphor glyphs that the embedded font maps', () => {
   const icons = read('assets/icons.css')
   const panel = read('scenes-panel.js')

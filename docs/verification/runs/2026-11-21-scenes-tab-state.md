@@ -12,10 +12,10 @@
 | Command | Result | Counts/duration | Evidence/notes |
 | --- | --- | --- | --- |
 | `npm ci` | Pass | | in the worktree, before `kit doctor` |
-| `npm test` | Pass | 475 tests: 474 pass, 1 skipped, 0 fail | the skipped one is the release Go check, which runs only on a version tag build |
+| `npm test` | Pass | 477 tests: 476 pass, 1 skipped, 0 fail | the skipped one is the release Go check, which runs only on a version tag build |
 | New tests on the old code | Fail as expected | `test/scenes-tab-state.test.js` fails to import (`src/scenes-tab-state.js` does not exist yet) | |
 | Undo on a layout Scene keeps the camera and quality picked since | Pass on old and new code | | a test the code already met; it fails when `createSceneEdits` follows the camera keys too (tried by changing `FOLLOWED_LOOK_KEYS` in `src/scenes.js`, then put back) |
-| `kit shots` | Pass | 25 screenshots, byte for byte the same as before the change | every PNG compared with `cmp` against a run on d904686; the run now also checks F2 focuses the rename field with its name selected, Escape puts focus back on the Scene, and an arrow key moves to the Scene before it |
+| `kit shots` | Pass | 25 screenshots, byte for byte the same as before the change | every PNG compared with `cmp` against a run on d904686; the run now also checks F2 focuses the rename field with its name selected, Escape puts focus back on the Scene, an arrow key moves to the Scene before it, and Alt+Down moves the Scene with focus staying on it and the page not navigating |
 | `kit ux` | Not run | | the repo has no `docs/agents/features.md` list for it to try |
 | `npm run test:electron` | Not run | | the brief says not to run the Electron smoke on Lex's screen |
 | `git diff --check` | Pass | | |
