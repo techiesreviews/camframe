@@ -50,6 +50,10 @@ pub fn window_size(shape: Shape, size: u32) -> Rect {
     Rect::new(0, 0, i64::from(width), i64::from(height))
 }
 
+pub fn restore_compact(saved: Rect, areas: &[Rect], primary: Rect, margin: u32) -> Rect {
+    on_screen_base(saved, areas, primary, margin)
+}
+
 /// `keepInside`: the start that keeps a window of `window_length` inside `[start, start + length]`.
 pub fn keep_inside(value: f64, start: i64, length: i64, window_length: i64) -> i64 {
     js::round(value.min((start + length - window_length) as f64).max(start as f64)) as i64
@@ -360,6 +364,14 @@ pub fn interpolate_bounds(from: Rect, to: Rect, progress: f64) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn full_screen_return_keeps_compact_bounds_and_heals_a_removed_display() {
+        let compact = Rect::new(2000, 400, 324, 390);
+        let primary = Rect::new(0, 0, 1920, 1080);
+        assert_eq!(restore_compact(compact, &[primary], primary, 32), Rect::new(1582, 676, 324, 390));
+        assert_eq!(restore_compact(compact, &[Rect::new(1920, 0, 1920, 1080)], primary, 32), compact);
+    }
 
     const AREA: Rect = Rect { x: 0, y: 0, width: 1920, height: 1040 };
 

@@ -35,7 +35,11 @@ The camera thread keeps only the newest frame. Blur works on a small shaped copy
 The sliders also take arrow, Home and End keys. The custom colour field takes native text input,
 including IME composition, and applies on Enter.
 
-Not yet: shortcuts, Full screen, Scenes, the Prompter link and first-run tips. They come in the
+Part 3 adds Full screen without reopening the camera, return to Compact, animated moves,
+display-change recovery, global shortcuts and the expanded tray menu. Shortcut registration
+failures appear in Camera settings. The old Shape click checks follow the expanded toolbar.
+
+Not yet: Scenes, the Prompter link and first-run tips. They come in the
 next parts of TOOLS-393. Real camera quality, hot-plug recovery and effect appearance still need
 Windows and Mac hardware checks; the Linux tests exercise the portable rules and drawing inputs.
 

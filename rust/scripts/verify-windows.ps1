@@ -289,10 +289,9 @@ try {
     $besideBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir "hover-beside-toolbar.png")
     $hToolbarFromBeside = Sample-Rel $besideBmp 162 44
     $besideBmp.Dispose()
-    # A real click on the toolbar's Shape button (the two buttons sit centred: Close, then Shape
-    # at x 163 to 199) switches the circle to the rounded square.
+    # A real click on Shape, the middle of the five current toolbar buttons.
     Move-To 162 228
-    Move-To 181 44
+    Move-To 162 44
     [Win32Verify]::mouse_event(0x02, 0, 0, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 60
     [Win32Verify]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)

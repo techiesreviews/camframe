@@ -169,6 +169,9 @@ impl BubbleOverlay {
         let mut body = div().flex().flex_col().gap(px(10.0));
         if self.settings_tab == Some(SettingsTab::Camera) {
             body = body.child("Camera");
+            for error in &self.shortcut_errors {
+                body = body.child(format!("Shortcut unavailable: {error}"));
+            }
             let cameras = lock_unpoisoned(&self.slot.devices).clone();
             body = body.child(self.control(
                 "default-camera".into(),

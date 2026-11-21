@@ -5,6 +5,7 @@ mod camera;
 mod mac_overlay;
 mod overlay;
 mod prefs;
+mod shortcuts;
 mod text_field;
 mod tray;
 #[cfg(not(target_os = "macos"))]
@@ -51,6 +52,8 @@ fn main() {
     // On macOS the camera permission is asked for by the capture thread (`camera.rs`), so the demo
     // pattern never touches AVFoundation.
     gpui_platform::application().with_assets(overlay::Icons).run(move |cx| {
+        #[cfg(target_os = "macos")]
+        cx.set_activation_policy(gpui::ActivationPolicy::Accessory);
         if config.demo_pattern {
             overlay::bind_test_keys(cx);
         }

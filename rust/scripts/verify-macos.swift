@@ -323,13 +323,12 @@ func checks() -> Int32 {
         failures.append("a click beside the toolbar did not reach the window behind (\(clicksAfterBesideToolbar - clicksAfterCorner) clicks arrived)")
     }
 
-    // 4. Shape switch by real clicks on the toolbar's Shape button. The two buttons sit centred
-    // (Close, then Shape), so the Shape button's middle is 19 pt right of the window's middle.
+    // 4. Shape switch by real clicks on Shape, the middle of the five current toolbar buttons.
     func clickShapeButton() {
         let (cx, cy) = cameraCenter(bubble.bounds)
         moveMouse(global(cx, cy))
-        moveMouse(global(bubble.bounds.width / 2 + 19, 44), settleMs: 300)
-        leftClick(global(bubble.bounds.width / 2 + 19, 44))
+        moveMouse(global(bubble.bounds.width / 2, 44), settleMs: 300)
+        leftClick(global(bubble.bounds.width / 2, 44))
         let before = bubble.bounds
         moveMouseAway(from: before)
         refresh()
