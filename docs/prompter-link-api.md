@@ -18,8 +18,8 @@ A change that narrows this is Lex's decision in a new ADR.
 
 - Base address: `http://127.0.0.1:47833`, only while the Prompter link is on in CamFrame.
 - `POST` bodies are JSON (`Content-Type: application/json`), at most 1024 bytes.
-- Allowed pages: `https://prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, `file://` copies, and local programs that send no `Origin`.
-- `POST /camframe/scenes` and `POST /camframe/small-size` refuse `file://` copies (`Origin: null`, `403`). A `file://` copy may send cues, but its status has only `app`, `version`, `scenes` and `api`, and its cue answers have only `ok` and `cue`.
+- Allowed callers: `https://prompter.techies.tools`, `http://localhost[:port]`, `http://127.0.0.1[:port]`, local programs that send no `Origin`, and, for cues only, pages that send `Origin: null` (`file://` copies and sandboxed frames on any web site).
+- `POST /camframe/scenes` and `POST /camframe/small-size` refuse `Origin: null` (`403`). Such a page may send cues, but its status has only `app`, `version`, `scenes` and `api`, and its cue answers have only `ok` and `cue`.
 - Every answer is JSON. Success is `200 {"ok":true,…}` (except `GET /camframe/status`, which is the status object itself). A refusal is `{"ok":false,"error":"<plain English>","code":"<code>"}`:
 
 | HTTP | `code` | Meaning |

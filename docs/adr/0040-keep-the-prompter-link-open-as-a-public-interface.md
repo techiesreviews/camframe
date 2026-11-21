@@ -35,14 +35,14 @@ Every request must also name the link itself as its `Host` (`127.0.0.1:47833` or
 - `POST /camframe/scenes`: save a layout Scene (a name, a size and a place), optionally applying it.
 - `POST /camframe/small-size`: set the size "small" restores.
 
-Each request is a JSON object of at most 1024 bytes with only the known fields; anything else is refused and changes nothing.
+Each `POST` body is a JSON object of at most 1024 bytes with only the known fields; anything else is refused and changes nothing.
 
 ### What it does not allow
 
 - No access from another computer: the link listens on `127.0.0.1` only.
-- Nothing while the link is off. It is off by default and listens only after Lex turns it on with the toolbar's Prompter link button. The choice is saved, so it stays on after a restart until he turns it off; turning it off, or quitting, closes the port.
+- Nothing while the link is off. It is off by default and listens only while its saved choice is on, which only Lex's toolbar Prompter link button changes. The choice is saved, so it stays on after a restart until he turns it off; turning it off, or quitting, closes the port.
 - No camera, shape, style (frame, effect, colours), crop, mirror, zoom or Camera quality of its own. Applying a saved Scene by name applies only what that Scene already holds; a layout Scene keeps the live look.
-- No deleting, renaming or reordering Scenes. Saving never deletes another Scene: a seventh Scene is refused (`409 scene-limit`). Saving over an existing name needs `"replace": true`, and then it does replace that Scene, also one saved by hand in CamFrame, with a layout Scene.
+- No deleting, renaming (beyond the spelling change below) or reordering Scenes. Saving never deletes another Scene: a seventh Scene is refused (`409 scene-limit`). Saving over an existing name needs `"replace": true`, and then it does replace that Scene, also one saved by hand in CamFrame, with a layout Scene. The replacement keeps the Scene's id and place in the list but takes the name as sent, so a name that matches in another spelling (for example "demo" for "Demo") changes how the name is written.
 - A cue never changes a saved Scene: a cue that moves the camera clears the active Scene instead of saving into it.
 - No other settings: not Face full, Face small or the Corner margin, not the Prompter link itself, not click-through, always on top or onboarding. It cannot hide CamFrame or quit it.
 - No pictures: it never records, streams or reads the camera's video, and the status shows the look without the camera's device id (the camera's label is shown), plus a hash of the whole look.

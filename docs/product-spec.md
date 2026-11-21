@@ -159,7 +159,7 @@ Presentation entry points:
 
 ## Prompter link
 
-An optional link that lets the Techies teleprompter (https://prompter.techies.tools, a local copy, or a file:// copy) switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it can also save layout Scenes and the small size (ADR 0035), but it never records, streams, or changes the camera itself (ADR 0031).
+An optional link that lets the Techies teleprompter (https://prompter.techies.tools, a local copy, or a file:// copy), or any other local tool (ADR 0040), switch CamFrame's view when the prompter's reading line reaches a camera cue line such as `[Share screen. Face small, bottom right.]`. It changes only the view CamFrame already offers (Full screen, Compact size/position, a Scene); it can also save layout Scenes and the small size (ADR 0035), but it never records, streams, or changes the camera itself (ADR 0031).
 
 - Off by default. Turning it on with the toolbar's Prompter link button (scroll icon), its only control since ADR 0037, starts a tiny HTTP server bound to `127.0.0.1` only, on port `47833`. Turning it off, or quitting, closes the port. With it off nothing listens.
 - The button is pressed while the link is on and shows a dot: green ready, grey starting, orange a problem. Its title and screen reader description say Off, On (waiting for prompter cues on port 47833), Starting…, or why it could not start (for example "Port 47833 is in use by another app."); turning the link off and on retries.
