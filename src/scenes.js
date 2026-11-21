@@ -90,15 +90,15 @@ export function describeScene(scene, settings) {
     margin: request.margin,
     withinRight: request.withinRight,
     saved: { size: scene.settings.size, position: scene.settings.position },
-    keepsLiveLook: Boolean(scene.layout),
-    look: scene.layout ? undefined : sceneLook(scene.settings),
+    keepsLiveLook: sceneKind(scene) === 'layout',
+    look: sceneKind(scene) === 'layout' ? undefined : sceneLook(scene.settings),
   }
 }
 
 // What a Scene looks like on camera: a layout Scene keeps the live look at `openSize`, the size it
 // really opens at (`sceneOpening`), or else the size it asks for; a snapshot Scene its saved settings.
 export function sceneLookOnCamera(scene, settings, openSize) {
-  if (!scene.layout) return scene.settings
+  if (sceneKind(scene) === 'snapshot') return scene.settings
   return { ...settings, size: openSize ?? describeScene(scene, settings).size }
 }
 
