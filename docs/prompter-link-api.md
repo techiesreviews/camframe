@@ -49,7 +49,7 @@ Read-only. The first three fields are the same as before API 2.
 ```json
 {
   "app": "camframe",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "scenes": ["Interview", "Live small corner", "Live right large"],
   "api": 2,
   "sceneLimit": 6,
