@@ -1,8 +1,18 @@
 # Prompter link API 2: sizes, places and layout Scenes
 
-This is the guide for whoever drives CamFrame from the prompter (a person or the prompter's agent). It lists every request the Prompter link accepts, with real request and answer payloads, and the cues for Lex's livestream layouts. The rules are in `docs/data-contracts.md` (Prompter link HTTP contract), the decision is ADR 0035, and the code is `src/prompter-link.js` (wire checks) and `src/prompter-control.js` (what a request does).
+This is the guide for whoever drives CamFrame from the prompter (a person or the prompter's agent), or from any other tool. It lists every request the Prompter link accepts, with real request and answer payloads, and the cues for Lex's livestream layouts. The rules are in `docs/data-contracts.md` (Prompter link HTTP contract), the decisions are ADR 0035 and ADR 0040, and the code is `src/prompter-link.js` (wire checks) and `src/prompter-control.js` (what a request does).
 
 API 2 needs a CamFrame build that contains it. Check before relying on it: `GET /camframe/status` answers `"api": 2`. An older CamFrame has no `api` field, refuses numeric sizes with `400`, and has no `/camframe/scenes` or `/camframe/small-size` (`404`).
+
+## Open on purpose
+
+The Prompter link is a public interface on this computer, not only the prompter's (ADR 0040, Lex 2026-11-15). Anyone may build tools on it: a script, a stream deck button, a page of their own. While it is on:
+
+- A program that sends no `Origin`, the prompter site and any `http://localhost` or `http://127.0.0.1` page may use every request below.
+- A page that sends `Origin: null` (a `file://` copy, or a sandboxed frame on any web site) may send cues and read the Scene names, but not save or read the display layout.
+- It never accepts another computer, never changes the camera or look on its own (only by applying a saved Scene), never deletes, renames or reorders Scenes, and cannot hide or quit CamFrame. Turning the link off stops all of it.
+
+A change that narrows this is Lex's decision in a new ADR.
 
 ## Basics
 
