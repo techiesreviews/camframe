@@ -173,7 +173,7 @@ An optional link that lets the Techies teleprompter (https://prompter.techies.to
 - **Layout Scenes**: the prompter can save a named Scene that holds only a size and a place (for example "Live right large": 432 px, right, inside the right 30%). Applying it, from a cue, the tray, a shortcut or Inline settings, keeps the camera, shape, style and crop exactly as they are live and works the place out again on the current display. Saving never deletes a Scene: a seventh Scene is refused, and saving over an existing name needs an explicit replace. Pages that send `Origin: null` (a `file://` copy, or a sandboxed frame on any web site) may cue the view but not save.
 - **Status**: the prompter can read what CamFrame shows (camera bounds, whether it is still moving, the size, the small size, the active Scene, the look and the Scenes) to check a cue worked.
 - A Face full/Face small choice that names a deleted Scene falls back to its default.
-- Requests are accepted only from the prompter's site, `http://localhost:*`, `http://127.0.0.1:*`, file:// copies and sandboxed frames on any web site (`Origin: null`, cues only), and local programs that send no `Origin`. This is open on purpose, so anyone can build tools on the link (ADR 0040). The `Host` must be `127.0.0.1:47833` or `localhost:47833`.
+- Requests are accepted only from the prompter's site, `http://localhost:*`, `http://127.0.0.1:*`, file:// copies and sandboxed frames on any web site (`Origin: null`: cues and a limited status, no saves), and local programs that send no `Origin`. This is open on purpose, so anyone can build tools on the link (ADR 0040). The `Host` must be `127.0.0.1:47833` or `localhost:47833`.
 
 ## Contrast and reduced motion
 
