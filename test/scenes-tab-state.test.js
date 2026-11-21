@@ -108,6 +108,21 @@ test('a different Scene saved in between does not take the focus meant for the s
   assert.equal(tab.send({ type: 'state', state: saved }).focus, 'apply:c')
 })
 
+// B3: a Prompter link save can fill the sixth slot after Save look was sent; main then refuses the
+// sent Scene, and the link's Scene must not take the focus meant for it.
+test('a save refused because a Prompter link save filled the last slot leaves focus alone and shows Full', () => {
+  const five = ['Intro', 'Talk', 'Demo', 'Wide', 'Outro'].map((name, index) => scene(`s${index}`, name))
+  const { tab } = tabWith(stateWith(five, { activePresetId: 's0', sceneSaved: { id: 's0', at: 10 } }))
+  tab.send({ type: 'save-open' })
+  tab.send({ type: 'input', role: 'new-name', value: 'Seventh' })
+  assert.deepEqual(tab.send({ type: 'save-ok' }).requests, [['savePreset', 'Seventh', '']])
+  const full = stateWith([...five, scene('link', 'Big left')], { activePresetId: 's0', sceneSaved: { id: 'link', at: 15 } })
+  const answer = tab.send({ type: 'state', state: full })
+  assert.equal(answer.focus, '', 'the Prompter link Scene does not take the focus')
+  assert.equal(answer.draw.model.add.kind, 'full')
+  assert.deepEqual(answer.requests, [], 'nothing is sent again')
+})
+
 test('Save look over a taken name says Replace and focuses the Scene it replaced', () => {
   const before = stateWith([scene('a', 'Intro'), scene('b', 'Talk')], { activePresetId: 'b', sceneSaved: { id: 'b', at: 10 } })
   const { tab } = tabWith(before)

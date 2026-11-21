@@ -45,3 +45,4 @@ The Scenes tab mixed four things: a name field with a Save/Update button, a sele
 - Start at login users lose the feature; the one-time unregister means CamFrame no longer starts at sign-in after the update.
 - The Prompter link API, its cues and the Scenes data the prompter reads are unchanged; a starter is reported as a layout Scene until it is edited, then as a snapshot Scene.
 - Manual rows changed: W-25 and M-08 (Start at login) are retired; new rows check autosave, Undo, delete Undo, the tiles' geometry on a real display, the list/grid switch and the keyboard on Windows.
+- 2026-11-21 (TOOLS-295 B3): no Scene save ever removes a Scene. A new Scene past six is refused from every path (Inline settings and the Prompter link alike), nothing is stored, and Inline settings only announces it to screen readers; the Full slot above stays the visible state.
