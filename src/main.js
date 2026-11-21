@@ -137,9 +137,11 @@ function updateSettings(patch, { demo = false } = {}) {
 }
 
 // A place the window reached by itself (a heal, the end of the onboarding reserve, a native move):
-// stored in Preferences only, no Scene changes (ADR 0038).
+// stored in Preferences only, no Scene changes (ADR 0038). The tiles are sent again, since a heal
+// after a move can land on another display than the one the move was heading to.
 function compactPlaceReached(position) {
   sceneSession.record({ position })
+  emitState()
   saveSettings()
 }
 

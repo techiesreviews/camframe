@@ -425,6 +425,32 @@ test('while a Scene moves the Overlay to a smaller display, the tiles already sh
   assert.equal(previews.scenes[big.id].size, opened.size)
 })
 
+test('when the display a Scene is moving to is unplugged mid-move, the tiles after the heal match the next apply', async (t) => {
+  const laptop = { bounds: { x: 1920, y: 0, width: 1280, height: 720 }, workArea: { x: 1920, y: 0, width: 1280, height: 680 } }
+  const live = await harness(t, { extraDisplays: [laptop] })
+  await live.saveScene({ name: 'Big right', size: 640, position: 'right' })
+  live.state.settings = sanitizeSettings({
+    ...live.state.settings,
+    presets: [
+      ...live.state.settings.presets,
+      { id: 'preset-laptop', name: 'Laptop', settings: { size: 288, shape: 'circle', position: { x: 2100, y: 100 } } },
+    ],
+  })
+  await live.cue({ scene: 'Laptop' })
+  // Main's display handler: the move is checked when it ends, where the window is healed.
+  live.unplug(1)
+  live.geometry.ensureOnScreen()
+  live.settle()
+  const view = (await live.status()).view
+  assert.ok(view.window.x < 1920, 'healed onto the display that is left')
+  const displayAt = () => ({ x: 0, y: 0, width: 1920, height: 1080 })
+  const previews = sceneLibrary.scenePreviews(live.state.settings, { ...sceneDisplays(live.geometry), displayAt })
+  const big = live.state.settings.presets.find((scene) => scene.name === 'Big right')
+  const opened = (await live.cue({ scene: 'Big right' })).body.layout
+  assert.equal(opened.size, 640)
+  assert.equal(previews.scenes[big.id].size, opened.size)
+})
+
 test('in Full screen, a bare "small" after a tray apply of a Scene from another display returns to that display', async (t) => {
   const second = { bounds: { x: 1920, y: 0, width: 1920, height: 1080 }, workArea: { x: 1920, y: 0, width: 1920, height: 1040 } }
   const live = await harness(t, { extraDisplays: [second] })
