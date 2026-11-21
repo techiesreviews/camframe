@@ -3,8 +3,9 @@
 // Puts a full-screen magenta window behind the bubble, starts camframe-trial with the demo
 // pattern, and checks real screen pixels: everything around the circle shows the magenta behind
 // it (no title bar, no background, no shadow), the window floats above normal windows, a real
-// right-click on the bubble switches the shape while the outside stays see-through, and dragging
-// the bubble moves the window. Also measures size, start time and memory.
+// right-click on the bubble switches the shape while the outside stays see-through, the bubble
+// stays visible when another app is active, and dragging the bubble moves the window. Also
+// measures size, start time and memory.
 //
 // Build and run:
 //   swiftc -O scripts/verify-macos.swift -o verify-macos
@@ -229,7 +230,8 @@ func checks() -> Int32 {
     }
     let backdrop = circle.pixel(6, 6)
     log("backdrop sample \(backdrop) scale=\(circle.scale)")
-    if !(backdrop.r >= 200 && backdrop.g <= 60 && backdrop.b >= 200) {
+    // The runner's display colour profile turns pure magenta into about rgb(255,64,255).
+    if !(backdrop.r >= 200 && backdrop.g <= 110 && backdrop.b >= 200) {
         failures.append("backdrop sample \(backdrop) is not magenta: the capture does not show the screen")
     }
     pixels["circle.TL"] = "\(expectClear(circle, "circle TL", 8, 8, backdrop))"
@@ -245,20 +247,14 @@ func checks() -> Int32 {
     }
     pixels["circle.center"] = "\(expectDrawn(circle, "circle center", 162, 200, backdrop))"
 
-    // 2. Shape switch by a real right-click on the bubble (falls back to the "2" key sent to the app).
+    // 2. Shape switch by a real right-click on the bubble. It must work by itself: no keyboard rescue.
     let center = CGPoint(x: bubble.bounds.minX + 162, y: bubble.bounds.minY + 200)
-    var switchMethod = "right-click"
-    rightClick(center)
-    moveMouseAway(from: bubble.bounds)
-    var rounded = capture(around: bubble.bounds, name: "rounded")
-    if let shot = rounded, shot.at(bubble.bounds, 48, 86).near(backdrop) {
-        log("right-click did not switch the shape; trying the 2 key")
-        switchMethod = "key"
-        pressKey(keyForShape["rounded"]!, pid: pid)
+    func nextShapeByRightClick() {
+        rightClick(center)
         moveMouseAway(from: bubble.bounds)
-        rounded = capture(around: bubble.bounds, name: "rounded")
     }
-    if let shot = rounded {
+    nextShapeByRightClick()
+    if let shot = capture(around: bubble.bounds, name: "rounded") {
         pixels["rounded.TL"] = "\(expectClear(shot, "rounded TL", 8, 8, backdrop))"
         pixels["rounded.TR"] = "\(expectClear(shot, "rounded TR", 316, 8, backdrop))"
         pixels["rounded.BL"] = "\(expectClear(shot, "rounded BL", 8, 354, backdrop))"
@@ -272,19 +268,15 @@ func checks() -> Int32 {
         failures.append("rounded capture failed")
     }
 
-    // 3. Portrait and landscape, by the same input method.
-    func nextShape(_ key: String) {
-        if switchMethod == "right-click" { rightClick(center) } else { pressKey(keyForShape[key]!, pid: pid) }
-        moveMouseAway(from: bubble.bounds)
-    }
-    nextShape("portrait")
+    // 3. Portrait and landscape, by more right-clicks.
+    nextShapeByRightClick()
     if let shot = capture(around: bubble.bounds, name: "portrait") {
         pixels["portrait.side"] = "\(expectClear(shot, "portrait side strip", 30, 200, backdrop))"
         pixels["portrait.center"] = "\(expectDrawn(shot, "portrait center", 162, 200, backdrop))"
     } else {
         failures.append("portrait capture failed")
     }
-    nextShape("landscape")
+    nextShapeByRightClick()
     if let shot = capture(around: bubble.bounds, name: "landscape") {
         pixels["landscape.top"] = "\(expectClear(shot, "landscape top strip", 162, 80, backdrop))"
         pixels["landscape.bottom"] = "\(expectClear(shot, "landscape bottom strip", 162, 320, backdrop))"
@@ -292,6 +284,33 @@ func checks() -> Int32 {
     } else {
         failures.append("landscape capture failed")
     }
+
+    // 3b. Keyboard shortcut "1" back to the circle, checked on its own (reported, not required:
+    // keys sent to another app's process can be filtered by macOS on CI runners).
+    pressKey(keyForShape["circle"]!, pid: pid)
+    moveMouseAway(from: bubble.bounds)
+    var keyboardShapeSwitch = false
+    if let shot = capture(around: bubble.bounds, name: "key-circle") {
+        // Back in the circle, the top strip is drawn again and the corner probe is see-through.
+        keyboardShapeSwitch = !shot.at(bubble.bounds, 162, 80).near(backdrop)
+            && shot.at(bubble.bounds, 48, 86).near(backdrop)
+    }
+    log("keyboard shape switch (1 key): \(keyboardShapeSwitch ? "worked" : "did not work")")
+
+    // 3c. Another app in front: the bubble must stay visible and see-through.
+    _ = run("/usr/bin/open", ["-a", "Finder"])
+    sleepMs(1200)
+    let frontApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown"
+    moveMouseAway(from: bubble.bounds)
+    if bubbleWindow(of: pid) == nil {
+        failures.append("bubble disappeared when \(frontApp) became the active app")
+    } else if let shot = capture(around: bubble.bounds, name: "other-app-active") {
+        pixels["otherApp.TL"] = "\(expectClear(shot, "other app active TL", 8, 8, backdrop))"
+        pixels["otherApp.center"] = "\(expectDrawn(shot, "other app active center", 162, 200, backdrop))"
+    } else {
+        failures.append("capture with another app active failed")
+    }
+    log("active app during the check: \(frontApp)")
 
     // 4. Dragging the bubble moves the window.
     let before = bubble.bounds
@@ -320,7 +339,9 @@ func checks() -> Int32 {
 
     report["seeThroughAndShapeSwitchVerified"] = failures.isEmpty
     report["failures"] = failures
-    report["shapeSwitchInput"] = switchMethod
+    report["shapeSwitchInput"] = "right-click"
+    report["keyboardShapeSwitch"] = keyboardShapeSwitch
+    report["activeAppDuringOtherAppCheck"] = frontApp
     report["pixels"] = pixels
     report["backdrop"] = "\(backdrop)"
     report["captureScale"] = circle.scale
