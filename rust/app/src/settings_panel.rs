@@ -27,14 +27,29 @@ const EDGE: u32 = 0x343438;
 const TEXT: u32 = 0xe5e5e5;
 
 impl BubbleOverlay {
+    pub(super) fn toggle_framing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_tab.is_some() {
+            self.toggle_settings(window, cx);
+        }
+        self.framing = !self.framing;
+        cx.notify();
+    }
+    pub(super) fn sync_color_input(&mut self, cx: &mut Context<Self>) {
+        if self.color_input.read(cx).text != self.settings.effect_color {
+            let color = self.settings.effect_color.clone();
+            self.color_input.update(cx, |input, cx| input.set_text(color, cx));
+        }
+    }
     pub(super) fn patch_settings(&mut self, patch: Value, window: &mut Window, cx: &mut Context<Self>) {
         let previous = self.settings.clone();
         self.settings = self.settings.with_patch(&patch);
         self.settings =
             self.scene_edits.follow(&previous, self.settings.clone(), &self.active_scene_id, &patch, self.now_ms());
         if patch.get("effectColor").is_some() {
-            let color = self.settings.effect_color.clone();
-            self.color_input.update(cx, |input, cx| input.set_text(color, cx));
+            self.sync_color_input(cx);
+        }
+        if patch.get("cameraId").is_some() || patch.get("overlayResolution").is_some() {
+            self.camera_notice.clear();
         }
         if previous.always_on_top != self.settings.always_on_top {
             platform::set_always_on_top(window, self.settings.always_on_top);

@@ -112,10 +112,32 @@ impl BubbleOverlay {
             let Some(index) = self.settings.presets.iter().position(|s| scenes::same_name(s.name.trim(), &name)) else {
                 return error(404, "unknown-scene", &format!("CamFrame has no Scene named \"{name}\"."));
             };
+            let scene = &self.settings.presets[index];
+            let requested = scene.layout.map_or(scene.settings.size, |layout| match layout.size {
+                LayoutSize::Small => self.settings.prompter_small_size,
+                LayoutSize::Pixels(size) => size,
+            });
+            let mut asked = json!({"size":requested});
+            let mut failed_plan = false;
+            if let Some(layout) = scene.layout {
+                if let Some(spot) = layout.position {
+                    asked["position"] = json!(spot);
+                } else if let Some(point) = scene.settings.position {
+                    asked["position"] =
+                        json!({"x":point.x+i64::from(OVERLAY_CHROME.left),"y":point.y+i64::from(OVERLAY_CHROME.top)});
+                }
+                if let Some(margin) = layout.margin {
+                    asked["margin"] = json!(margin);
+                }
+                if let Some(share) = layout.within_right {
+                    asked["withinRight"] = json!(share);
+                }
+                failed_plan = asked.get("position").is_some() && self.link_plan(&asked, window, cx).is_err();
+            }
             self.apply_scene_at(index, window, cx);
             return (
                 200,
-                json!({"ok":true,"cue":body,"layout":{"size":self.size(),"requestedSize":self.size(),"clamped":false},"view":self.link_view(window,cx)}),
+                json!({"ok":true,"cue":body,"layout":{"size":self.size(),"requestedSize":requested,"clamped":failed_plan||self.size()!=requested},"view":self.link_view(window,cx)}),
             );
         }
         if body["size"] == "full" {
@@ -146,7 +168,11 @@ impl BubbleOverlay {
             self.scene_edits.clear_change();
         }
         self.set_overlay_visible(true, window, cx);
-        self.move_to(geometry::window_size(self.settings.shape, self.size()).at(plan.position), window, cx);
+        let mut bounds = geometry::window_size(self.settings.shape, self.size()).at(plan.position);
+        if self.settings_tab.is_some() {
+            bounds.height = bounds.height.max(390);
+        }
+        self.move_to(bounds, window, cx);
         self.sync_capture_view(window);
         self.save_now();
         self.update_tray_scenes();

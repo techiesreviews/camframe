@@ -114,6 +114,41 @@ fn device_id(info: &nokhwa::utils::CameraInfo) -> String {
     if unique.is_empty() { info.index().as_string() } else { unique }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum DeviceChoice {
+    Wait,
+    Unavailable,
+    Device(usize),
+}
+
+fn choose_device(
+    seen_inventory: bool,
+    devices: &[nokhwa::utils::CameraInfo],
+    request: &CaptureRequest,
+) -> DeviceChoice {
+    if !seen_inventory {
+        return DeviceChoice::Wait;
+    }
+    if devices.is_empty() {
+        return DeviceChoice::Unavailable;
+    }
+    if let Some(index) = devices.iter().position(|info| device_id(info) == request.device) {
+        return DeviceChoice::Device(index);
+    }
+    if !request.label.trim().is_empty() && request.label != "Default camera" {
+        let matches = devices
+            .iter()
+            .enumerate()
+            .filter(|(_, info)| info.human_name().trim() == request.label.trim())
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
+        if matches.len() == 1 {
+            return DeviceChoice::Device(matches[0]);
+        }
+    }
+    DeviceChoice::Device(0)
+}
+
 pub fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
@@ -247,6 +282,8 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
     let mut pending = lock_unpoisoned(&slot.request).clone();
     let mut changed_at = Instant::now() - Duration::from_secs(1);
     let mut devices = Vec::new();
+    let mut seen_inventory = false;
+    let mut last_working_resolution = Resolution::R720;
     let mut scan_error: Option<String> = None;
     let mut current_device = String::new();
     let mut failures = FailureCount::default();
@@ -257,6 +294,7 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
             changed_at = Instant::now();
         }
         if let Some(scan) = lock_unpoisoned(&slot.inventory).take() {
+            seen_inventory = true;
             if let Ok(list) = scan {
                 devices = list;
                 scan_error = None;
@@ -273,48 +311,56 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
                 }
             }
         }
+        if choose_device(seen_inventory, &devices, &pending) == DeviceChoice::Wait {
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        }
         if changed_at.elapsed() >= Duration::from_millis(200) && applied.as_ref() != Some(&pending) {
             if let Some(current) = camera.as_mut()
                 && applied.as_ref().is_some_and(|old| old.device == pending.device)
             {
                 // Keep the same device and restore its working mode if the driver refuses a switch.
                 let old = current.camera_format();
-                if let Ok(formats) = current.compatible_camera_formats()
-                    && let Some(best) = pick_best_format(&formats, pending.resolution)
-                    && let Err(error) = current.set_camera_requset(RequestedFormat::with_formats(
-                        RequestedFormatType::Exact(best),
-                        &DECODABLE_FORMATS,
-                    ))
-                {
+                let switched = current
+                    .compatible_camera_formats()
+                    .map_err(|error| error.to_string())
+                    .and_then(|formats| {
+                        pick_best_format(&formats, pending.resolution)
+                            .ok_or_else(|| "This quality is not available.".to_string())
+                    })
+                    .and_then(|best| {
+                        current
+                            .set_camera_requset(RequestedFormat::with_formats(
+                                RequestedFormatType::Exact(best),
+                                &DECODABLE_FORMATS,
+                            ))
+                            .map_err(|error| error.to_string())
+                    });
+                if let Err(error) = switched {
                     let _ = current.set_camera_requset(RequestedFormat::with_formats(
                         RequestedFormatType::Exact(old),
                         &DECODABLE_FORMATS,
                     ));
                     let _ = current.open_stream();
-                    let old_resolution = applied.as_ref().map_or(Resolution::R720, |old| old.resolution);
+                    let old_resolution = last_working_resolution;
                     *lock_unpoisoned(&slot.rejection) = Some((
                         pending.clone(),
                         old_resolution,
-                        format!("{} The previous quality is kept.", classify_error(&error.to_string())),
+                        format!("{} The previous quality is kept.", classify_error(&error)),
                     ));
                     publish_status(slot, wake, CameraStatus::Live);
+                } else {
+                    last_working_resolution = pending.resolution;
                 }
                 applied = Some(pending.clone());
             } else {
                 if let Some(mut previous) = camera.take() {
                     let _ = previous.stop_stream();
                 }
-                let info = devices
-                    .iter()
-                    .find(|info| device_id(info) == pending.device)
-                    .or_else(|| {
-                        devices.iter().find(|info| {
-                            !pending.label.is_empty()
-                                && pending.label != "Default camera"
-                                && info.human_name() == pending.label
-                        })
-                    })
-                    .or(devices.first());
+                let info = match choose_device(seen_inventory, &devices, &pending) {
+                    DeviceChoice::Device(index) => devices.get(index),
+                    _ => None,
+                };
                 if let Some(info) = info {
                     let unique = device_id(info);
                     let index =
@@ -327,6 +373,7 @@ fn run_webcam_loop(stop: &AtomicBool, slot: &CameraSlot, wake: &async_channel::S
                             camera = Some(next);
                             current_device = unique;
                             applied = Some(pending.clone());
+                            last_working_resolution = pending.resolution;
                             failures.reset();
                             publish_status(slot, wake, CameraStatus::Live);
                         }
@@ -675,6 +722,20 @@ pub fn generate_demo_pattern(width: u32, height: u32, tick: u32) -> BgraFrame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_waits_for_inventory_and_uses_stable_identity_after_reordering() {
+        let a = nokhwa::utils::CameraInfo::new("  Desk  ", "", "native-a", CameraIndex::Index(0));
+        let b = nokhwa::utils::CameraInfo::new("Default", "", "native-b", CameraIndex::Index(1));
+        let request = CaptureRequest { device: "native-a".into(), label: "Desk".into(), resolution: Resolution::R720 };
+        assert_eq!(choose_device(false, &[a.clone(), b.clone()], &request), DeviceChoice::Wait);
+        assert_eq!(choose_device(true, &[b.clone(), a.clone()], &request), DeviceChoice::Device(1));
+        let imported = CaptureRequest { device: "chromium-id".into(), ..request };
+        assert_eq!(choose_device(true, &[b.clone(), a.clone()], &imported), DeviceChoice::Device(1));
+        let duplicate = nokhwa::utils::CameraInfo::new("Desk", "", "native-c", CameraIndex::Index(2));
+        assert_eq!(choose_device(true, &[b, a, duplicate], &imported), DeviceChoice::Device(0));
+        assert_eq!(choose_device(true, &[], &imported), DeviceChoice::Unavailable);
+    }
 
     #[test]
     fn blur_halo_has_transparent_corners_and_a_bounded_working_size() {

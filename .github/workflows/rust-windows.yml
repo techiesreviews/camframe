@@ -95,6 +95,9 @@ jobs:
           Copy-Item "rust/target/release/camframe-rust.exe" "dist/CamFrame-Rust-Portable-0.1.0-Windows-x64.exe"
           Copy-Item "rust/README.md" "dist/README.txt"
 
+      - name: Check native settings labels
+        run: rust/target/release/check-panel-text.exe verification-windows/camera-panel.png verification-windows/style-panel.png verification-windows/scenes-panel.png
+
       - name: Build and check the unsigned per-user installer
         shell: pwsh
         run: |

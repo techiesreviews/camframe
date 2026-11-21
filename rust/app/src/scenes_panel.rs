@@ -25,6 +25,8 @@ impl BubbleOverlay {
         self.set_fullscreen(false, window, cx);
         let (areas, primary) = work_areas(cx);
         self.settings = scenes::apply_scene(&self.settings, &scene, compact, &areas, primary);
+        self.sync_color_input(cx);
+        self.camera_notice.clear();
         self.active_scene_id = scene.id;
         self.announcement = scene.name;
         self.scene_edits.clear_change();
@@ -94,6 +96,7 @@ impl BubbleOverlay {
                         if self.active_scene_id == id {
                             self.active_scene_id.clear();
                         }
+                        self.scene_undo_focus.focus(window, cx);
                         self.save_now();
                         self.update_tray_scenes();
                     }
@@ -101,8 +104,10 @@ impl BubbleOverlay {
             }
             SceneAction::Move(i, offset) => {
                 if let Some(scene) = self.settings.presets.get(i) {
-                    self.settings =
-                        scenes::reorder_scene(&self.settings, &scene.id, (i as i32 + offset).max(0) as usize);
+                    let target =
+                        (i as i32 + offset).clamp(0, self.settings.presets.len().saturating_sub(1) as i32) as usize;
+                    self.settings = scenes::reorder_scene(&self.settings, &scene.id, target);
+                    self.scene_focus[target].focus(window, cx);
                     self.save_now();
                     self.update_tray_scenes();
                 }
@@ -119,7 +124,14 @@ impl BubbleOverlay {
             }
             SceneAction::UndoDelete => {
                 if let Some((settings, active)) = self.scene_edits.restore_delete(&self.settings, self.now_ms()) {
+                    let restored_index = settings
+                        .presets
+                        .iter()
+                        .position(|scene| !self.settings.presets.iter().any(|old| old.id == scene.id));
                     self.settings = settings;
+                    if let Some(index) = restored_index {
+                        self.scene_focus[index].focus(window, cx);
+                    }
                     if self.active_scene_id.is_empty()
                         && let Some(id) = active
                         && let Some(i) = self.settings.presets.iter().position(|s| s.id == id)
@@ -171,6 +183,7 @@ impl BubbleOverlay {
                 match result {
                     Ok(imported) => {
                         this.settings = imported.library.settings;
+                        this.sync_color_input(cx);
                         this.scene_status = format!("Imported {} Scenes", imported.imported_count);
                         this.scene_edits.clear_delete();
                         this.save_now();
@@ -296,7 +309,9 @@ impl BubbleOverlay {
                 .on_mouse_up(
                     MouseButton::Left,
                     cx.listener(move |this, _, _, cx| {
-                        if let Some(id) = this.scene_drag.take() {
+                        if let Some(id) = this.scene_drag.take()
+                            && this.settings.presets.get(i).is_some_and(|scene| scene.id != id)
+                        {
                             this.settings = scenes::reorder_scene(&this.settings, &id, i);
                             this.save_now();
                             this.update_tray_scenes();
@@ -384,13 +399,16 @@ impl BubbleOverlay {
             ));
         }
         if self.scene_edits.can_undo_delete(self.now_ms()) {
-            body = body.child(self.control(
-                "undo-delete".into(),
-                "Undo delete".into(),
-                false,
-                Control::Scene(SceneAction::UndoDelete),
-                cx,
-            ));
+            body = body.child(
+                self.control(
+                    "undo-delete".into(),
+                    "Undo delete".into(),
+                    false,
+                    Control::Scene(SceneAction::UndoDelete),
+                    cx,
+                )
+                .track_focus(&self.scene_undo_focus),
+            );
         }
         if !self.scene_status.is_empty() {
             body = body.child(self.scene_status.clone());

@@ -5,6 +5,7 @@ use std::ops::Range;
 
 pub struct TextField {
     pub text: String,
+    pub high_contrast: bool,
     focus: FocusHandle,
     selection: Range<usize>,
     marked: Option<Range<usize>>,
@@ -36,7 +37,16 @@ impl TextField {
     }
     pub fn new(text: String, label: &'static str, cx: &mut Context<Self>) -> Self {
         let end = text.len();
-        Self { text, label, focus: cx.focus_handle(), selection: 0..end, marked: None, line: None, bounds: None }
+        Self {
+            text,
+            high_contrast: false,
+            label,
+            focus: cx.focus_handle(),
+            selection: 0..end,
+            marked: None,
+            line: None,
+            bounds: None,
+        }
     }
     fn bytes(&self, range: Range<usize>) -> Range<usize> {
         byte_offset(&self.text, range.start)..byte_offset(&self.text, range.end)
@@ -195,7 +205,7 @@ impl Render for TextField {
             .track_focus(&self.focus)
             .tab_index(0)
             .border_1()
-            .border_color(rgb(0x343438))
+            .border_color(rgb(if self.high_contrast { 0xffffff } else { 0x343438 }))
             .rounded(px(6.0))
             .bg(rgb(0x19191b))
             .text_color(rgb(0xe5e5e5))

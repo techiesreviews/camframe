@@ -94,6 +94,9 @@ jobs:
       - name: Verify on the real desktop and measure
         run: ./verify-macos --exe rust/target/release/camframe-rust --out verification-macos
 
+      - name: Check native settings labels
+        run: rust/target/release/check-panel-text verification-macos/camera-panel.png verification-macos/style-panel.png verification-macos/scenes-panel.png
+
       - name: Package the unsigned app
         run: |
           app="dist/CamFrame Rust.app"
@@ -127,6 +130,7 @@ jobs:
           sleep 1
           # Check the packaged app's binary too, so the download is the one that was checked.
           ./verify-macos --exe "$app/Contents/MacOS/camframe-rust" --out verification-macos/packaged-app
+          rust/target/release/check-panel-text verification-macos/packaged-app/camera-panel.png
           cp rust/README.md dist/README.txt
           (cd dist && ditto -c -k --keepParent "CamFrame Rust.app" "CamFrame-Rust-macOS-${{ matrix.arch }}-beta.zip")
           mkdir -p dist/dmg

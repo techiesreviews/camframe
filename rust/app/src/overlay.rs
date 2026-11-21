@@ -199,6 +199,7 @@ pub struct BubbleOverlay {
     scene_status: String,
     scene_drag: Option<String>,
     scene_focus: [FocusHandle; 6],
+    scene_undo_focus: FocusHandle,
     camera_notice: String,
     link: Option<crate::prompter::Link>,
     link_commands: async_channel::Sender<crate::prompter::Command>,
@@ -372,6 +373,7 @@ impl BubbleOverlay {
             scene_status: String::new(),
             scene_drag: None,
             scene_focus: std::array::from_fn(|_| cx.focus_handle()),
+            scene_undo_focus: cx.focus_handle(),
             camera_notice: String::new(),
             link,
             link_commands,
@@ -473,6 +475,14 @@ impl BubbleOverlay {
             }
             if contrast != self.high_contrast {
                 self.high_contrast = contrast;
+                self.color_input.update(cx, |input, cx| {
+                    input.high_contrast = contrast;
+                    cx.notify();
+                });
+                self.scene_input.update(cx, |input, cx| {
+                    input.high_contrast = contrast;
+                    cx.notify();
+                });
                 cx.notify();
             }
         }
@@ -755,10 +765,8 @@ impl BubbleOverlay {
                 },
             )))
             .child(toolbar_button("position-button", "icons/crosshair.svg", cx).on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.framing = !this.framing;
-                    this.settings_tab = None;
-                    cx.notify();
+                |this, _, window, cx| {
+                    this.toggle_framing(window, cx);
                 },
             )))
             .child(
@@ -845,11 +853,16 @@ impl BubbleOverlay {
                     return;
                 }
                 let Some((start, position)) = this.framing_drag else { return };
-                let (width, height) = dimensions_for(this.settings.shape, this.size());
+                let (width, height) = if this.presentation.fullscreen {
+                    (f64::from(window.bounds().size.width), f64::from(window.bounds().size.height))
+                } else {
+                    let (w, h) = dimensions_for(this.settings.shape, this.size());
+                    (f64::from(w), f64::from(h))
+                };
                 let next = camframe_core::framing::camera_position_after_drag(
                     position,
                     (f64::from(event.position.x) - start.0, f64::from(event.position.y) - start.1),
-                    (f64::from(width), f64::from(height)),
+                    (width, height),
                     this.settings.mirror,
                     this.settings.camera_zoom,
                 );
@@ -1015,6 +1028,18 @@ impl Render for BubbleOverlay {
             .h(px((if self.settings_tab.is_some() { window_height.max(390) } else { window_height }
                 + self.guide_reserve()) as f32))
             .bg(transparent_black())
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _, _, _| {
+                    this.scene_drag = None;
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, _, _, _| {
+                    this.scene_drag = None;
+                }),
+            )
             .when(cfg!(target_os = "linux"), |root| {
                 root.on_hover(cx.listener(|this, &hovered: &bool, _window, cx| {
                     let now = this.now_ms();
@@ -1032,8 +1057,11 @@ impl Render for BubbleOverlay {
                         this.finish_guide(window, cx);
                         return;
                     }
-                    if this.scene_rename.take().is_some() {
+                    if let Some(id) = this.scene_rename.take() {
                         this.scene_input.update(cx, |input, cx| input.set_text(String::new(), cx));
+                        if let Some(index) = this.settings.presets.iter().position(|s| s.id == id) {
+                            this.scene_focus[index].focus(window, cx);
+                        }
                         cx.notify();
                         return;
                     }
@@ -1084,8 +1112,9 @@ impl Render for BubbleOverlay {
                 root.child(
                     div()
                         .absolute()
-                        .top(px(68.0))
+                        .top(px(68.0 + self.guide_reserve() as f32))
                         .left(px(18.0))
+                        .max_w(px(camera_width))
                         .text_xs()
                         .text_color(rgb(0xffffff))
                         .child(format!("Zoom {}% · Drag · Scroll · Double-click resets", self.settings.camera_zoom)),
@@ -1109,6 +1138,9 @@ fn toolbar_button(id: &'static str, icon: &'static str, cx: &mut Context<BubbleO
         .aria_label(label)
         .accessibility_id(id)
         .tab_index(0)
+        .border_1()
+        .border_color(transparent_black())
+        .focus(|style| style.border_color(rgb(0xffffff)))
         .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
             if !matches!(event.keystroke.key.as_str(), "enter" | "space") {
                 return;
@@ -1119,8 +1151,7 @@ fn toolbar_button(id: &'static str, icon: &'static str, cx: &mut Context<BubbleO
                 "fullscreen-button" => this.set_fullscreen(!this.presentation.fullscreen, window, cx),
                 "shape-button" => this.set_shape(this.settings.shape.next(), window, cx),
                 "position-button" => {
-                    this.framing = !this.framing;
-                    cx.notify();
+                    this.toggle_framing(window, cx);
                 }
                 "prompter-button" => this.toggle_link(cx),
                 _ => this.toggle_settings(window, cx),
