@@ -1,6 +1,6 @@
 # Verification run: Rust frame defaults and Full screen motion — 2026-11-22
 
-- **Commit:** 22e453d370bdad0df5fcb472ed55a18d4d6a001d (final application source; later documentation commits do not change it).
+- **Commit:** 22e453d370bdad0df5fcb472ed55a18d4d6a001d (frame reset and surface-morph implementation; later Mac repaint repair is recorded separately).
 - **Version:** Rust 0.1.0 test app beside Electron 0.9.0.
 - **Observer:** GPT Sol; Claude Opus 5.5 high performed the independent review.
 - **Environment:** Linux x64, Rust 1.98.1, Node 24; native CI results below.
@@ -39,9 +39,9 @@ Full screen capture dimensions throughout the shrink, before restoring Compact c
 
 | Target/check | Result | Artifact/notes |
 | --- | --- | --- |
-| Windows Portable and NSIS | Not run | Final-source [CI run](https://github.com/techiesreviews/camframe/actions/runs/45065412086) pending; download `camframe-rust-windows-x64` after it passes. |
-| Mac ARM DMG/ZIP and packaged app | Not run | Final-source [CI run](https://github.com/techiesreviews/camframe/actions/runs/45065412071) pending; download `camframe-rust-macos-arm64-beta` after it passes. |
-| Mac Intel DMG/ZIP and packaged app | Not run | Same Mac run; download `camframe-rust-macos-x64-beta` after it passes. |
+| Windows Portable and NSIS | Pass | [Run 45065633935](https://github.com/techiesreviews/camframe/actions/runs/45065633935): native checks and test packages passed. |
+| Mac ARM DMG/ZIP and packaged app | Fail | [Run 45065633844](https://github.com/techiesreviews/camframe/actions/runs/45065633844): stale Compact scene on first Full screen capture. Repair and native evidence: [Metal repaint run](2026-11-22-rust-metal-fullscreen.md). |
+| Mac Intel DMG/ZIP and packaged app | Pass | [Run 45065633844](https://github.com/techiesreviews/camframe/actions/runs/45065633844): Intel native checks and package passed. |
 
 ## Manual checks
 

@@ -54,3 +54,27 @@ Inconclusive: the see-through, always-on-top bubble and the shape switch passed 
 ## Follow-up
 
 2026-11-21: the trial code moved on into the full Rust rebuild (Orbit TOOLS-393, ADR 0041). Its successor lives in `rust/` (`rust/app/src/mac_overlay.rs`, `rust/scripts/verify-macos.swift`) and is checked by `.github/workflows/rust-macos.yml`; the open questions above (real camera, permission prompt, Gatekeeper, hover pill hiding) are carried over to that work.
+
+
+### 2026-11-22: Full screen repaint without mouse input
+
+The successor app at `edff3b7` still failed on ARM even after deferring `setFrame` and explicitly
+calling GPUI `bounds_changed` (`cd87fcf` / `9b4a120`). [Run 45065633844](https://github.com/techiesreviews/camframe/actions/runs/45065633844)
+shows a correctly sized 1024 × 768 native window containing the old Compact scene stretched to
+fill it. Its bottom corners remain magenta; moving the pointer produces the correct scene.
+Synchronization alone is therefore insufficient; the failing capture scale is 1.
+
+Variant B (`e9c45f5`) adds an explicit GPUI next-frame callback after native resize. GPUI's
+Metal source is demand driven; the callback calls both `schedule_frame` and the platform
+waker, then refreshes the scene. Pass threshold: all four corners show the demo camera in the
+first Full screen capture before any further pointer event, and the toolbar stays normal size.
+
+ARM [push run 45075229896](https://github.com/techiesreviews/camframe/actions/runs/45075229896)
+passes for the raw binary and packaged app. GPT Sol inspected both Full screen PNGs and both
+toolbar PNGs: no transparent corners or stretched Compact controls. A small follow-up at
+`43b0ca1` adds the reverse check: after Escape, Compact must repaint before another pointer
+event. Final Windows/ARM/Intel results and artifact links are recorded on PR #72.
+
+Disposition: adopt the explicit frame demand for native resizing. The frame-bounds sync stays;
+no change to the 280 ms motion curve or frame-default migration. Physical-camera and real-Mac
+permission/Gatekeeper checks remain open, as above.
