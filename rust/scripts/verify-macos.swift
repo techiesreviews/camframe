@@ -465,8 +465,14 @@ func checks() -> Int32 {
         failures.append("Full screen toolbar did not fill the display: \(bubble.bounds)")
     }
     if let shot = capture(around: bubble.bounds, name: "fullscreen", padding: 0) {
-        for (x,y) in [(4.0,4.0),(bubble.bounds.width-5,4.0),(4.0,bubble.bounds.height-5),(bubble.bounds.width-5,bubble.bounds.height-5)] {
-            if shot.at(bubble.bounds,x,y).near(backdrop) { failures.append("Full screen camera leaves a transparent corner") }
+        for (name,x,y) in [("TL",4.0,4.0),("TR",bubble.bounds.width-5,4.0),("BL",4.0,bubble.bounds.height-5),("BR",bubble.bounds.width-5,bubble.bounds.height-5)] {
+            let pixel = shot.at(bubble.bounds,x,y)
+            pixels["fullscreen.\(name)"] = "\(pixel)"
+            log("Full screen \(name) at (\(x),\(y)): \(pixel), window \(bubble.bounds), display \(display)")
+            if pixel.near(backdrop) { failures.append("Full screen camera leaves a transparent corner") }
+            // The demo gradient is blue/teal at every corner. A stale Compact scene can also
+            // expose Finder or the menu bar, which is not the magenta backdrop.
+            else if pixel.r >= 150 || pixel.b < 80 { failures.append("Full screen \(name) does not show the camera") }
         }
     }
     moveMouse(CGPoint(x: display.midX, y: display.minY + 44), settleMs: 400)

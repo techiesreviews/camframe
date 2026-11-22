@@ -169,7 +169,13 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             });
             // AppKit may coalesce resize callbacks or deliver them during another GPUI turn.
             // Synchronize after setFrame even if that callback could not update the Window.
-            let _ = handle.update(&mut async_cx, |_, window, cx| window.bounds_changed(cx));
+            let _ = handle.update(&mut async_cx, |_, window, cx| {
+                window.bounds_changed(cx);
+                // A dirty scene alone does not wake an already-paused Metal display link.
+                // Explicit frame demand prevents AppKit stretching the previous Compact frame
+                // until the next mouse event, including the final frame of a Full screen move.
+                window.on_next_frame(|window, _cx| window.refresh());
+            });
         })
         .detach();
 }
