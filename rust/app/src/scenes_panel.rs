@@ -396,7 +396,8 @@ impl BubbleOverlay {
                         .w(gpui::relative(0.46))
                         .h(gpui::relative(0.26))
                         .rounded(px(2.0))
-                        .bg(rgb(0x1d1d1f)),
+                        .bg(gpui::rgba(0xffffff0f))
+                        .shadow(vec![gpui::BoxShadow::new(px(0.0), px(12.0), gpui::rgba(0xffffff08).into())]),
                 )
                 .child(
                     div()
@@ -436,7 +437,10 @@ impl BubbleOverlay {
                 .items_center()
                 .justify_center()
                 .text_size(px(10.0))
-                .bg(rgb(if undo.is_some() {
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .border_1()
+                .border_color(if active || saved_flash { transparent_black() } else { gpui::rgba(0xffffff14).into() })
+                .bg(rgb(if saved_flash {
                     0x86efac
                 } else if active {
                     0xf4f4f5
@@ -457,7 +461,13 @@ impl BubbleOverlay {
                 .aria_label(scene.name.clone())
                 .aria_selected(active)
                 .border_1()
-                .border_color(if active && grid { rgb(0xeeeeef).into() } else { transparent_black() })
+                .border_color(if active && grid {
+                    rgb(0xeeeeef).into()
+                } else if grid {
+                    gpui::rgba(0xffffff14).into()
+                } else {
+                    transparent_black()
+                })
                 .rounded(px(if grid { 9.0 } else { 8.0 }))
                 .bg(if active {
                     rgb(0x27272a).into()
@@ -853,7 +863,12 @@ impl BubbleOverlay {
                 )
                 .aria_description(if status { self.scene_status.clone() } else { String::new() })
                 .h(px(26.0))
-                .text_color(rgb(if status { if self.scene_status_ok { 0x86efac } else { 0xf97316 } } else { 0xd4d4d8 }))
+                .bg(transparent_black())
+                .border_color(gpui::rgba(0xffffff14))
+                .rounded(px(7.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .flex_row_reverse()
+                .text_color(rgb(if status { if self.scene_status_ok { 0x86efac } else { 0xf97316 } } else { 0xa1a1aa }))
                 .flex_1()
                 .justify_center()
                 .gap(px(5.0))

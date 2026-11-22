@@ -1,6 +1,6 @@
 # Verification run: Rust 0.9.0 controls parity — 2026-11-22
 
-- **Commit:** 61f520105643726e78c8b6326573f6d7fdb63c1f (first native parity build; subsequent fixes are identified below).
+- **Commit:** 269cdaaf2b63cd04ab4d7f52856e017dd0ba4691 (native parity candidate; CI results below).
 - **Version:** Rust 0.1.0 test app beside Electron 0.9.0.
 - **Observer:** GPT Sol through Codex; independent review by Claude Opus 5.5 high.
 - **Environment:** local Linux x64, Rust 1.98.1 and Node 24; Windows x64, Mac ARM and Intel CI desktops for native evidence.
@@ -14,8 +14,8 @@
 | `kit doctor` | Pass | 12/12 | Project runner guide `docs/agents/runner.md` does not exist; the project kit guide and shared rulebook were read. |
 | `kit unit --affected` | Pass | None affected | Rust changes are checked by `kit rust`; Node affected selection does not cover them. |
 | `kit unit` | Pass | 480/481; one skipped | `.scratch/unit/20261122T140042-3018827.log` |
-| `kit rust` | Pass before final style adjustment | 39 core, 2 chrome, 3 shared fixture suites, 18 app and 1 image-check test | Final rerun recorded below. |
-| `kit shots` | Pass | 25 baseline captures | `.scratch/shots/2026-11-22T13-58-06-757Z`; this checks Electron, not GPUI. |
+| `kit rust` | Pass | 40 core, 3 chrome, 3 shared fixture suites, 18 app and 1 image-check test | 65 test functions; fmt and Clippy with warnings denied. `.scratch/kit-jobs/parity-panel-scroll3/log` |
+| `kit shots` | Pass | 25 baseline captures | `.scratch/shots/2026-11-22T15-03-07-777Z`; this checks Electron, not GPUI. |
 | `kit ux` | Cannot run | No feature list | `RESULT: fail ux ENOENT: no such file or directory, open '.../docs/agents/features.md'`. Native verifiers and comparison captures provide the Rust evidence. |
 | Syntax and whitespace | Pass | `node --check rust/scripts/capture-parity.mjs`, `git diff --check` | |
 
@@ -24,8 +24,12 @@
 L1–L3 share a native resize defect. `SetWindowPos` sends `WM_SIZE` synchronously while GPUI has
 its Window checked out. The callback cannot re-enter that Window. The OS window grows, but
 GPUI's viewport and clipping mask retain the previous size. The first Windows Full screen capture
-at d57ea84 shows only a 340×398 drawing in a 1024×768 display. Native bounds changes now call
-`window.bounds_changed(cx)` explicitly on both platforms. Initial bounds are synchronized too.
+at d57ea84 shows only a 340×398 drawing in a 1024×768 display. Windows bounds changes now call
+`window.bounds_changed(cx)` explicitly; initial bounds are synchronized too. Mac frame changes
+run on GPUI's foreground executor after the current Window update returns. AppKit's synchronous
+resize/repaint callback can then enter GPUI, instead of stretching a cached Compact scene.
+Requested bounds stay authoritative until AppKit applies them, including guide exit followed
+by Full screen or a Scene in the same UI turn; superseded frame requests are discarded.
 Camera frames use cover fit while a new capture size is arriving. Toolbar button sizes fit even
 180 px Portrait; the picture and controls are no longer clipped by the old viewport.
 
@@ -36,7 +40,8 @@ refreshes its cached origin after its drag, before aiming at the Full screen but
 
 L4/L5: settings use the original 240 px maximum width, top 76, 10 px padding, 3 tabs, selects,
 switches, grey 3 px slider tracks and the original text, icons and colors. Settings never grow the
-native window; content scrolls. Scenes use compact list/grid layouts, screen previews preserving
+native window; the whole panel, including tabs, scrolls. Windows shows its 17 px scrollbar
+rail and Mac a 15 px rail without arrow buttons, with narrower Scene content when needed. Scenes use compact list/grid layouts, screen previews preserving
 camera aspect, Save look slots, rename, delete/Undo, the 1.8 s saved check and file status on its
 control. The tray menu matches 0.9.0's order and labels. Framing replaces the other toolbar
 buttons with its original zoom/support row. The simpler guide keeps its approved no-ghost scope,
@@ -46,6 +51,13 @@ Review found that Scene row commands intercepted rename keys. A regression test 
 `space: Some(Apply(1)), expected None` before the guard. Row keys/clicks now ignore a row being
 renamed; the field consumes its mouse events. Guide exit closes its settings, and row actions
 remain visible while keyboard focus is inside the row.
+
+GPUI already activates buttons on Enter/Space release. Removing duplicate manual handlers
+prevents a toggle from running twice. Scene rows prevent the synthetic default click only when
+the row itself handles the key; child edit buttons run alone. Ctrl/Cmd+Z undoes a pending delete
+before a look change, matching 0.9.0; the visible look Undo only undoes that look change.
+Slider click/drag coordinates now use the thumb centers, including the Windows scroll rail.
+Export reports its Scene count; import/export failures remain on the respective control.
 
 ## Build and artifact checks
 
@@ -64,6 +76,15 @@ artifacts contain 11 side-by-side states: bubble, menu, small/large menu, Camera
 right is a real GPUI desktop capture. The capture refuses any Electron source drift and any blank
 comparison. Video patterns differ; this is not a video-pixel equality test.
 
+## Manual checks
+
+| ID | Result | Observation/evidence |
+| --- | --- | --- |
+| W-01–W-37 | Not run as a human matrix | CI runs native desktop interaction and image checks, not the complete physical-PC matrix. |
+| M-01–M-12 | Not run as a human matrix | Both native Mac architectures are exercised in CI; hardware, Spaces and VoiceOver remain open. |
+| L1–L4 | Native CI verification in progress | Full screen, real corner resize, camera cover, six toolbar icons, selected-tab text and all settings-page captures. Final links/results follow below. |
+| L5 | Inconclusive for complete visual/hardware parity | 71-feature source audit and 11 real side-by-side states per platform; contract presence is not pixel equality or hardware certification. |
+
 ## Findings ledger
 
 The complete kit ledger remains in the PR. R5-18 (rename), R5-19 (guide cleanup), R5-20 (remaining
@@ -71,7 +92,36 @@ The complete kit ledger remains in the PR. R5-18 (rename), R5-19 (guide cleanup)
 R5-24 (empty camera selection), R5-25 (this run), and R5-26 (README) are fixed. Prior nits and test
 gaps outside this UI correction remain recorded rather than silently counted as fixed.
 
-## Decision
+R10's Opus review of `269cdaa` returned only P3/nits and validation gaps. The quality-select
+popup now derives its Y position from its label gap, and the scroll rail switches to the
+contrast palette. Screenshot inspection also corrected Scene number outlines, the 1.8 s
+saved-check color, file-button icon order/background and the miniature desktop shadow.
+
+Declined: R10-31 (P3): the requested sign change is incorrect for these fixed-aspect tiles.
+`screen_height = screen_width * 9 / 16`: narrowing a two-column grid by 17 px makes each
+row **shorter** by `17 * 9 / 32`, not taller. Adding that amount reconstructs the wider,
+rail-free height. Subtracting it can remove a necessary rail and make its appearance
+oscillate. The existing sign is retained. Remaining P3 documentation/test-gap findings
+are listed in the kit ledger; no broader refactor is required for this test-build correction.
+
+## Regressions and surprises
+
+- New probes exposed the stale Windows viewport and Escape focus bug, then a stale Mac
+  repaint and pending-bounds race. Their failed CI runs are retained below.
+- The first comparison run used nested preferences instead of the app’s flat document;
+  fixed before accepting comparisons. The Mac runner’s Bash 3.2 could not run the kit;
+  CI now installs modern Bash.
+- The Windows installer’s new license path was relative twice; corrected to the script’s
+  working directory. The existing Mac app-bundle license placement passes packaging.
+- The source tray PNG is corrupt; the working Rust raster glyph remains. The guide’s
+  ghost mouse and old login cleanup remain the approved ADR 0042 differences.
+
+## Release decision
+
+- **Decision:** No-go
+- **Reason:** Test build only; Lex has not approved a release.
+- **Known exceptions accepted by:** Lex, ADR 0042 (simpler guide and deferred switch-over).
+- **Follow-ups:** Physical-camera and accessibility checks below; Lex tries the test build.
 
 Test build only. No merge, release, switch-over, tag or production update. Physical-camera
 quality/hot-plug/continuity, NVDA/VoiceOver and real-camera performance remain unverified release

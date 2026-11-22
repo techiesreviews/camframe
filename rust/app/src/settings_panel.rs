@@ -27,6 +27,13 @@ const EDGE: u32 = 0x343438;
 const TEXT: u32 = 0xf4f4f5;
 const MUTED: u32 = 0xa1a1aa;
 
+fn scrollbar_width() -> f32 {
+    if cfg!(target_os = "windows") { 17.0 } else { 15.0 }
+}
+fn scrollbar_arrow_extent() -> f32 {
+    if cfg!(target_os = "windows") { 17.0 } else { 0.0 }
+}
+
 impl BubbleOverlay {
     pub(super) fn toggle_framing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings_tab.is_some() {
@@ -134,6 +141,7 @@ impl BubbleOverlay {
         width: f32,
         cx: &mut Context<Self>,
     ) -> gpui::Div {
+        let label_gap = if key == "quality" { 4.0 } else { 6.0 };
         let selected_index = options.iter().position(|(label, _)| *label == value).unwrap_or(0);
         let keyboard_options = options.clone();
         let field = self
@@ -166,7 +174,7 @@ impl BubbleOverlay {
             .relative()
             .flex()
             .flex_col()
-            .gap(px(if key == "quality" { 4.0 } else { 6.0 }))
+            .gap(px(label_gap))
             .min_w_0()
             .flex_shrink_0()
             .child(div().text_color(rgb(MUTED)).child(label.to_owned()))
@@ -196,7 +204,7 @@ impl BubbleOverlay {
                 gpui::deferred(
                     gpui::anchored()
                         .position_mode(gpui::AnchoredPositionMode::Local)
-                        .position(point(px(0.0), px(52.0)))
+                        .position(point(px(0.0), px(16.0 + label_gap + 30.0)))
                         .snap_to_window()
                         .child(menu),
                 )
@@ -330,7 +338,7 @@ impl BubbleOverlay {
         );
         let mut range_bounds = bounds;
         if self.settings_scrollbar.get() {
-            range_bounds.width -= 17;
+            range_bounds.width -= scrollbar_width() as i64;
         }
         self.patch_settings(json!({key:camframe_core::chrome::slider_value(range_bounds,x,min,max)}), window, cx);
     }
@@ -339,9 +347,10 @@ impl BubbleOverlay {
         let bounds = self.settings_scroll.bounds();
         let height = f32::from(bounds.size.height).max(1.0);
         let max = f32::from(self.settings_scroll.max_offset().y).max(0.0);
-        let track = (height - 34.0).max(1.0);
+        let arrows = scrollbar_arrow_extent();
+        let track = (height - arrows * 2.0).max(1.0);
         let thumb = (track * height / (height + max)).max(18.0).min(track);
-        let share = ((y - f32::from(bounds.top()) - 17.0 - grab) / (track - thumb).max(1.0)).clamp(0.0, 1.0);
+        let share = ((y - f32::from(bounds.top()) - arrows - grab) / (track - thumb).max(1.0)).clamp(0.0, 1.0);
         self.settings_scroll.set_offset(point(px(0.0), px(-share * max)));
         cx.notify();
     }
@@ -361,14 +370,14 @@ impl BubbleOverlay {
             && self.settings_tab == Some(SettingsTab::Scenes)
             && self.settings.scene_view == camframe_core::settings::SceneView::Grid
         {
-            17.0 * rows * 9.0 / 32.0
+            scrollbar_width() * rows * 9.0 / 32.0
         } else {
             0.0
         };
-        let show_scrollbar = cfg!(target_os = "windows")
+        let show_scrollbar = cfg!(any(target_os = "windows", target_os = "macos"))
             && scroll_height + max_scroll + width_correction > bounds.height as f32 - 2.0 + 0.5;
         self.settings_scrollbar.set(show_scrollbar);
-        let rail = if show_scrollbar { 17.0 } else { 0.0 };
+        let rail = if show_scrollbar { scrollbar_width() } else { 0.0 };
         let available = bounds.width as f32 - 22.0 - rail;
         let mut body = div().flex().flex_col().gap(px(8.0)).min_w_0();
         match self.settings_tab {
@@ -589,9 +598,10 @@ impl BubbleOverlay {
             return panel;
         }
         let height = scroll_height.max(1.0);
-        let track = (height - 34.0).max(1.0);
+        let arrows = scrollbar_arrow_extent();
+        let track = (height - arrows * 2.0).max(1.0);
         let thumb = (track * height / (height + max_scroll.max(0.0))).max(18.0).min(track);
-        let top = 17.0
+        let top = arrows
             + if max_scroll > 0.0 {
                 -f32::from(self.settings_scroll.offset().y) / max_scroll * (track - thumb)
             } else {
@@ -601,10 +611,16 @@ impl BubbleOverlay {
             div()
                 .id("settings-scrollbar")
                 .relative()
-                .w(px(17.0))
+                .w(px(scrollbar_width()))
                 .flex_shrink_0()
                 .h(px(height))
-                .bg(rgb(0xf1f1f1))
+                .bg(rgb(if self.high_contrast {
+                    PANEL
+                } else if cfg!(target_os = "windows") {
+                    0xf1f1f1
+                } else {
+                    0xffffff
+                }))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, event: &MouseDownEvent, _, cx| {
@@ -614,9 +630,9 @@ impl BubbleOverlay {
                             this.settings_scroll_drag = Some(local - top);
                             this.update_settings_scroll(f32::from(event.position.y), cx);
                         } else {
-                            let delta = if local < 17.0 {
+                            let delta = if local < arrows {
                                 20.0
-                            } else if local > height - 17.0 {
+                            } else if local > height - arrows {
                                 -20.0
                             } else if local < top {
                                 height
@@ -631,36 +647,58 @@ impl BubbleOverlay {
                     }),
                 )
                 .when(max_scroll > 0.0, |bar| {
-                    bar.child(div().absolute().left(px(2.0)).top(px(top)).w(px(13.0)).h(px(thumb)).bg(rgb(0xc1c1c1)))
+                    bar.child(
+                        div()
+                            .absolute()
+                            .left(px(2.0))
+                            .top(px(top))
+                            .w(px(scrollbar_width() - 4.0))
+                            .h(px(thumb))
+                            .bg(rgb(if self.high_contrast { TEXT } else { 0xc1c1c1 })),
+                    )
                 })
-                .child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .w_full()
-                        .h(px(17.0))
-                        .bg(rgb(0xf1f1f1))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(8.0))
-                        .text_color(rgb(0x5e5e5e))
-                        .child("▲"),
-                )
-                .child(
-                    div()
-                        .absolute()
-                        .bottom_0()
-                        .w_full()
-                        .h(px(17.0))
-                        .bg(rgb(0xf1f1f1))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(8.0))
-                        .text_color(rgb(0x5e5e5e))
-                        .child("▼"),
-                ),
+                .when(cfg!(target_os = "windows"), |bar| {
+                    bar.child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .w_full()
+                            .h(px(17.0))
+                            .bg(rgb(if self.high_contrast {
+                                PANEL
+                            } else if cfg!(target_os = "windows") {
+                                0xf1f1f1
+                            } else {
+                                0xffffff
+                            }))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(8.0))
+                            .text_color(rgb(if self.high_contrast { TEXT } else { 0x5e5e5e }))
+                            .child("▲"),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .bottom_0()
+                            .w_full()
+                            .h(px(17.0))
+                            .bg(rgb(if self.high_contrast {
+                                PANEL
+                            } else if cfg!(target_os = "windows") {
+                                0xf1f1f1
+                            } else {
+                                0xffffff
+                            }))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(8.0))
+                            .text_color(rgb(if self.high_contrast { TEXT } else { 0x5e5e5e }))
+                            .child("▼"),
+                    )
+                }),
         )
     }
 }
