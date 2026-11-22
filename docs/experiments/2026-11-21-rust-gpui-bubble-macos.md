@@ -84,3 +84,14 @@ correct Compact rendering over Finder. The probe expected the magenta window tha
 covered earlier. The follow-up restores the controlled backdrop before the round trip and
 retains the strict transparency assertion; it does not change the app or insert pointer input
 after Escape. The failing image and diagnosis are recorded in the Metal verification run.
+
+The next ARM run (`45076554787`, source `94d66ec`) again captured a stretched Compact scene on
+entry, even with explicit frame demand. The corrected Escape fixture passed. The earlier
+single-run pass is therefore insufficient evidence for the frame-demand-only repair.
+
+Variant C (`e953c3c`) sets the native window frame with `display: NO` instead of asking AppKit
+to display immediately. GPUI then presents after viewport synchronization. Temporary demo-only
+window/frame diagnostics distinguish failed deferred updates from stale cache/presentation.
+The verifier now runs six round trips per raw and packaged app. Native results are pending;
+remove the temporary diagnostics after evaluating the captured evidence. This supersedes the
+earlier confidence in variant B; no reliable Full screen result is claimed until this run passes.

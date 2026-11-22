@@ -1,6 +1,6 @@
 # Verification run: Mac Full screen repaint without pointer input
 
-- **Commit:** 43b0ca16978cbeeb8e5250cb8bb3e419c7e56667 (checked app source, including the small review corrections). The repaint repair was independently reviewed at e9c45f5d8ba7eaf575346d00bd2b395e9b8fd6b6; failing baseline edff3b718d594fb1a32be55b998bb81f67182938.
+- **Commit:** e953c3cf5ddb0052f304ac69dfa2fbfd56901e99 (current candidate, checked locally; native proof pending). Earlier frame-demand repair e9c45f5d8ba7eaf575346d00bd2b395e9b8fd6b6 passed individual runs but remained unreliable; original failing baseline edff3b718d594fb1a32be55b998bb81f67182938.
 - **Version:** Rust 0.1.0 test app beside Electron 0.9.0.
 - **Observer:** GPT Sol; native screenshots inspected locally.
 - **Environment:** Local Linux x64, Rust 1.98.1; failing CI macOS 15.8.2 ARM at 1024 × 768, capture scale 1. Intel at 1920 × 1080 passed.
@@ -75,6 +75,34 @@ centre assertions, with no pointer event between Escape and the capture. No addi
 rendering change is justified by this image: the explicit frame-demand adapter already runs
 on both entry and exit. The new native jobs verify the corrected controlled-background check.
 Local `kit rust` passes 72 tests, formatting and Clippy (`.scratch/kit-jobs/p5-checks/log`).
+
+### Recurrent stale entry after 94d66ec
+
+[ARM run 45076554787](https://github.com/techiesreviews/camframe/actions/runs/45076554787/job/137375053918)
+again shows the enlarged Compact toolbar/handles and transparent camera margins in a correctly
+sized Full screen window. The [failed artifact](https://github.com/techiesreviews/camframe/actions/runs/45076554787/artifacts/14775945344)
+was downloaded and inspected. Escape returns to the correctly drawn Compact camera over the
+restored magenta backdrop. Thus the fixture correction is valid, but explicit frame demand
+alone is not a reliable repair for entry. Prior one-run ARM passes do not establish reliability.
+
+The current candidate changes only native `setFrame`'s display flag from YES to NO, leaving
+GPUI responsible for presenting after its viewport is synchronized. Immediate AppKit display
+can enter the layer callback while the old scene is still current; this candidate tests whether
+avoiding that immediate presentation removes the race. The existing explicit frame demand stays.
+
+The native verifier repeats six enter/Escape round trips per raw binary and per packaged Mac
+app, retaining the original screenshot names for the first trip and suffixing later trips.
+Every trip checks camera pixels in all four Full screen corners, normal toolbar scale, restored
+Compact bounds, a clear Compact margin and the camera centre before another pointer event.
+Missing captures also fail. Timing curves and frame defaults are unchanged.
+
+Temporary `[DEBUG-p6]` logs are limited to the demo pattern, except a log if a native bounds
+refresh fails. They record transition renders, deferred-update errors, and GPUI window/frame-
+source snapshots at 400/1000 ms, distinguishing a skipped window update, stale viewport and
+paused/pending frame. These diagnostics are not the final app and must be removed after the
+native evidence identifies the cause. `kit rust` passes 72 tests/fmt/Clippy locally; the first
+instrumentation run caught two lint issues which were corrected before the passing run.
+Swift compilation, repeated native results and final captures are pending CI for this candidate.
 
 Failure PNGs were already uploaded by the workflow's final `if: always()` native-verification
 step; that is how the failing image was obtained. That upload remains. The comparison upload
