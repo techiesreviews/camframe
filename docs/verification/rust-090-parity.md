@@ -51,7 +51,7 @@ Inspected source pairs: `overlay.*` / GPUI overlay, settings/Scenes/guide;
 | 30 | The camera grows to fill the display with a short animation (0.28 seconds), and shrinks back to its old place. | Same window animates to display bounds in 280 ms and restores its Compact target; viewport updated each step. | Yes (contract) |
 | 31 | Leave with Esc, the toolbar button or the shortcut. | Toolbar, global shortcut and Escape; persistent root receives Escape after toolbar hides. | Yes (contract) |
 | 32 | In Full screen the toolbar hides by itself and comes back when the mouse goes to its spot. | Top-center hotspot and 200 ms hide delay. | Yes (contract) |
-| 33 | Settings open inside the same window, with three tabs: Camera, Style, Scenes. | Same window, original tabs/geometry and scrolling. Mac currently reserves a 15 px rail regardless of the system overlay-scrollbar preference (R11-32). | No — Mac mismatch open |
+| 33 | Settings open inside the same window, with three tabs: Camera, Style, Scenes. | Same window, original tabs/geometry and scrolling. Mac follows AppKit’s preferred scrollbar style: a reserved legacy rail or a transient overlay thumb with no reserved width. | Yes (contract) |
 | 34 | Camera tab: camera, quality, Mirror, Always on top. | Camera/Resolution selects and the two original switches. | Yes (contract) |
 | 35 | Style tab: effect (none, Glow, Progressive blur) with its sliders, and frame width. | Effect select, source color swatches/tuning sliders and Frame slider. | Yes (contract) |
 | 36 | Up to six Scenes. A Scene remembers the place, size, shape and look. | Shared Scene library caps at six and retains complete look/place. | Yes (contract) |
@@ -80,7 +80,7 @@ Inspected source pairs: `overlay.*` / GPUI overlay, settings/Scenes/guide;
 | 59 | The prompter can save two layout Scenes and set the small size. | Layout Scene save and small-size endpoints use the shared settings/Scene rules. | Yes (contract) |
 | 60 | It only listens on this computer and only answers the prompter page and local pages. | 127.0.0.1 listener with checked Host/Origin and restricted null-origin status. | Yes (contract) |
 | 61 | When the system says "less motion", animations stop at once, also while CamFrame is running. | Native accessibility preference scan stops an active transition at its final target. | Yes (contract) |
-| 62 | High-contrast mode: clear edges, selection and focus. | Contrast mode uses boundaries/focus and disables effects, but Import/Export override their contrast border (R11-33); OS-palette/human comparison is unverified. | No — mismatch and verification pending |
+| 62 | High-contrast mode: clear edges, selection and focus. | Contrast mode uses boundaries/focus and disables effects; Import/Export retain the shared high-contrast edge token. OS-palette/human comparison is still unverified. | No — verification pending |
 | 63 | Screen readers (NVDA, VoiceOver) can read the buttons and hear changes such as the Scene name. | AccessKit roles/states and a live Scene announcement exist; NVDA/VoiceOver not tried. | No — verification pending |
 | 64 | Clear keyboard focus everywhere. | Focusable controls and visible orange focus; Scene edit icons show for focus within the row. | Yes (contract) |
 | 65 | All settings are in one file per user, saved shortly after each change and again on quit. | One schema-15 file in a separate test identity, delayed save and quit save. | Yes (contract) |
@@ -95,9 +95,10 @@ The source tray PNG is corrupt in both `src/main.js` and the unused Rust asset; 
 retains its working raster camera glyph. Native camera ids differ from Chromium’s origin-specific
 ids, so imported selections use the camera label before falling back, as ADR 0042 records.
 
-Audit outcome: 66 implementation-contract matches, two approved differences (55/68), one
-known Mac settings mismatch (33), one contrast mismatch awaiting OS verification (62), and
-one screen-reader verification gap (63). This is not 71/71 parity.
+Audit outcome: 67 implementation-contract matches, two approved differences (55/68), and
+two verification gaps (62/63). R11-32/R11-33 are addressed in the
+[scrollbar/contrast follow-up](runs/2026-11-22-rust-scrollbar-contrast.md). This is not 71/71
+hardware or accessibility certification.
 
 Remaining release gates: physical-camera quality, hot-plug and stream continuity on Windows/Mac;
 exact high-contrast OS palette; NVDA/VoiceOver; real-camera size/start/memory measurements; Lex’s
