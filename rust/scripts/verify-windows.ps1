@@ -341,6 +341,35 @@ try {
     if (-not (Is-Magenta $hEmptyCorner)) { $failures += "Something is drawn in the empty corner on hover: $(Format-Color $hEmptyCorner)" }
     if (Is-Magenta $bCornerProbe)        { $failures += "Clicking the Shape button did not switch the circle to the rounded square" }
 
+    # Full screen must work from the real toolbar and cover the display, then Escape restores
+    # the exact compact bounds. Earlier checks exercised neither path.
+    Refresh-Rect
+    $compactRect = $rect
+    Move-To 162 228
+    Move-To 105 44
+    [Win32Verify]::mouse_event(0x02, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 60
+    [Win32Verify]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 1000
+    Refresh-Rect
+    $display = [System.Windows.Forms.Screen]::FromHandle($hwnd).Bounds
+    $fullscreenWorked = ($rect.Left -eq $display.Left -and $rect.Top -eq $display.Top -and
+        $rect.Right -eq $display.Right -and $rect.Bottom -eq $display.Bottom)
+    $fullBmp = Capture-ScreenRegion -X $display.Left -Y $display.Top -W $display.Width -H $display.Height -Path (Join-Path $OutDir 'fullscreen.png')
+    foreach ($probe in @(@(4,4), @($display.Width-5,4), @(4,$display.Height-5), @($display.Width-5,$display.Height-5))) {
+        if (Is-Magenta ($fullBmp.GetPixel($probe[0],$probe[1]))) { $failures += 'Full screen camera does not cover a display corner' }
+    }
+    $fullBmp.Dispose()
+    if (-not $fullscreenWorked) { $failures += "Full screen toolbar did not fill display: $($rect | Out-String)" }
+    [void][Win32Verify]::SetForegroundWindow($hwnd)
+    [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+    Start-Sleep -Milliseconds 700
+    Refresh-Rect
+    if ($rect.Left -ne $compactRect.Left -or $rect.Top -ne $compactRect.Top -or
+        $rect.Right -ne $compactRect.Right -or $rect.Bottom -ne $compactRect.Bottom) {
+        $failures += 'Escape did not restore the original compact window bounds'
+    }
+
     # Preferences: saved in the app's own folder, in 0.9.0's layout, with the last shape.
     $prefsText = if (Test-Path $prefsFile) { Get-Content $prefsFile -Raw } else { "" }
     if (-not $prefsText.StartsWith("{`n  `"schemaVersion`": 15,")) { $failures += "Preferences missing or not in 0.9.0's layout: $prefsFile" }
