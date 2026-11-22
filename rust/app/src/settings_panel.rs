@@ -95,7 +95,6 @@ impl BubbleOverlay {
         control: Control,
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
-        let key_control = control.clone();
         div()
             .id(SharedString::from(id))
             .role(gpui::Role::Button)
@@ -119,12 +118,6 @@ impl BubbleOverlay {
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
                 this.run_control(&control, window, cx);
-            }))
-            .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
-                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                    cx.stop_propagation();
-                    this.run_control(&key_control, window, cx);
-                }
             }))
             .when(!label.is_empty(), |button| button.child(label))
     }

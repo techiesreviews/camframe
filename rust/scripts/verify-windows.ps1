@@ -341,6 +341,21 @@ try {
     if (-not (Is-Magenta $hEmptyCorner)) { $failures += "Something is drawn in the empty corner on hover: $(Format-Color $hEmptyCorner)" }
     if (Is-Magenta $bCornerProbe)        { $failures += "Clicking the Shape button did not switch the circle to the rounded square" }
 
+    # GPUI supplies Enter/Space activation for on_click itself. A second manual key handler
+    # toggles settings twice, leaving it open after Space on its focused toolbar button.
+    Move-To 162 228
+    Move-To 257 44
+    [Win32Verify]::mouse_event(0x02, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 60
+    [Win32Verify]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 350
+    [System.Windows.Forms.SendKeys]::SendWait(' ')
+    Start-Sleep -Milliseconds 350
+    $keyboardBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir 'keyboard-controls.png')
+    $afterSpace = Sample-Rel $keyboardBmp 60 100
+    if ($afterSpace.B -lt 80) { $failures += 'Space did not close Camera controls exactly once' }
+    $keyboardBmp.Dispose()
+
     # Full screen must work from the real toolbar and cover the display, then Escape restores
     # the exact compact bounds. Earlier checks exercised neither path.
     Refresh-Rect

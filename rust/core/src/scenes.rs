@@ -219,6 +219,12 @@ struct Removal {
     active: bool,
     until: u64,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UndoKind {
+    Delete,
+    Change,
+}
+
 #[derive(Default)]
 pub struct SceneEdits {
     change: Option<Change>,
@@ -231,6 +237,15 @@ impl SceneEdits {
     }
     pub fn clear_delete(&mut self) {
         self.removal = None;
+    }
+    pub fn undo_target(&self, active_id: &str, now: u64) -> Option<UndoKind> {
+        if self.can_undo_delete(now) {
+            Some(UndoKind::Delete)
+        } else if self.can_undo_change(active_id, now) {
+            Some(UndoKind::Change)
+        } else {
+            None
+        }
     }
     pub fn removal_preview(&self, now: u64) -> Option<(&Scene, usize, u64)> {
         self.removal.as_ref().filter(|r| now < r.until).map(|r| (&r.scene, r.index, r.until - now))
@@ -329,6 +344,25 @@ impl SceneEdits {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keyboard_undo_restores_a_delete_before_an_active_scene_change() {
+        let (settings, id) = save_look(&Settings::default(), "Desk", "desk").unwrap();
+        let (settings, other) = save_look(&settings, "Other", "other").unwrap();
+        let mut edits = SceneEdits::default();
+        let next = settings.with_patch(&json!({"shape":"portrait"}));
+        let changed = edits.follow(&settings, next, &id, &json!({"shape":"portrait"}), 10);
+        let _deleted = edits.delete(&changed, &other, false, 20).unwrap();
+        assert_eq!(edits.undo_target(&id, 30), Some(UndoKind::Delete));
+        assert_eq!(edits.removal_preview(30).map(|(_, i, remaining)| (i, remaining)), Some((1, 5990)));
+        assert_eq!(edits.change_remaining(&id, 30), Some(9980));
+        assert!(edits.removal_preview(6020).is_none());
+        assert_eq!(edits.undo_target(&id, 6020), Some(UndoKind::Change));
+        assert_eq!(edits.undo_target("another", 6020), None);
+        assert_eq!(edits.change_remaining("another", 30), None);
+        assert_eq!(edits.undo_target(&id, 10010), None);
+        assert_eq!(edits.change_remaining(&id, 10010), None);
+    }
 
     #[test]
     fn saving_a_seventh_scene_refuses_without_eviction() {

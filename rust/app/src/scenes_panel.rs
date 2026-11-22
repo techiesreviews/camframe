@@ -12,6 +12,7 @@ pub(super) enum SceneAction {
     Delete(usize),
     Move(usize, i32),
     Undo,
+    UndoLatest,
     UndoDelete,
     Import,
     Export,
@@ -42,7 +43,7 @@ fn scene_row_key(
                 SceneAction::Focus((index as i32 + delta).clamp(0, count.saturating_sub(1) as i32) as usize)
             }
         }
-        "z" if modifiers.control || modifiers.platform => SceneAction::Undo,
+        "z" if modifiers.control || modifiers.platform => SceneAction::UndoLatest,
         _ => return None,
     })
 }
@@ -149,13 +150,15 @@ impl BubbleOverlay {
                     self.update_tray_scenes();
                 }
             }
-            SceneAction::Undo => {
-                if !self.scene_edits.can_undo_change(&self.active_scene_id, self.now_ms())
-                    && self.scene_edits.can_undo_delete(self.now_ms())
-                {
-                    self.run_scene_action(SceneAction::UndoDelete, window, cx);
-                    return;
+            SceneAction::UndoLatest => {
+                let target = self.scene_edits.undo_target(&self.active_scene_id, self.now_ms());
+                match target {
+                    Some(scenes::UndoKind::Delete) => self.run_scene_action(SceneAction::UndoDelete, window, cx),
+                    Some(scenes::UndoKind::Change) => self.run_scene_action(SceneAction::Undo, window, cx),
+                    None => {}
                 }
+            }
+            SceneAction::Undo => {
                 if let Some(settings) =
                     self.scene_edits.undo_change(&self.settings, &self.active_scene_id, self.now_ms())
                 {
@@ -471,7 +474,19 @@ impl BubbleOverlay {
                         this.apply_scene_at(i, window, cx);
                     }
                 }))
+                .capture_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, _cx| {
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                        && this.scene_focus[i].is_focused(window)
+                    {
+                        window.prevent_default();
+                    }
+                }))
                 .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                        && !this.scene_focus[i].is_focused(window)
+                    {
+                        return;
+                    }
                     let Some(action) = scene_row_key(
                         event.keystroke.key.as_str(),
                         event.keystroke.modifiers,

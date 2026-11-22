@@ -1147,7 +1147,7 @@ impl Render for BubbleOverlay {
                     && !this.scene_save_open
                 {
                     cx.stop_propagation();
-                    this.run_scene_action(scenes_panel::SceneAction::Undo, window, cx);
+                    this.run_scene_action(scenes_panel::SceneAction::UndoLatest, window, cx);
                     return;
                 }
                 if event.keystroke.key == "escape" {
@@ -1223,7 +1223,7 @@ fn toolbar_button(
     icon: &'static str,
     width: f32,
     selected: bool,
-    cx: &mut Context<BubbleOverlay>,
+    _cx: &mut Context<BubbleOverlay>,
 ) -> gpui::Stateful<gpui::Div> {
     let label = match id {
         "close-button" => "Quit CamFrame",
@@ -1243,22 +1243,6 @@ fn toolbar_button(
         .border_color(if selected { rgb(0xeeeeef).into() } else { transparent_black() })
         .aria_toggled(if selected { accesskit::Toggled::True } else { accesskit::Toggled::False })
         .focus(|style| style.border_color(rgb(0xffffff)))
-        .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
-            if !matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                return;
-            }
-            cx.stop_propagation();
-            match id {
-                "close-button" => cx.quit(),
-                "fullscreen-button" => this.set_fullscreen(!this.presentation.fullscreen, window, cx),
-                "shape-button" => this.set_shape(this.settings.shape.next(), window, cx),
-                "position-button" => {
-                    this.toggle_framing(window, cx);
-                }
-                "prompter-button" => this.toggle_link(cx),
-                _ => this.toggle_settings(window, cx),
-            }
-        }))
         .w(px(width))
         .min_w_0()
         .flex_shrink_0()
@@ -1274,7 +1258,7 @@ fn toolbar_button(
         .child(
             svg()
                 .path(icon)
-                .size(px(TOOLBAR_ICON.min((width - 2.0).max(1.0))))
+                .size(px(TOOLBAR_ICON))
                 .text_color(rgb(if selected { 0xe8e8e8 } else { 0x8b8b90 }))
                 .group_hover("toolbar-button", |s| s.text_color(rgb(0xe5e5e5))),
         )
