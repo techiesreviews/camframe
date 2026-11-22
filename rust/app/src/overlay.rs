@@ -492,16 +492,9 @@ impl BubbleOverlay {
 
     fn sync_capture_view(&self, window: &Window, cx: &App) {
         let mut view = output_view(&self.settings, self.size(), window.scale_factor());
-        if self.presentation.fullscreen {
-            let target = self.presentation.transition.map_or_else(
-                || {
-                    window
-                        .display(cx)
-                        .map(|display| rect_of(display.bounds()))
-                        .unwrap_or_else(|| rect_of(window.bounds()))
-                },
-                |(_, to, _)| to,
-            );
+        let display_bounds =
+            window.display(cx).map(|display| rect_of(display.bounds())).unwrap_or_else(|| rect_of(window.bounds()));
+        if let Some(target) = self.presentation.capture_bounds(display_bounds) {
             view.width = (target.width as f32 * window.scale_factor()).round().max(1.0) as u32;
             view.height = (target.height as f32 * window.scale_factor()).round().max(1.0) as u32;
         }
@@ -514,7 +507,7 @@ impl BubbleOverlay {
         *lock_unpoisoned(&self.slot.effect) = (self.settings.frame_effect
             == camframe_core::settings::FrameEffect::Blur)
             .then_some((self.settings.shape, self.size(), self.settings.blur_amount, self.settings.blur_opacity));
-        if self.presentation.fullscreen {
+        if self.presentation.fullscreen || self.presentation.surface_transition.is_some() {
             *lock_unpoisoned(&self.slot.effect) = None;
         }
     }

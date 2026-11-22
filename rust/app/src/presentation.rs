@@ -22,6 +22,16 @@ pub(super) struct CameraLayout {
 }
 
 impl Presentation {
+    pub fn capture_bounds(&self, fallback: Rect) -> Option<Rect> {
+        (self.fullscreen || self.surface_transition.is_some()).then(|| {
+            self.transition.map_or(fallback, |(from, to, _)| Rect {
+                width: from.width.max(to.width),
+                height: from.height.max(to.height),
+                ..to
+            })
+        })
+    }
+
     pub fn change_mode(&mut self, fullscreen: bool, reduced_motion: bool, now: Instant) {
         if fullscreen == self.fullscreen {
             return;
@@ -86,6 +96,7 @@ impl BubbleOverlay {
         if let Some((_, start)) = self.presentation.surface_transition {
             if start.elapsed().as_millis() >= u128::from(geometry::OVERLAY_BOUNDS_TRANSITION_MS) {
                 self.presentation.surface_transition = None;
+                self.sync_capture_view(window, cx);
             }
             cx.notify();
         }
@@ -213,6 +224,14 @@ mod tests {
         let start = Instant::now();
         let mut presentation = Presentation { fullscreen: true, ..Default::default() };
         presentation.change_mode(false, false, start);
+        let full = Rect::new(0, 0, 1920, 1080);
+        let compact = Rect::new(120, 140, 324, 390);
+        presentation.transition = Some((full, compact, start));
+        assert_eq!(
+            presentation.capture_bounds(compact).map(|bounds| (bounds.width, bounds.height)),
+            Some((1920, 1080)),
+            "keep sharp Full screen frames during exit"
+        );
         let surface = presentation.camera_layout((1920.0, 1080.0), Shape::Circle, 288, 0, start);
         assert!((surface.width - 1920.0).abs() < 1.0, "camera must shrink with the window, not snap to 288px");
         assert!(surface.radius < 1.0);
