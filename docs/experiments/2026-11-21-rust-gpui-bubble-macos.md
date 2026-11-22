@@ -75,7 +75,7 @@ toolbar PNGs: no transparent corners or stretched Compact controls. A small foll
 `43b0ca1` adds the reverse check: after Escape, Compact must repaint before another pointer
 event. Final Windows/ARM/Intel results and artifact links are recorded on PR #72.
 
-Disposition: adopt the explicit frame demand for native resizing. The frame-bounds sync stays;
+Disposition at the single-run checkpoint (superseded by the later failures below): retain the explicit frame-demand attempt for further testing. The frame-bounds sync stays;
 no change to the 280 ms motion curve or frame-default migration. Physical-camera and real-Mac
 permission/Gatekeeper checks remain open, as above.
 
@@ -95,3 +95,17 @@ window/frame diagnostics distinguish failed deferred updates from stale cache/pr
 The verifier now runs six round trips per raw and packaged app. Native results are pending;
 remove the temporary diagnostics after evaluating the captured evidence. This supersedes the
 earlier confidence in variant B; no reliable Full screen result is claimed until this run passes.
+
+
+Variant C failed every ARM entry in `45077351007` at `052a5df`. The 24 diagnostic snapshots
+showed correct native/content/viewport/drawable dimensions and scale, no failed deferred window
+updates, and an attached, unpaused Metal source. Nevertheless, 21 snapshots were dirty, and
+there were no transition renders. Deferring immediate AppKit display alone is rejected as a
+repair. The earlier variant B single pass remains inconclusive, not evidence of reliability.
+
+Variant D (`097d44c`) explicitly invalidates and displays the native backing layer after the
+GPUI viewport update has returned. This uses GPUI's AppKit `displayLayer` path without waiting
+for a display-link update or re-entering a borrowed GPUI window. The six strict round trips
+remain. All temporary diagnostic timers/logs were removed before this source is tested.
+Status: native validation pending; no reliable repair is yet claimed. The current dated run is
+[the Metal repaint verification](../verification/runs/2026-11-22-rust-metal-fullscreen.md).
