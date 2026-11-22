@@ -51,6 +51,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
@@ -93,6 +95,27 @@ jobs:
 
       - name: Verify on the real desktop and measure
         run: ./verify-macos --exe rust/target/release/camframe-rust --out verification-macos
+
+      - name: Install the Electron 0.9.0 comparison dependencies
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install comparison dependencies
+        run: npm ci
+
+      - name: Capture Electron 0.9.0 beside Rust
+        shell: bash
+        run: scripts/agents/kit parity verification-parity verification-macos
+
+      - name: Upload side-by-side comparisons
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-parity-macos-${{ matrix.arch }}
+          path: verification-parity/*.png
+          if-no-files-found: error
 
       - name: Check native settings labels
         run: rust/target/release/check-panel-text verification-macos/camera-panel.png verification-macos/style-panel.png verification-macos/scenes-panel.png

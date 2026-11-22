@@ -121,10 +121,10 @@ $prefsFile = Join-Path $settingsDir "CamFrame Rust\preferences.json"
 $WS_EX_TRANSPARENT = 0x20
 $winX = 200
 $winY = 150
-$cropX = 150
-$cropY = 100
-$cropW = 424
-$cropH = 462
+$cropX = 160
+$cropY = 110
+$cropW = 404
+$cropH = 470
 
 $rustExeSize = (Get-Item $ExePath).Length
 $rustProc = $null
@@ -356,7 +356,7 @@ try {
     $fullscreenWorked = ($rect.Left -eq $display.Left -and $rect.Top -eq $display.Top -and
         $rect.Right -eq $display.Right -and $rect.Bottom -eq $display.Bottom)
     $fullBmp = Capture-ScreenRegion -X $display.Left -Y $display.Top -W $display.Width -H $display.Height -Path (Join-Path $OutDir 'fullscreen.png')
-    foreach ($probe in @(@(4,4), @($display.Width-5,4), @(4,$display.Height-5), @($display.Width-5,$display.Height-5))) {
+    foreach ($probe in @(@(4,4), @(($display.Width - 5),4), @(4,($display.Height - 5)), @(($display.Width - 5),($display.Height - 5)))) {
         if (Is-Magenta ($fullBmp.GetPixel($probe[0],$probe[1]))) { $failures += 'Full screen camera does not cover a display corner' }
     }
     $fullBmp.Dispose()
@@ -369,6 +369,24 @@ try {
         $rect.Right -ne $compactRect.Right -or $rect.Bottom -ne $compactRect.Bottom) {
         $failures += 'Escape did not restore the original compact window bounds'
     }
+
+    # A real corner resize must also update GPUI's drawable area, rather than cutting off the
+    # enlarged camera and the centered toolbar at the old viewport edge.
+    Move-To 162 228
+    Move-To 306 372
+    [Win32Verify]::mouse_event(0x02, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 60
+    Move-To 426 492
+    [Win32Verify]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 600
+    Refresh-Rect
+    $resizedWidth = ($rect.Right - $rect.Left) / $scale
+    $resizedHeight = ($rect.Bottom - $rect.Top) / $scale
+    if ($resizedWidth -lt 430 -or $resizedHeight -lt 490) { $failures += 'Corner drag did not resize the camera' }
+    $resizeBmp = Capture-ScreenRegion -X ($rect.Left - 40) -Y ($rect.Top - 40) -W ($rect.Right - $rect.Left + 80) -H ($rect.Bottom - $rect.Top + 80) -Path (Join-Path $OutDir 'resize-large.png')
+    $edge = $resizeBmp.GetPixel([int](40 + ($resizedWidth - 20) * $scale), [int](40 + (84 + ($resizedHeight - 102) / 2) * $scale))
+    if (Is-Magenta $edge) { $failures += 'Resized camera is clipped by the old drawing viewport' }
+    $resizeBmp.Dispose()
 
     # Preferences: saved in the app's own folder, in 0.9.0's layout, with the last shape.
     $prefsText = if (Test-Path $prefsFile) { Get-Content $prefsFile -Raw } else { "" }
@@ -453,7 +471,7 @@ try {
     Write-Host $reportJson
 
     # Capture the real GPUI settings panels, each with its own disposable Preferences folder.
-    foreach ($panel in @('camera', 'style', 'scenes')) {
+    foreach ($panel in @('camera', 'style', 'style-glow', 'style-blur', 'scenes', 'scenes-list', 'small-menu', 'large-menu')) {
         if ($rustProc -and -not $rustProc.HasExited) { Stop-Process -Id $rustProc.Id -Force }
         $panelSettings = Join-Path $OutDir "panel-settings-$panel"
         $rustProc = Start-Process -FilePath $ExePath -ArgumentList @('--demo-pattern', '--position', "$winX,$winY", '--settings-panel', $panel, '--settings-dir', $panelSettings) -PassThru
@@ -467,6 +485,10 @@ try {
         Start-Sleep -Milliseconds 800
         $panelBounds = New-Object Win32Verify+RECT
         [void][Win32Verify]::GetWindowRect($panelWindow, [ref]$panelBounds)
+        if ($panel -like '*menu') {
+            [void][Win32Verify]::SetCursorPos(($panelBounds.Left + [int](($panelBounds.Right - $panelBounds.Left) / 2)), ($panelBounds.Top + 100))
+            Start-Sleep -Milliseconds 350
+        }
         $panelShot = Capture-ScreenRegion -X ($panelBounds.Left - 40) -Y ($panelBounds.Top - 40) -W ($panelBounds.Right - $panelBounds.Left + 80) -H ($panelBounds.Bottom - $panelBounds.Top + 80) -Path (Join-Path $OutDir "$panel-panel.png")
         $panelShot.Dispose()
     }

@@ -123,7 +123,7 @@ fn main_screen_height() -> f64 {
 }
 
 /// Moves and sizes the window in one step. `bounds` are GPUI points (top-left origin).
-pub fn set_bounds(window: &Window, bounds: camframe_core::geometry::Rect) {
+pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx: &mut gpui::App) {
     let Some(ns_window) = ns_window_of(window) else { return };
     let frame = CgRect {
         origin: CgPoint { x: bounds.x as f64, y: main_screen_height() - (bounds.y + bounds.height) as f64 },
@@ -133,6 +133,7 @@ pub fn set_bounds(window: &Window, bounds: camframe_core::geometry::Rect) {
     unsafe {
         let _: () = msg_send![ns_window, setFrame: frame, display: Bool::YES];
     }
+    window.bounds_changed(cx);
 }
 
 pub fn set_click_through(window: &Window, through: bool) {

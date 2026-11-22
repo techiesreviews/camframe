@@ -232,6 +232,12 @@ impl SceneEdits {
     pub fn clear_delete(&mut self) {
         self.removal = None;
     }
+    pub fn removal_preview(&self, now: u64) -> Option<(&Scene, usize, u64)> {
+        self.removal.as_ref().filter(|r| now < r.until).map(|r| (&r.scene, r.index, r.until - now))
+    }
+    pub fn change_remaining(&self, id: &str, now: u64) -> Option<u64> {
+        self.change.as_ref().filter(|c| c.scene.id == id && now < c.until).map(|c| c.until - now)
+    }
     pub fn can_undo_change(&self, id: &str, now: u64) -> bool {
         self.change.as_ref().is_some_and(|c| c.scene.id == id && now < c.until)
     }

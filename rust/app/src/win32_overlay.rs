@@ -155,7 +155,7 @@ fn hwnd_of(window: &Window) -> Option<windows::Win32::Foundation::HWND> {
 
 /// Moves and sizes the window in one step. `bounds` are logical pixels, like GPUI's.
 #[cfg(target_os = "windows")]
-pub fn set_bounds(window: &Window, bounds: camframe_core::geometry::Rect) {
+pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx: &mut gpui::App) {
     use windows::Win32::UI::WindowsAndMessaging::{SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos};
     let Some(hwnd) = hwnd_of(window) else { return };
     let scale = f64::from(window.scale_factor());
@@ -172,6 +172,9 @@ pub fn set_bounds(window: &Window, bounds: camframe_core::geometry::Rect) {
             SWP_NOACTIVATE | SWP_NOZORDER,
         );
     }
+    // SetWindowPos sends WM_SIZE synchronously while GPUI has this Window checked out. Its
+    // callback cannot re-enter the Window, so explicitly synchronize the drawable viewport.
+    window.bounds_changed(cx);
 }
 
 /// Lets clicks go through the window to the app behind it (`through`), or takes them again. The
@@ -296,7 +299,7 @@ pub fn configure_transparent_overlay(_window: &Window, _position: Option<(i32, i
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn set_bounds(_window: &Window, _bounds: camframe_core::geometry::Rect) {}
+pub fn set_bounds(_window: &mut Window, _bounds: camframe_core::geometry::Rect, _cx: &mut gpui::App) {}
 
 #[cfg(not(target_os = "windows"))]
 pub fn set_click_through(_window: &Window, _through: bool) {}

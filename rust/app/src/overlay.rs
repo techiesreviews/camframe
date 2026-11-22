@@ -20,8 +20,8 @@ use gpui::prelude::FluentBuilder;
 use gpui::{
     App, AppContext, AssetSource, Bounds, Context, CursorStyle, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyBinding, MouseButton, MouseDownEvent, ParentElement, Pixels, Render, RenderImage, SharedString,
-    StatefulInteractiveElement, Styled, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowKind, WindowOptions, actions, div, img, point, px, rgb, size, svg, transparent_black,
+    StatefulInteractiveElement, Styled, StyledImage, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowControlArea, WindowKind, WindowOptions, actions, div, img, point, px, rgb, size, svg, transparent_black,
 };
 use smallvec::SmallVec;
 
@@ -73,8 +73,20 @@ pub struct Icons;
 impl AssetSource for Icons {
     fn load(&self, path: &str) -> anyhow::Result<Option<std::borrow::Cow<'static, [u8]>>> {
         let bytes: &'static [u8] = match path {
+            "icons/list.svg" => include_bytes!("../assets/icons/list.svg"),
+            "icons/squares-four.svg" => include_bytes!("../assets/icons/squares-four.svg"),
+            "icons/pencil-simple.svg" => include_bytes!("../assets/icons/pencil-simple.svg"),
+            "icons/trash.svg" => include_bytes!("../assets/icons/trash.svg"),
+            "icons/dots-six-vertical.svg" => include_bytes!("../assets/icons/dots-six-vertical.svg"),
+            "icons/check.svg" => include_bytes!("../assets/icons/check.svg"),
+            "icons/plus.svg" => include_bytes!("../assets/icons/plus.svg"),
+            "icons/arrow-counter-clockwise.svg" => include_bytes!("../assets/icons/arrow-counter-clockwise.svg"),
+            "icons/x.svg" => include_bytes!("../assets/icons/x.svg"),
+            "icons/download-simple.svg" => include_bytes!("../assets/icons/download-simple.svg"),
+            "icons/upload-simple.svg" => include_bytes!("../assets/icons/upload-simple.svg"),
             "icons/x-circle.svg" => include_bytes!("../assets/icons/x-circle.svg"),
             "icons/circle.svg" => include_bytes!("../assets/icons/circle.svg"),
+            "icons/corners-in.svg" => include_bytes!("../assets/icons/corners-in.svg"),
             "icons/corners-out.svg" => include_bytes!("../assets/icons/corners-out.svg"),
             "icons/crosshair.svg" => include_bytes!("../assets/icons/crosshair.svg"),
             "icons/scroll.svg" => include_bytes!("../assets/icons/scroll.svg"),
@@ -102,6 +114,17 @@ pub fn bind_test_keys(cx: &mut App) {
 
 pub fn open(config: LaunchConfig, cx: &mut App) -> anyhow::Result<()> {
     let (prefs, mut settings) = Prefs::open(config.settings_dir.clone());
+    if config.demo_pattern {
+        let patch = match config.settings_panel.as_deref() {
+            Some("small-menu") => serde_json::json!({"shape":"portrait","size":180}),
+            Some("large-menu") => serde_json::json!({"shape":"landscape","size":640}),
+            Some("style-glow") => serde_json::json!({"frameEffect":"glow"}),
+            Some("style-blur") => serde_json::json!({"frameEffect":"blur"}),
+            Some("scenes-list") => serde_json::json!({"sceneView":"list"}),
+            _ => serde_json::json!({}),
+        };
+        settings = settings.with_patch(&patch);
+    }
     let (areas, primary) = work_areas(cx);
     let (mut bounds, healed) = geometry::opening_compact_bounds(
         settings.shape,
@@ -119,9 +142,6 @@ pub fn open(config: LaunchConfig, cx: &mut App) -> anyhow::Result<()> {
         prefs.save(&settings);
     }
 
-    if config.demo_pattern && config.settings_panel.is_some() {
-        bounds.height = bounds.height.max(390);
-    }
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(gpui_bounds(bounds))),
         titlebar: None,
@@ -144,6 +164,7 @@ pub fn open(config: LaunchConfig, cx: &mut App) -> anyhow::Result<()> {
         if let Err(err) = platform::configure_transparent_overlay(window, position) {
             eprintln!("CamFrame: transparent window setup failed: {err}");
         }
+        platform::set_bounds(window, bounds, cx);
         cx.new(|cx| BubbleOverlay::new(config, prefs, settings, window, cx))
     })?;
     Ok(())
@@ -185,6 +206,7 @@ pub struct BubbleOverlay {
     startup_recorded: bool,
     settings_tab: Option<SettingsTab>,
     framing: bool,
+    open_select: Option<&'static str>,
     framing_drag: Option<((f64, f64), camframe_core::settings::CameraPosition)>,
     color_input: gpui::Entity<crate::text_field::TextField>,
     color_error: bool,
@@ -197,6 +219,9 @@ pub struct BubbleOverlay {
     scene_input: gpui::Entity<crate::text_field::TextField>,
     scene_rename: Option<String>,
     scene_status: String,
+    scene_status_until: u64,
+    scene_status_action: Option<&'static str>,
+    scene_save_open: bool,
     scene_drag: Option<String>,
     scene_focus: [FocusHandle; 6],
     scene_undo_focus: FocusHandle,
@@ -233,6 +258,7 @@ impl BubbleOverlay {
         })
         .detach();
         let scene_input = cx.new(|cx| crate::text_field::TextField::new(String::new(), "Scene name", cx));
+        cx.subscribe_in(&scene_input, window, |_, _, _: &crate::text_field::Changed, _, cx| cx.notify()).detach();
         cx.subscribe_in(&scene_input, window, |this, _, event: &crate::text_field::Submitted, window, cx| {
             this.save_scene_name(&event.0, window, cx);
         })
@@ -351,14 +377,15 @@ impl BubbleOverlay {
             settings_tab: if config.demo_pattern {
                 match config.settings_panel.as_deref() {
                     Some("camera") => Some(SettingsTab::Camera),
-                    Some("style") => Some(SettingsTab::Style),
-                    Some("scenes") => Some(SettingsTab::Scenes),
+                    Some("style" | "style-glow" | "style-blur") => Some(SettingsTab::Style),
+                    Some("scenes" | "scenes-list") => Some(SettingsTab::Scenes),
                     _ => None,
                 }
             } else {
                 None
             },
             framing: false,
+            open_select: None,
             framing_drag: None,
             color_input,
             color_error: false,
@@ -371,6 +398,9 @@ impl BubbleOverlay {
             scene_input,
             scene_rename: None,
             scene_status: String::new(),
+            scene_status_until: 0,
+            scene_status_action: None,
+            scene_save_open: false,
             scene_drag: None,
             scene_focus: std::array::from_fn(|_| cx.focus_handle()),
             scene_undo_focus: cx.focus_handle(),
@@ -470,7 +500,7 @@ impl BubbleOverlay {
             let (reduced, contrast) = platform::accessibility_preferences();
             cx.set_reduce_motion(reduced);
             if reduced && let Some((_, target, _)) = self.presentation.transition.take() {
-                platform::set_bounds(window, target);
+                platform::set_bounds(window, target, cx);
                 self.sync_capture_view(window);
             }
             if contrast != self.high_contrast {
@@ -543,6 +573,7 @@ impl BubbleOverlay {
                 platform::set_bounds(
                     window,
                     self.with_guide_bounds(Rect::new(origin.x, origin.y, i64::from(width), i64::from(height))),
+                    cx,
                 );
                 self.last_origin = Some(origin);
                 self.sync_capture_view(window);
@@ -657,7 +688,7 @@ impl BubbleOverlay {
         if leaving_full {
             self.move_to(base, window, cx);
         } else {
-            platform::set_bounds(window, self.with_guide_bounds(base));
+            platform::set_bounds(window, self.with_guide_bounds(base), cx);
         }
         self.last_origin = Some(base.origin());
         let before = self.settings.clone();
@@ -740,7 +771,8 @@ impl BubbleOverlay {
             width = camframe_core::interaction::TOOLBAR_MAX_WIDTH;
             left = (f64::from(window_width) - width) / 2.0;
         }
-        div()
+        let button_width = camframe_core::chrome::toolbar_button_width(width) as f32;
+        let bar = div()
             .id("hover-toolbar")
             .absolute()
             .top(px(top as f32 + self.guide_reserve() as f32))
@@ -750,49 +782,88 @@ impl BubbleOverlay {
             .flex()
             .items_center()
             .justify_center()
-            .gap(px(2.0))
+            .gap(px(if self.framing { 8.0 } else { 2.0 }))
             .p(px(4.0))
             .rounded(px(10.0))
-            .bg(rgb(0x0c0c0d))
-            .child(toolbar_button("close-button", "icons/x-circle.svg", cx).on_click(|_, _, cx| cx.quit()))
-            .child(toolbar_button("fullscreen-button", "icons/corners-out.svg", cx).on_click(
+            .bg(rgb(0x0c0c0d));
+        if self.framing {
+            return bar
+                .child(
+                    toolbar_button("position-button", "icons/crosshair.svg", 36.0, true, cx)
+                        .on_click(cx.listener(|this, _, window, cx| this.toggle_framing(window, cx))),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(px(9.0))
+                        .line_height(px(12.0))
+                        .text_color(rgb(0xa1a1aa))
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(rgb(0xf4f4f5))
+                                .child(format!("Zoom {}%", self.settings.camera_zoom)),
+                        )
+                        .child("Drag · Scroll · Double-click resets"),
+                );
+        }
+        bar.child(
+            toolbar_button("close-button", "icons/x-circle.svg", button_width, false, cx)
+                .on_click(|_, _, cx| cx.quit()),
+        )
+        .child(
+            toolbar_button(
+                "fullscreen-button",
+                if self.presentation.fullscreen { "icons/corners-in.svg" } else { "icons/corners-out.svg" },
+                button_width,
+                self.presentation.fullscreen,
+                cx,
+            )
+            .on_click(
                 cx.listener(|this, _, window, cx| this.set_fullscreen(!this.presentation.fullscreen, window, cx)),
-            ))
-            .child(toolbar_button("shape-button", "icons/circle.svg", cx).on_click(cx.listener(
-                |this, _, window, cx| {
-                    let next = this.settings.shape.next();
-                    this.set_shape(next, window, cx);
-                },
-            )))
-            .child(toolbar_button("position-button", "icons/crosshair.svg", cx).on_click(cx.listener(
-                |this, _, window, cx| {
-                    this.toggle_framing(window, cx);
-                },
-            )))
-            .child(
-                toolbar_button("prompter-button", "icons/scroll.svg", cx)
-                    .aria_label(if self.link.is_some() {
-                        "Prompter link: on"
-                    } else if self.link_message.is_empty() {
-                        "Prompter link: off"
-                    } else {
-                        self.link_message.as_str()
-                    })
-                    .on_click(cx.listener(|this, _, _, cx| this.toggle_link(cx)))
-                    .child(div().absolute().right(px(4.0)).bottom(px(4.0)).size(px(5.0)).rounded_full().bg(rgb(
-                        if self.link.is_some() {
-                            0x22c55e
-                        } else if self.link_message.is_empty() {
-                            0x71717a
-                        } else {
-                            0xfb923c
-                        },
-                    ))),
+            ),
+        )
+        .child(
+            toolbar_button("shape-button", "icons/circle.svg", button_width, false, cx)
+                .on_click(cx.listener(|this, _, window, cx| this.set_shape(this.settings.shape.next(), window, cx))),
+        )
+        .child(
+            toolbar_button("position-button", "icons/crosshair.svg", button_width, false, cx)
+                .on_click(cx.listener(|this, _, window, cx| this.toggle_framing(window, cx))),
+        )
+        .child(
+            toolbar_button("prompter-button", "icons/scroll.svg", button_width, self.link.is_some(), cx)
+                .aria_label(if self.link.is_some() {
+                    "Prompter link: on"
+                } else if self.link_message.is_empty() {
+                    "Prompter link: off"
+                } else {
+                    self.link_message.as_str()
+                })
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_link(cx)))
+                .when(self.link.is_some() || !self.link_message.is_empty(), |button| {
+                    button.child(
+                        div()
+                            .absolute()
+                            .right(px(6.0))
+                            .top(px(6.0))
+                            .size(px(7.0))
+                            .rounded_full()
+                            .bg(rgb(if self.link.is_some() { 0x22c55e } else { 0xf97316 })),
+                    )
+                }),
+        )
+        .child(
+            toolbar_button(
+                "controls-button",
+                "icons/sliders-horizontal.svg",
+                button_width,
+                self.settings_tab.is_some(),
+                cx,
             )
-            .child(
-                toolbar_button("controls-button", "icons/sliders-horizontal.svg", cx)
-                    .on_click(cx.listener(|this, _, window, cx| this.toggle_settings(window, cx))),
-            )
+            .on_click(cx.listener(|this, _, window, cx| this.toggle_settings(window, cx))),
+        )
     }
 
     fn render_camera(&self, camera_width: f32, camera_height: f32, cx: &mut Context<Self>) -> impl IntoElement {
@@ -891,7 +962,15 @@ impl BubbleOverlay {
         }
 
         if let Some(frame) = self.frame.clone() {
-            camera = camera.child(img(frame).w(px(camera_width)).h(px(camera_height)).rounded(px(radius)));
+            camera = camera.child(
+                img(frame)
+                    .absolute()
+                    .inset_0()
+                    .w_full()
+                    .h_full()
+                    .object_fit(gpui::ObjectFit::Cover)
+                    .rounded(px(radius)),
+            );
             if let CameraStatus::Unavailable(message) = &self.status {
                 camera = camera.child(
                     div()
@@ -1024,20 +1103,24 @@ impl Render for BubbleOverlay {
             .id("overlay-root")
             .track_focus(&self.focus)
             .relative()
+            .font_family(if cfg!(target_os = "windows") { "Segoe UI" } else { "Arial" })
+            .text_size(px(11.0))
+            .line_height(px(16.0))
             .w(px(window_width as f32))
-            .h(px((if self.settings_tab.is_some() { window_height.max(390) } else { window_height }
-                + self.guide_reserve()) as f32))
+            .h(px((window_height + self.guide_reserve()) as f32))
             .bg(transparent_black())
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, _, _, _| {
                     this.scene_drag = None;
+                    this.slider_drag = None;
                 }),
             )
             .on_mouse_up_out(
                 MouseButton::Left,
                 cx.listener(|this, _, _, _| {
                     this.scene_drag = None;
+                    this.slider_drag = None;
                 }),
             )
             .when(cfg!(target_os = "linux"), |root| {
@@ -1057,11 +1140,20 @@ impl Render for BubbleOverlay {
                         this.finish_guide(window, cx);
                         return;
                     }
+                    if this.scene_save_open {
+                        this.scene_save_open = false;
+                        cx.notify();
+                        return;
+                    }
                     if let Some(id) = this.scene_rename.take() {
                         this.scene_input.update(cx, |input, cx| input.set_text(String::new(), cx));
                         if let Some(index) = this.settings.presets.iter().position(|s| s.id == id) {
                             this.scene_focus[index].focus(window, cx);
                         }
+                        cx.notify();
+                        return;
+                    }
+                    if this.open_select.take().is_some() {
                         cx.notify();
                         return;
                     }
@@ -1096,7 +1188,7 @@ impl Render for BubbleOverlay {
                     root.children(self.render_handles(camera_width, camera_height, cx))
                 })
             })
-            .when(self.settings_tab.is_some(), |root| root.child(self.render_settings(cx)))
+            .when(self.settings_tab.is_some(), |root| root.child(self.render_settings(window, cx)))
             .when(self.guide_step.is_some(), |root| root.child(self.render_guide(cx)))
             .child({
                 let announcement = self.announcement.clone();
@@ -1108,22 +1200,16 @@ impl Render for BubbleOverlay {
                     tree.push_child(id, node);
                 })
             })
-            .when(self.framing, |root| {
-                root.child(
-                    div()
-                        .absolute()
-                        .top(px(68.0 + self.guide_reserve() as f32))
-                        .left(px(18.0))
-                        .max_w(px(camera_width))
-                        .text_xs()
-                        .text_color(rgb(0xffffff))
-                        .child(format!("Zoom {}% · Drag · Scroll · Double-click resets", self.settings.camera_zoom)),
-                )
-            })
     }
 }
 
-fn toolbar_button(id: &'static str, icon: &'static str, cx: &mut Context<BubbleOverlay>) -> gpui::Stateful<gpui::Div> {
+fn toolbar_button(
+    id: &'static str,
+    icon: &'static str,
+    width: f32,
+    selected: bool,
+    cx: &mut Context<BubbleOverlay>,
+) -> gpui::Stateful<gpui::Div> {
     let label = match id {
         "close-button" => "Quit CamFrame",
         "fullscreen-button" => "Full screen",
@@ -1139,7 +1225,8 @@ fn toolbar_button(id: &'static str, icon: &'static str, cx: &mut Context<BubbleO
         .accessibility_id(id)
         .tab_index(0)
         .border_1()
-        .border_color(transparent_black())
+        .border_color(if selected { rgb(0xeeeeef).into() } else { transparent_black() })
+        .aria_selected(selected)
         .focus(|style| style.border_color(rgb(0xffffff)))
         .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
             if !matches!(event.keystroke.key.as_str(), "enter" | "space") {
@@ -1157,9 +1244,9 @@ fn toolbar_button(id: &'static str, icon: &'static str, cx: &mut Context<BubbleO
                 _ => this.toggle_settings(window, cx),
             }
         }))
-        .w(px(TOOLBAR_BUTTON))
+        .w(px(width))
         .min_w_0()
-        .flex_1()
+        .flex_shrink_0()
         .h(px(TOOLBAR_BUTTON))
         .flex()
         .items_center()
@@ -1168,7 +1255,7 @@ fn toolbar_button(id: &'static str, icon: &'static str, cx: &mut Context<BubbleO
         .cursor_pointer()
         .text_color(rgb(0x8b8b90))
         .hover(|style| style.bg(rgb(0x19191b)).text_color(rgb(0xe5e5e5)))
-        .child(svg().path(icon).size(px(TOOLBAR_ICON)).text_color(rgb(0x8b8b90)))
+        .child(svg().path(icon).size(px(TOOLBAR_ICON.min((width - 2.0).max(1.0)))))
 }
 
 /// The capture size in device pixels and the framing from Preferences.

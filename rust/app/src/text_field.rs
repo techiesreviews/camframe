@@ -15,6 +15,8 @@ pub struct TextField {
 }
 
 pub struct Submitted(pub String);
+pub struct Changed;
+impl EventEmitter<Changed> for TextField {}
 impl EventEmitter<Submitted> for TextField {}
 
 fn byte_offset(text: &str, utf16: usize) -> usize {
@@ -55,6 +57,7 @@ impl TextField {
         self.text[..range.start].encode_utf16().count()..self.text[..range.end].encode_utf16().count()
     }
     fn changed(&self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.emit(Changed);
         window.notify_text_input_changed(&self.focus);
         cx.notify();
     }
@@ -206,11 +209,14 @@ impl Render for TextField {
             .tab_index(0)
             .border_1()
             .border_color(rgb(if self.high_contrast { 0xffffff } else { 0x343438 }))
-            .rounded(px(6.0))
-            .bg(rgb(0x19191b))
-            .text_color(rgb(0xe5e5e5))
-            .text_size(px(14.0))
-            .p(px(6.0))
+            .rounded(px(7.0))
+            .bg(rgb(0x202023))
+            .text_color(rgb(0xf4f4f5))
+            .text_size(px(11.0))
+            .px(px(7.0))
+            .h(px(28.0))
+            .flex()
+            .items_center()
             .overflow_hidden()
             .focus(|s| s.border_color(rgb(0xffffff)))
             .cursor_text()
@@ -246,7 +252,7 @@ impl Render for TextField {
                             underline: None,
                             strikethrough: None,
                         };
-                        let line = window.text_system().shape_line(text.into(), px(14.0), &[run], None);
+                        let line = window.text_system().shape_line(text.into(), px(11.0), &[run], None);
                         window.handle_input(&focus, ElementInputHandler::new(bounds, entity.clone()), cx);
                         if focus.is_focused(window) {
                             let x = line.x_for_index(selection.start);
@@ -259,7 +265,7 @@ impl Render for TextField {
                                 rgba(0xffffff55),
                             ));
                         }
-                        let _ = line.paint(bounds.origin, px(20.0), TextAlign::Left, None, window, cx);
+                        let _ = line.paint(bounds.origin, px(16.0), TextAlign::Left, None, window, cx);
                         entity.update(cx, |this, _| {
                             this.line = Some(line);
                             this.bounds = Some(bounds);
@@ -267,7 +273,7 @@ impl Render for TextField {
                     },
                 )
                 .w_full()
-                .h(px(20.0)),
+                .h(px(16.0)),
             )
     }
 }

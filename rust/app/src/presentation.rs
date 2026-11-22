@@ -16,7 +16,7 @@ impl BubbleOverlay {
         if let Some((from, to, start)) = self.presentation.transition {
             let progress =
                 (start.elapsed().as_secs_f64() * 1000.0 / geometry::OVERLAY_BOUNDS_TRANSITION_MS as f64).min(1.0);
-            platform::set_bounds(window, geometry::interpolate_bounds(from, to, progress));
+            platform::set_bounds(window, geometry::interpolate_bounds(from, to, progress), cx);
             if progress >= 1.0 {
                 self.presentation.transition = None;
                 self.sync_capture_view(window);
@@ -30,14 +30,14 @@ impl BubbleOverlay {
                 let current = self.guide_base_bounds(window);
                 let healed = geometry::restore_compact(current, &areas, primary, self.settings.prompter_margin);
                 if healed != current {
-                    platform::set_bounds(window, self.with_guide_bounds(healed));
+                    platform::set_bounds(window, self.with_guide_bounds(healed), cx);
                     self.last_origin = Some(healed.origin());
                     self.settings.position = Some(healed.origin());
                     self.save_now();
                 }
             } else if self.presentation.fullscreen && self.presentation.transition.is_none() {
                 let target = window.display(cx).map(|display| rect_of(display.bounds())).unwrap_or(primary);
-                platform::set_bounds(window, target);
+                platform::set_bounds(window, target, cx);
                 self.sync_capture_view(window);
             }
         }
@@ -46,7 +46,7 @@ impl BubbleOverlay {
     pub(super) fn move_to(&mut self, target: Rect, window: &mut Window, cx: &mut Context<Self>) {
         if cx.reduce_motion() {
             self.presentation.transition = None;
-            platform::set_bounds(window, target);
+            platform::set_bounds(window, target, cx);
         } else {
             self.presentation.transition = Some((rect_of(window.bounds()), target, Instant::now()));
         }

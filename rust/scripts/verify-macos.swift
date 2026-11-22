@@ -120,10 +120,10 @@ struct Shot {
     }
 }
 
-func capture(around window: CGRect, name: String) -> Shot? {
-    let origin = CGPoint(x: window.minX - pad, y: window.minY - pad)
-    let w = window.width + pad * 2
-    let h = window.height + pad * 2
+func capture(around window: CGRect, name: String, padding: Double = pad) -> Shot? {
+    let origin = CGPoint(x: window.minX - padding, y: window.minY - padding)
+    let w = window.width + padding * 2
+    let h = window.height + padding * 2
     let path = (outDir as NSString).appendingPathComponent("\(name).png")
     _ = run("/usr/sbin/screencapture", ["-x", "-R", "\(Int(origin.x)),\(Int(origin.y)),\(Int(w)),\(Int(h))", path])
     guard let data = FileManager.default.contents(atPath: path), let rep = NSBitmapImageRep(data: data) else {
@@ -450,6 +450,31 @@ func checks() -> Int32 {
     moveMouseAway(from: after)
     _ = capture(around: after, name: "after-drag")
 
+    // Full screen through the real toolbar, including all four drawable corners. Then Escape
+    // must restore the same compact bounds without opening a second camera/window.
+    let compact = bubble.bounds
+    let centre = cameraCenter(compact)
+    moveMouse(global(centre.0, centre.1))
+    moveMouse(global(compact.width / 2 - 57, 44), settleMs: 300)
+    leftClick(global(compact.width / 2 - 57, 44))
+    sleepMs(700)
+    refresh()
+    let display = CGDisplayBounds(CGMainDisplayID())
+    if abs(bubble.bounds.width - display.width) > 2 || abs(bubble.bounds.height - display.height) > 2 {
+        failures.append("Full screen toolbar did not fill the display: \(bubble.bounds)")
+    }
+    if let shot = capture(around: bubble.bounds, name: "fullscreen", padding: 0) {
+        for (x,y) in [(4.0,4.0),(bubble.bounds.width-5,4.0),(4.0,bubble.bounds.height-5),(bubble.bounds.width-5,bubble.bounds.height-5)] {
+            if shot.at(bubble.bounds,x,y).near(backdrop) { failures.append("Full screen camera leaves a transparent corner") }
+        }
+    }
+    pressKey(0x35, pid: pid)
+    sleepMs(400)
+    refresh()
+    if abs(bubble.bounds.width - compact.width) > 2 || abs(bubble.bounds.height - compact.height) > 2 {
+        failures.append("Escape did not restore compact bounds")
+    }
+
     // Whole screen for the record.
     _ = run("/usr/sbin/screencapture", ["-x", (outDir as NSString).appendingPathComponent("desktop.png")])
 
@@ -486,7 +511,7 @@ func checks() -> Int32 {
 
     // Capture native GPUI controls, rather than the old Electron browser preview.
     if app.isRunning { app.terminate(); app.waitUntilExit() }
-    for panel in ["camera", "style", "scenes"] {
+    for panel in ["camera", "style", "style-glow", "style-blur", "scenes", "scenes-list", "small-menu", "large-menu"] {
         let panelApp = Process()
         panelApp.executableURL = URL(fileURLWithPath: exePath)
         panelApp.arguments = ["--demo-pattern", "--position", "\(Int(windowX)),\(Int(windowY))", "--settings-panel", panel,
@@ -500,6 +525,9 @@ func checks() -> Int32 {
         }
         sleepMs(800)
         if let panelWindow {
+            if panel.hasSuffix("menu") {
+                moveMouse(CGPoint(x: panelWindow.bounds.midX, y: panelWindow.bounds.minY + 100), settleMs: 350)
+            }
             if capture(around: panelWindow.bounds, name: "\(panel)-panel") == nil { failures.append("could not capture \(panel) panel") }
         } else { failures.append("\(panel) panel did not open") }
         if panelApp.isRunning { panelApp.terminate(); panelApp.waitUntilExit() }

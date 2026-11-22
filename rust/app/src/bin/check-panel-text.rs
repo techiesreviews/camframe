@@ -18,8 +18,15 @@ fn main() {
         };
         let scale = (f64::from(image.width()) / 412.0).round().clamp(1.0, 3.0) as u32;
         let mut text_pixels = 0;
-        for y in 143 * scale..166 * scale {
-            for x in 79 * scale..124 * scale {
+        let left = if path.contains("scenes") {
+            249
+        } else if path.contains("style") {
+            180
+        } else {
+            107
+        };
+        for y in 135 * scale..153 * scale {
+            for x in left * scale..(left + 42) * scale {
                 if x < image.width() && y < image.height() {
                     let pixel = image.get_pixel(x, y);
                     if pixel[0] >= 170 && pixel[1] >= 170 && pixel[2] >= 170 {
@@ -28,9 +35,9 @@ fn main() {
                 }
             }
         }
-        println!("{path}: Camera label bright pixels = {text_pixels}");
+        println!("{path}: Selected tab bright pixels = {text_pixels}");
         if text_pixels < 10 * scale * scale {
-            eprintln!("FAIL: Camera tab label is missing in {path}");
+            eprintln!("FAIL: Selected tab label is missing in {path}");
             failed = true;
         }
     }

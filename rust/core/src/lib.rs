@@ -2,6 +2,7 @@
 //! checked against the same contract fixtures, so the Rust app reads and writes the same
 //! Preferences and Scene files.
 
+pub mod chrome;
 pub mod framing;
 pub mod geometry;
 pub mod interaction;
