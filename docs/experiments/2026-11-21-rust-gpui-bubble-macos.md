@@ -109,3 +109,8 @@ for a display-link update or re-entering a borrowed GPUI window. The six strict 
 remain. All temporary diagnostic timers/logs were removed before this source is tested.
 Status: native validation pending; no reliable repair is yet claimed. The current dated run is
 [the Metal repaint verification](../verification/runs/2026-11-22-rust-metal-fullscreen.md).
+
+Opus's immutable review of variant D identified a P3 edge where GPUI's generic low-power or
+thermal frame interval could defer the final synchronous repaint to the stalled link. The
+small Mac-only correction at `2a72a34` sets those intervals to `None`; Windows options are
+unchanged. All temporary traces are removed. Final repeated native results remain pending.

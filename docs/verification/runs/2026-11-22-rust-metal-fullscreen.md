@@ -1,6 +1,6 @@
 # Verification run: Mac Full screen repaint without pointer input
 
-- **Commit:** 097d44ce2d10e9ca5ab1eb48c6a3fd94eda1ec27 (clean app source; native result pending at write time).
+- **Commit:** 2a72a3476a9c34aa9d72f611db680ba6b274cf47 (clean app source including the review correction; native result pending at write time).
 - **Version:** Rust 0.1.0 test app beside Electron 0.9.0.
 - **Observer:** GPT Sol; failed ARM captures and renderer snapshots inspected locally.
 - **Environment:** Linux x64/Rust 1.98.1 for portable checks. Failing native runs: macOS 15.8.2 ARM, 1024 × 768, backing/capture scale 1.
@@ -12,7 +12,7 @@
 | Command/check | Result | Evidence/notes |
 | --- | --- | --- |
 | `kit doctor` | Pass | 12/12 checks. |
-| `kit rust` on clean app source | Pass | `.scratch/kit-jobs/p7-checks/log`: 72 test functions, formatting and Clippy. Linux does not compile the native Mac shim or Swift verifier. |
+| `kit rust` on clean app source | Pass | `.scratch/kit-jobs/p7-clean-checks/log`: 72 test functions, formatting and Clippy. Linux does not compile the native Mac shim or Swift verifier. |
 | `kit unit --affected` | Pass | No affected Node suites. |
 | `kit ux --base 052a5df` | Blocked | Existing missing `docs/agents/features.md`; not counted as a pass. |
 | `git diff --check` | Pass | Before the clean implementation commit. |
@@ -64,6 +64,12 @@ window; running it before synchronization would display the old geometry. The cl
 therefore applies bounds, synchronizes GPUI, releases that borrow, then invalidates and displays
 the retained window's backing layer. No manual change to drawable size or scale is needed.
 
+Opus found a rare deferral edge in this synchronous display route: GPUI's generic low-power or
+thermal interval could skip the last repaint and hand it back to the same display link. Mac
+overlay windows now set those two intervals to `None`, alongside the existing unrestricted
+inactive-window interval. Thus a dirty resize repaint cannot take that throttle branch. Windows
+window options stay unchanged. The animation still uses its original 280 ms duration and curves.
+
 The six-trip verifier is retained without relaxed thresholds, extra pointer events or longer
 settling delays. It checks four camera corners, toolbar scale, exact Compact return bounds and
 clear Compact margins plus camera centre, raw and packaged. The 280 ms curves and the one-time
@@ -78,8 +84,11 @@ adds a misleading missing-comparison error.
 
 Earlier Opus reviews returned P3 findings and validation gaps; they did not prove native
 correctness. Those historical approved review verdicts do not override the failed CI runs.
-The clean implementation has a separate immutable-commit review; its result is reported on
-PR #72. A non-GPT second look was unavailable because Grok's weekly budget and OpenCode's free
+The clean native shim at `097d44c` received an immutable-commit Opus review: only a P3 throttling
+edge and native-validation gaps, evidence `.scratch/reviews/fleet-lead/20261122T223758Z` in the
+main checkout. The small Mac-only window-option correction at `2a72a34` addresses that edge;
+it has local checks and awaits the final native jobs, without another nit round. No native
+validation gap is claimed closed by review. A non-GPT second look was unavailable because Grok's weekly budget and OpenCode's free
 usage were exhausted. No GPT fallback is authorized or used.
 
 ## Release decision
