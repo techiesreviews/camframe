@@ -1,0 +1,53 @@
+{
+  "activeAppDuringOtherAppCheck" : "Finder",
+  "backdrop" : "rgb(255,65,255)",
+  "besideToolbarPassesClicks" : true,
+  "cameraTakesClicks" : true,
+  "captureScale" : 1,
+  "emptyCornerPassesClicks" : true,
+  "failures" : [
+
+  ],
+  "keyboardShapeSwitch" : false,
+  "macOS" : "Version 15.7.9 (Build 24G830)",
+  "pixels" : {
+    "circle.belowWindow" : "rgb(255,65,255)",
+    "circle.BL" : "rgb(255,65,255)",
+    "circle.BR" : "rgb(255,65,255)",
+    "circle.center" : "rgb(52,146,183)",
+    "circle.probe" : "rgb(255,65,255)",
+    "circle.shadowProbe" : "rgb(255,65,255)",
+    "circle.TL" : "rgb(255,65,255)",
+    "circle.toolbarRoom" : "rgb(255,65,255)",
+    "circle.TR" : "rgb(255,65,255)",
+    "hover.emptyCorner" : "rgb(255,65,255)",
+    "hover.handle" : "rgb(32,32,36)",
+    "hover.toolbar" : "rgb(13,13,15)",
+    "landscape.bottom" : "rgb(255,65,255)",
+    "landscape.center" : "rgb(52,146,183)",
+    "landscape.top" : "rgb(255,65,255)",
+    "otherApp.BL" : "rgb(255,65,255)",
+    "otherApp.center" : "rgb(52,146,183)",
+    "otherApp.TL" : "rgb(255,65,255)",
+    "portrait.center" : "rgb(52,146,183)",
+    "portrait.side" : "rgb(255,65,255)",
+    "rounded.BR" : "rgb(255,65,255)",
+    "rounded.center" : "rgb(52,146,183)",
+    "rounded.probe" : "rgb(40,100,215)",
+    "rounded.TL" : "rgb(255,65,255)"
+  },
+  "rust" : {
+    "dragMoved" : "(120.0, 60.0)",
+    "exeBytes" : 8961192,
+    "exeMb" : 8.5500000000000007,
+    "firstFrameMs" : 2514.8899999999999,
+    "footprint" : "camframe-rust [8478]: 64-bit    Footprint: 27 MB (4096 bytes per page)",
+    "rssMb" : 25.219999999999999,
+    "windowBounds" : "(320.0, 273.0, 324.0, 264.0)",
+    "windowCount" : 2,
+    "windowLayer" : 101,
+    "windowVisibleMs" : 2981
+  },
+  "seeThroughAndShapeSwitchVerified" : true,
+  "shapeSwitchInput" : "toolbar Shape button"
+}

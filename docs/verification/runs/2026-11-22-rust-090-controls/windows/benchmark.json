@@ -1,0 +1,28 @@
+﻿{
+    "transparencyVerified":  true,
+    "failures":  [
+
+                 ],
+    "rust":  {
+                 "exeBytes":  7948800,
+                 "exeMb":  7.58,
+                 "windowVisibleMs":  153.9,
+                 "firstFrameMs":  110.4,
+                 "workingSetMb":  54.19,
+                 "privateMb":  37.87,
+                 "dpi":  96,
+                 "gwlStyleHex":  "0x96000000",
+                 "gwlExStyleHex":  "0x2800A8"
+             },
+    "camframe090":  {
+                        "exeBytes":  101385890,
+                        "exeMb":  96.69,
+                        "setupBytes":  111805357,
+                        "setupMb":  106.63,
+                        "measured":  true,
+                        "windowVisibleMs":  9894.5,
+                        "workingSetMb":  454.98,
+                        "privateMb":  132.92,
+                        "processCount":  7
+                    }
+}
