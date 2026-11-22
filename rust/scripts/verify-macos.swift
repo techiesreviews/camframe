@@ -521,11 +521,16 @@ func checks() -> Int32 {
 
     // Capture native GPUI controls, rather than the old Electron browser preview.
     if app.isRunning { app.terminate(); app.waitUntilExit() }
-    for panel in ["camera", "style", "style-glow", "style-blur", "scenes", "scenes-list", "small-menu", "large-menu"] {
+    for panel in ["camera", "style", "style-glow", "style-blur", "scenes", "scenes-list", "small-menu", "large-menu", "scenes-overlay", "scenes-legacy"] {
         let panelApp = Process()
         panelApp.executableURL = URL(fileURLWithPath: exePath)
-        panelApp.arguments = ["--demo-pattern", "--position", "\(Int(windowX)),\(Int(windowY))", "--settings-panel", panel,
+        let scrollerCase = panel == "scenes-overlay" || panel == "scenes-legacy"
+        panelApp.arguments = ["--demo-pattern", "--position", "\(Int(windowX)),\(Int(windowY))", "--settings-panel", scrollerCase ? "scenes" : panel,
                               "--settings-dir", (outDir as NSString).appendingPathComponent("panel-settings-\(panel)")]
+        if scrollerCase {
+            // AppKit's standard argument-domain override exercises the real NSScroller preference.
+            panelApp.arguments! += ["-AppleShowScrollBars", panel == "scenes-overlay" ? "WhenScrolling" : "Always"]
+        }
         do { try panelApp.run() } catch { failures.append("could not launch \(panel) panel: \(error)"); continue }
         var panelWindow: WindowInfo?
         for _ in 0..<100 {
@@ -538,7 +543,14 @@ func checks() -> Int32 {
             if panel.hasSuffix("menu") {
                 moveMouse(CGPoint(x: panelWindow.bounds.midX, y: panelWindow.bounds.minY + 100), settleMs: 350)
             }
-            if capture(around: panelWindow.bounds, name: "\(panel)-panel") == nil { failures.append("could not capture \(panel) panel") }
+            if let shot = capture(around: panelWindow.bounds, name: "\(panel)-panel") {
+                if scrollerCase {
+                    let rail = shot.at(panelWindow.bounds, 274, 120)
+                    let bright = rail.r > 220 && rail.g > 220 && rail.b > 220
+                    log("\(panel): native scroll rail pixel = \(rail)")
+                    if bright != (panel == "scenes-legacy") { failures.append("\(panel) does not follow Show scroll bars") }
+                }
+            } else { failures.append("could not capture \(panel) panel") }
         } else { failures.append("\(panel) panel did not open") }
         if panelApp.isRunning { panelApp.terminate(); panelApp.waitUntilExit() }
     }

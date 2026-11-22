@@ -321,3 +321,8 @@ pub fn primary_button_down() -> bool {
 pub fn pending_bounds(_window: &Window) -> Option<camframe_core::geometry::Rect> {
     None
 }
+
+// Windows and the Linux test host retain the existing reserved scrollbar.
+pub fn uses_overlay_scrollbars() -> bool {
+    false
+}

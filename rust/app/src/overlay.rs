@@ -210,6 +210,8 @@ pub struct BubbleOverlay {
     open_select: Option<&'static str>,
     settings_scroll: gpui::ScrollHandle,
     settings_scrollbar: std::cell::Cell<bool>,
+    overlay_scrollbars: bool,
+    settings_scroll_until: u64,
     settings_scroll_drag: Option<f32>,
     framing_drag: Option<((f64, f64), camframe_core::settings::CameraPosition)>,
     color_input: gpui::Entity<crate::text_field::TextField>,
@@ -393,6 +395,8 @@ impl BubbleOverlay {
             open_select: None,
             settings_scroll: gpui::ScrollHandle::new(),
             settings_scrollbar: std::cell::Cell::new(false),
+            overlay_scrollbars: platform::uses_overlay_scrollbars(),
+            settings_scroll_until: 0,
             settings_scroll_drag: None,
             framing_drag: None,
             color_input,
@@ -519,6 +523,13 @@ impl BubbleOverlay {
         if self.accessibility_scan.elapsed() >= Duration::from_secs(1) {
             self.accessibility_scan = Instant::now();
             let (reduced, contrast) = platform::accessibility_preferences();
+            // Re-read AppKit alongside the existing live preference scan; no notification owner is needed.
+            let overlay_scrollbars = platform::uses_overlay_scrollbars();
+            if overlay_scrollbars != self.overlay_scrollbars {
+                self.overlay_scrollbars = overlay_scrollbars;
+                self.settings_scroll_drag = None;
+                cx.notify();
+            }
             cx.set_reduce_motion(reduced);
             if reduced && let Some((_, target, _)) = self.presentation.transition.take() {
                 platform::set_bounds(window, target, cx);
@@ -541,6 +552,10 @@ impl BubbleOverlay {
             return;
         }
         let now = self.now_ms();
+        if self.settings_scroll_until != 0 && now >= self.settings_scroll_until {
+            self.settings_scroll_until = 0;
+            cx.notify();
+        }
         if self.save_at.is_some_and(|at| now >= at) {
             self.save_now();
         }

@@ -27,6 +27,23 @@ const EDGE: u32 = 0x343438;
 const TEXT: u32 = 0xf4f4f5;
 const MUTED: u32 = 0xa1a1aa;
 
+#[derive(Debug, PartialEq, Eq)]
+enum Scrollbar {
+    Hidden,
+    Overlay,
+    Legacy,
+}
+
+fn scrollbar_mode(overlay: bool, overflow: bool, scrolling: bool) -> Scrollbar {
+    if !overflow || (overlay && !scrolling) {
+        Scrollbar::Hidden
+    } else if overlay {
+        Scrollbar::Overlay
+    } else {
+        Scrollbar::Legacy
+    }
+}
+
 fn scrollbar_width() -> f32 {
     if cfg!(target_os = "windows") { 17.0 } else { 15.0 }
 }
@@ -352,6 +369,7 @@ impl BubbleOverlay {
         let thumb = (track * height / (height + max)).max(18.0).min(track);
         let share = ((y - f32::from(bounds.top()) - arrows - grab) / (track - thumb).max(1.0)).clamp(0.0, 1.0);
         self.settings_scroll.set_offset(point(px(0.0), px(-share * max)));
+        self.settings_scroll_until = self.now_ms() + 750;
         cx.notify();
     }
 
@@ -374,10 +392,16 @@ impl BubbleOverlay {
         } else {
             0.0
         };
-        let show_scrollbar = cfg!(any(target_os = "windows", target_os = "macos"))
+        let overflow = cfg!(any(target_os = "windows", target_os = "macos"))
             && scroll_height + max_scroll + width_correction > bounds.height as f32 - 2.0 + 0.5;
-        self.settings_scrollbar.set(show_scrollbar);
-        let rail = if show_scrollbar { scrollbar_width() } else { 0.0 };
+        let mode = scrollbar_mode(
+            self.overlay_scrollbars,
+            overflow,
+            self.settings_scroll_until > self.now_ms() || self.settings_scroll_drag.is_some(),
+        );
+        let reserve_scrollbar = mode == Scrollbar::Legacy;
+        self.settings_scrollbar.set(reserve_scrollbar);
+        let rail = if reserve_scrollbar { scrollbar_width() } else { 0.0 };
         let available = bounds.width as f32 - 22.0 - rail;
         let mut body = div().flex().flex_col().gap(px(8.0)).min_w_0();
         match self.settings_tab {
@@ -590,13 +614,18 @@ impl BubbleOverlay {
                     .flex()
                     .flex_col()
                     .gap(px(8.0))
-                    .on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
+                    .on_scroll(cx.listener(|this, _, _, cx| {
+                        this.settings_scroll_until = this.now_ms() + 750;
+                        cx.notify();
+                    }))
                     .child(tabs.flex_shrink_0())
                     .child(body.flex_shrink_0()),
             );
-        if !show_scrollbar {
+        if mode == Scrollbar::Hidden {
             return panel;
         }
+        let overlay = mode == Scrollbar::Overlay;
+        let bar_width = if overlay { 10.0 } else { scrollbar_width() };
         let height = scroll_height.max(1.0);
         let arrows = scrollbar_arrow_extent();
         let track = (height - arrows * 2.0).max(1.0);
@@ -611,16 +640,22 @@ impl BubbleOverlay {
             div()
                 .id("settings-scrollbar")
                 .relative()
-                .w(px(scrollbar_width()))
+                .w(px(bar_width))
+                .when(overlay, |bar| bar.absolute().right(px(2.0)).top(px(1.0)))
                 .flex_shrink_0()
                 .h(px(height))
-                .bg(rgb(if self.high_contrast {
-                    PANEL
-                } else if cfg!(target_os = "windows") {
-                    0xf1f1f1
+                .bg(if overlay {
+                    transparent_black()
                 } else {
-                    0xffffff
-                }))
+                    rgb(if self.high_contrast {
+                        PANEL
+                    } else if cfg!(target_os = "windows") {
+                        0xf1f1f1
+                    } else {
+                        0xffffff
+                    })
+                    .into()
+                })
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, event: &MouseDownEvent, _, cx| {
@@ -652,7 +687,8 @@ impl BubbleOverlay {
                             .absolute()
                             .left(px(2.0))
                             .top(px(top))
-                            .w(px(scrollbar_width() - 4.0))
+                            .w(px(bar_width - 4.0))
+                            .when(overlay, |thumb| thumb.rounded(px(3.0)))
                             .h(px(thumb))
                             .bg(rgb(if self.high_contrast { TEXT } else { 0xc1c1c1 })),
                     )
@@ -700,5 +736,20 @@ impl BubbleOverlay {
                     )
                 }),
         )
+    }
+}
+
+#[cfg(test)]
+mod scrollbar_tests {
+    use super::*;
+
+    #[test]
+    fn mac_scrollbars_follow_the_system_style_without_narrowing_overlay_content() {
+        assert_eq!(scrollbar_mode(false, true, false), Scrollbar::Legacy);
+        assert_eq!(scrollbar_mode(true, true, false), Scrollbar::Hidden);
+        assert_eq!(scrollbar_mode(true, true, true), Scrollbar::Overlay);
+        assert_eq!(scrollbar_mode(true, true, false), Scrollbar::Hidden);
+        assert_eq!(scrollbar_mode(false, false, true), Scrollbar::Hidden);
+        assert_eq!(scrollbar_mode(true, false, true), Scrollbar::Hidden);
     }
 }

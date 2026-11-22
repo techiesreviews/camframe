@@ -212,6 +212,13 @@ pub fn set_always_on_top(window: &Window, on_top: bool) {
     }
 }
 
+/// AppKit accounts for both Show scroll bars and the current mouse/trackpad.
+pub fn uses_overlay_scrollbars() -> bool {
+    // SAFETY: documented NSScroller class getter on GPUI's main thread; Overlay = 1, Legacy = 0.
+    let style: isize = unsafe { msg_send![class!(NSScroller), preferredScrollerStyle] };
+    style == 1
+}
+
 pub fn accessibility_preferences() -> (bool, bool) {
     // SAFETY: documented NSWorkspace preference getters on GPUI's main thread.
     unsafe {
