@@ -470,7 +470,7 @@ func checks() -> Int32 {
             pixels["fullscreen.\(name)"] = "\(pixel)"
             log("Full screen \(name) at (\(x),\(y)): \(pixel), window \(bubble.bounds), display \(display)")
             if pixel.near(backdrop) { failures.append("Full screen camera leaves a transparent corner") }
-            // The demo gradient is blue/teal at every corner. A stale Compact scene can also
+            // generate_demo_pattern (camera.rs) is blue/teal at every corner. A stale scene can
             // expose Finder or the menu bar, which is not the magenta backdrop.
             else if pixel.r >= 150 || pixel.b < 80 { failures.append("Full screen \(name) does not show the camera") }
         }
@@ -490,6 +490,16 @@ func checks() -> Int32 {
        abs(bubble.bounds.minX - compact.minX) > 2 || abs(bubble.bounds.minY - compact.minY) > 2 {
         failures.append("Escape did not restore compact bounds")
     }
+    if let shot = capture(around: bubble.bounds, name: "compact-after-escape") {
+        let corner = shot.at(bubble.bounds, 4, 4)
+        let centre = cameraCenter(bubble.bounds)
+        let camera = shot.at(bubble.bounds, centre.0, centre.1)
+        pixels["compactAfterEscape.corner"] = "\(corner)"
+        pixels["compactAfterEscape.camera"] = "\(camera)"
+        if !corner.near(backdrop) || camera.r >= 150 || camera.b < 80 {
+            failures.append("Escape did not repaint the Compact camera before the next pointer event")
+        }
+    } else { failures.append("could not capture Compact after Escape") }
 
     // Whole screen for the record.
     _ = run("/usr/sbin/screencapture", ["-x", (outDir as NSString).appendingPathComponent("desktop.png")])

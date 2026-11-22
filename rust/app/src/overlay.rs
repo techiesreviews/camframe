@@ -1211,6 +1211,7 @@ impl Render for BubbleOverlay {
             }))
             .when(
                 !self.presentation.fullscreen
+                    && self.presentation.surface_transition.is_none()
                     && !self.high_contrast
                     && self.settings.frame_effect == camframe_core::settings::FrameEffect::Blur,
                 |root| {
