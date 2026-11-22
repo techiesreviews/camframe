@@ -171,15 +171,27 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             });
             // AppKit may coalesce resize callbacks or deliver them during another GPUI turn.
             // Synchronize after setFrame even if that callback could not update the Window.
-            let refreshed = handle.update(&mut async_cx, |_, window, cx| {
+            let synchronized = handle.update(&mut async_cx, |_, window, cx| {
                 window.bounds_changed(cx);
-                // A dirty scene alone does not wake an already-paused Metal display link.
-                // Explicit frame demand prevents AppKit stretching the previous Compact frame
-                // until the next mouse event, including the final frame of a Full screen move.
-                window.on_next_frame(|window, _cx| window.refresh());
             });
-            if let Err(error) = refreshed {
-                eprintln!("[DEBUG-p6] deferred Mac bounds refresh failed: {error:#}");
+            if synchronized.is_err() {
+                return; // The GPUI window closed while the native request was queued.
+            }
+            // Resizing can leave CAMetalDisplayLink attached and unpaused without delivering
+            // a new drawable. Ask AppKit to display the backing layer after the GPUI update
+            // has returned. GPUI's displayLayer delegate then draws the synchronized scene;
+            // doing this inside handle.update would re-enter an already-borrowed Window.
+            // SAFETY: the retained NSWindow owns its content view/layer, all on the UI thread.
+            unsafe {
+                let view: *mut AnyObject = msg_send![&*native, contentView];
+                if view.is_null() {
+                    return;
+                }
+                let layer: *mut AnyObject = msg_send![view, layer];
+                if !layer.is_null() {
+                    let _: () = msg_send![layer, setNeedsDisplay];
+                    let _: () = msg_send![layer, displayIfNeeded];
+                }
             }
         })
         .detach();

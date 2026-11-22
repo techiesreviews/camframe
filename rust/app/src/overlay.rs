@@ -1108,14 +1108,6 @@ impl Render for BubbleOverlay {
             dimensions_for(shape, self.size())
         };
         let viewport = window.viewport_size();
-        if self.demo_pattern && self.presentation.transition.is_some() {
-            eprintln!(
-                "[DEBUG-p6] render full={} window={:?} viewport={:?}",
-                self.presentation.fullscreen,
-                window.bounds(),
-                viewport,
-            );
-        }
         let (window_width, window_height) = (f32::from(viewport.width), f32::from(viewport.height));
         let (camera_width, camera_height) = (camera_width as f32, camera_height as f32);
         let show_chrome = if self.presentation.fullscreen {
