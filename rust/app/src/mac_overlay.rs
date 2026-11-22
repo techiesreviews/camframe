@@ -24,8 +24,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-// Resize trace for the native verifier. Off unless `--demo-pattern` starts it; the counters
-// below stay at zero cost for a normal launch.
+// Resize trace for the native verifier. Off unless `--demo-pattern` starts it; a normal launch
+// only pays one relaxed atomic add per render.
 static TRACE_START: OnceLock<Instant> = OnceLock::new();
 static RENDERS: AtomicU64 = AtomicU64::new(0);
 static RESIZES: AtomicU64 = AtomicU64::new(0);

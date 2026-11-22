@@ -95,7 +95,9 @@ the native device's stable id afterwards.
   start time and memory against CamFrame 0.9.0 and upload the unsigned builds.
 - Command-line options for the checks: `--demo-pattern` (a moving test picture instead of the
   camera, and the 1 to 4 keys switch shapes), `--position x,y` (open there and never save the
-  place), `--metrics-file path` and `--settings-dir path`.
+  place), `--metrics-file path` and `--settings-dir path`. On macOS `--demo-pattern` also prints
+  a window resize trace and GPUI's warnings to stderr; this is temporary, until the Full screen
+  repaint cause is settled.
 
 ## macOS first start
 
