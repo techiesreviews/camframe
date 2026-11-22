@@ -159,6 +159,9 @@ pub fn open(config: LaunchConfig, cx: &mut App) -> anyhow::Result<()> {
         app_id: Some("camframe-rust".into()),
         ..WindowOptions::default()
     };
+    // Mac's synchronous resize display must not be deferred back to the display-link path.
+    #[cfg(target_os = "macos")]
+    let options = WindowOptions { low_power_frame_interval: None, thermal_frame_interval: None, ..options };
 
     let position = config.position;
     cx.open_window(options, |window, cx| {
