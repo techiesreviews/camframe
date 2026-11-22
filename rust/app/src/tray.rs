@@ -10,7 +10,6 @@ pub enum TrayCommand {
     ToggleCamera,
     Controls,
     Fullscreen,
-    Shape(camframe_core::settings::Shape),
     Help,
     CycleScene,
     Scene(usize),
@@ -48,25 +47,19 @@ mod imp {
             let scenes_menu = Submenu::new("Scenes", true);
             let scene_actions = Arc::new(Mutex::new(Vec::<(MenuId, TrayCommand)>::new()));
             let handler_scenes = Arc::clone(&scene_actions);
-            let controls = MenuItem::new("Camera controls", true, None);
-            let fullscreen = MenuItem::new("Full screen", true, None);
+            let controls = MenuItem::new("Open controls", true, None);
             let help = MenuItem::new("Help & onboarding", true, None);
-            let shapes = camframe_core::settings::Shape::ALL.map(|shape| MenuItem::new(shape.label(), true, None));
-            menu.append_items(&[&show_camera, &controls, &fullscreen, &scenes_menu])?;
-            for shape in &shapes {
-                menu.append(shape)?;
-            }
-            menu.append_items(&[&help, &PredefinedMenuItem::separator(), &quit])?;
+            menu.append_items(&[
+                &controls,
+                &help,
+                &show_camera,
+                &scenes_menu,
+                &PredefinedMenuItem::separator(),
+                &quit,
+            ])?;
 
             let (show_id, quit_id) = (show_camera.id().clone(), quit.id().clone());
-            let mut actions = vec![
-                (controls.id().clone(), TrayCommand::Controls),
-                (fullscreen.id().clone(), TrayCommand::Fullscreen),
-                (help.id().clone(), TrayCommand::Help),
-            ];
-            for (item, shape) in shapes.iter().zip(camframe_core::settings::Shape::ALL) {
-                actions.push((item.id().clone(), TrayCommand::Shape(shape)));
-            }
+            let actions = [(controls.id().clone(), TrayCommand::Controls), (help.id().clone(), TrayCommand::Help)];
             MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
                 let command = if event.id == show_id {
                     TrayCommand::ToggleCamera

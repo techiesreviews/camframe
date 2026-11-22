@@ -1,7 +1,7 @@
 # CamFrame Rust
 
 The Rust app's Phosphor icon assets use the MIT license; their copyright notice and the complete
-terms are in the repository [LICENSE](../LICENSE). The older Electron icons retain their own notice.
+terms are in the included LICENSE.txt (downloads) and the repository [LICENSE](https://github.com/techiesreviews/camframe/blob/dev/LICENSE). The older Electron icons retain their own notice.
 
 CamFrame rebuilt in Rust with GPUI: the floating camera bubble, for Windows (`camframe-rust.exe`)
 and macOS (`CamFrame Rust.app`, beta until a person has tried it). It is being built feature by
@@ -54,7 +54,7 @@ view cues, layout Scene saves and small-size changes use the same Scene and geom
 controls. Host/Origin checks and the restricted `Origin: null` responses follow 0.9.0. Only one of
 the two CamFrame apps can use that port at a time.
 
-The simpler first-run guide has four tips and progress, no ghost mouse. Skip/Finish is remembered,
+The simpler first-run guide has four tips and progress, Back, Skip and Done, and no ghost mouse. Skip/Done is remembered, and Back returns to the previous tip,
 and Help reopens it. Native reduced-motion and high-contrast settings are checked while running.
 Controls expose names, states and focus to screen readers; Scene changes have a live announcement.
 NVDA and VoiceOver still require a human check.
@@ -122,3 +122,20 @@ hidden title-bar area. `app/src/mac_overlay.rs` makes it borderless and non-acti
 shadow, clear, visible when another app is active, at the pop-up level and on every Space.
 Click-through uses `setIgnoresMouseEvents`. The macOS backend ignores GPUI's drag areas, so a left
 mouse-down on the camera starts a native window drag.
+
+## 0.9.0 parity checks
+
+The native verifiers now exercise the Full screen toolbar button, all four display corners,
+Escape back to Compact and a real corner resize. Native window changes explicitly synchronize
+GPUI's viewport: synchronous native resize callbacks cannot re-enter a window already in use.
+Settings keep 0.9.0's 240 px maximum width, three tabs, selects, switches and sliders, and scroll
+inside the current native window. They do not enlarge the window.
+
+`kit parity <output> <native captures>` captures the unchanged 0.9.0 Electron source beside the
+Rust app on each CI desktop. The test-only `--demo-pattern --settings-panel` values are `camera`,
+`style`, `style-glow`, `style-blur`, `scenes`, `scenes-list`, `small-menu` and `large-menu`.
+The latter two show the 180 px Portrait and 640 px Landscape toolbar. Native text/icon pixel
+checks reject blank selected tabs and missing toolbar icons. Synthetic video sources differ;
+this is not proof of physical-camera quality or exact pixel equality across rendering engines.
+
+Downloads include `LICENSE.txt`. The Mac application also includes it in `Contents/Resources`.

@@ -678,6 +678,11 @@ fn blur_halo(
             for c in 0..3 {
                 pixel[c] = (u32::from(pixel[c]) * 255 / u32::from(pixel[3])).min(255) as u8;
             }
+            // 0.9.0 applies saturate(1.18) after blur. Bytes remain BGRA until upload.
+            let luma = 0.2126 * f32::from(pixel[2]) + 0.7152 * f32::from(pixel[1]) + 0.0722 * f32::from(pixel[0]);
+            for channel in 0..3 {
+                pixel[channel] = (luma + (f32::from(pixel[channel]) - luma) * 1.18).clamp(0.0, 255.0).round() as u8;
+            }
         }
     }
     BgraFrame { width: blurred.width(), height: blurred.height(), bytes: blurred.into_raw() }

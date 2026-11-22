@@ -682,9 +682,6 @@ impl BubbleOverlay {
         if !areas.is_empty() {
             base = geometry::on_screen_base(base, &areas, primary, self.settings.prompter_margin);
         }
-        if self.settings_tab.is_some() {
-            base.height = base.height.max(390);
-        }
         if leaving_full {
             self.move_to(base, window, cx);
         } else {
@@ -736,9 +733,6 @@ impl BubbleOverlay {
                 window.activate_window();
             }
             TrayCommand::Fullscreen => self.set_fullscreen(!self.presentation.fullscreen, window, cx),
-            TrayCommand::Shape(shape) => {
-                self.set_shape(shape, window, cx);
-            }
             TrayCommand::CycleScene => {
                 let current = self.settings.presets.iter().position(|s| s.id == self.active_scene_id);
                 if !self.settings.presets.is_empty() {
@@ -1103,12 +1097,20 @@ impl Render for BubbleOverlay {
             .id("overlay-root")
             .track_focus(&self.focus)
             .relative()
-            .font_family(if cfg!(target_os = "windows") { "Segoe UI" } else { "Arial" })
+            .font_family(if cfg!(target_os = "windows") { "Segoe UI Variable" } else { "Arial" })
             .text_size(px(11.0))
             .line_height(px(16.0))
             .w(px(window_width as f32))
             .h(px((window_height + self.guide_reserve()) as f32))
             .bg(transparent_black())
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    if this.open_select.take().is_some() {
+                        cx.notify();
+                    }
+                }),
+            )
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, _, _, _| {
@@ -1226,7 +1228,7 @@ fn toolbar_button(
         .tab_index(0)
         .border_1()
         .border_color(if selected { rgb(0xeeeeef).into() } else { transparent_black() })
-        .aria_selected(selected)
+        .aria_toggled(if selected { accesskit::Toggled::True } else { accesskit::Toggled::False })
         .focus(|style| style.border_color(rgb(0xffffff)))
         .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
             if !matches!(event.keystroke.key.as_str(), "enter" | "space") {
@@ -1255,7 +1257,7 @@ fn toolbar_button(
         .cursor_pointer()
         .text_color(rgb(0x8b8b90))
         .hover(|style| style.bg(rgb(0x19191b)).text_color(rgb(0xe5e5e5)))
-        .child(svg().path(icon).size(px(TOOLBAR_ICON.min((width - 2.0).max(1.0)))))
+        .child(svg().path(icon).size(px(TOOLBAR_ICON.min((width - 2.0).max(1.0)))).text_color(rgb(0x8b8b90)))
 }
 
 /// The capture size in device pixels and the framing from Preferences.

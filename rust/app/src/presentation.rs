@@ -81,6 +81,11 @@ impl BubbleOverlay {
             )
         };
         self.presentation.fullscreen = fullscreen;
+        // The hover toolbar can disappear after activation. Keep Escape routed to the root.
+        self.focus.focus(window, cx);
+        if fullscreen {
+            window.activate_window();
+        }
         self.presentation.chrome_at = self.now_ms();
         self.presentation.chrome_shown = true;
         self.set_overlay_visible(true, window, cx);

@@ -75,6 +75,9 @@ impl BubbleOverlay {
                 cx.notify();
             }
             Control::Select(key) => {
+                if *key == "camera" && lock_unpoisoned(&self.slot.devices).is_empty() {
+                    return;
+                }
                 self.open_select = if self.open_select == Some(key) { None } else { Some(key) };
                 cx.notify();
             }
@@ -123,7 +126,7 @@ impl BubbleOverlay {
                     this.run_control(&key_control, window, cx);
                 }
             }))
-            .child(label)
+            .when(!label.is_empty(), |button| button.child(label))
     }
     fn select(
         &self,
@@ -131,15 +134,18 @@ impl BubbleOverlay {
         label: &str,
         value: String,
         options: Vec<(String, Value)>,
+        width: f32,
         cx: &mut Context<Self>,
     ) -> gpui::Div {
         let selected_index = options.iter().position(|(label, _)| *label == value).unwrap_or(0);
         let keyboard_options = options.clone();
         let field = self
             .control(format!("{key}-select"), value, false, Control::Select(key), cx)
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .role(gpui::Role::ComboBox)
             .aria_label(label.to_owned())
             .aria_expanded(self.open_select == Some(key))
+            .when(options.is_empty(), |field| field.opacity(0.42).tab_index(-1).cursor(CursorStyle::Arrow))
             .h(px(30.0))
             .w_full()
             .relative()
@@ -160,6 +166,7 @@ impl BubbleOverlay {
             }))
             .child(div().absolute().right(px(8.0)).text_color(rgb(MUTED)).child("⌄"));
         let mut group = div()
+            .relative()
             .flex()
             .flex_col()
             .gap(px(6.0))
@@ -168,22 +175,35 @@ impl BubbleOverlay {
             .child(div().text_color(rgb(MUTED)).child(label.to_owned()))
             .child(div().relative().child(field));
         if self.open_select == Some(key) {
-            // The menu stays inside the scrolling panel, so even a tiny Portrait window can reach
-            // every camera/quality/effect by scrolling. Escape dismisses without changing the value.
+            let menu = div()
+                .id(SharedString::from(format!("{key}-options")))
+                .role(gpui::Role::ListBox)
+                .occlude()
+                .w(px(width))
+                .max_h(px(180.0))
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap(px(1.0))
+                .p(px(3.0))
+                .rounded(px(7.0))
+                .bg(rgb(CONTROL))
+                .border_1()
+                .border_color(rgb(EDGE))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .children(options.into_iter().enumerate().map(|(i, (label, patch))| {
+                    self.control(format!("{key}-option-{i}"), label, i == selected_index, Control::Patch(patch), cx)
+                        .flex_shrink_0()
+                }));
             group = group.child(
-                div()
-                    .id(SharedString::from(format!("{key}-options")))
-                    .flex()
-                    .flex_col()
-                    .gap(px(1.0))
-                    .p(px(3.0))
-                    .rounded(px(7.0))
-                    .bg(rgb(CONTROL))
-                    .border_1()
-                    .border_color(rgb(EDGE))
-                    .children(options.into_iter().enumerate().map(|(i, (label, patch))| {
-                        self.control(format!("{key}-option-{i}"), label, i == selected_index, Control::Patch(patch), cx)
-                    })),
+                gpui::deferred(
+                    gpui::anchored()
+                        .position_mode(gpui::AnchoredPositionMode::Local)
+                        .position(point(px(0.0), px(52.0)))
+                        .snap_to_window()
+                        .child(menu),
+                )
+                .with_priority(1),
             );
         }
         group
@@ -252,7 +272,7 @@ impl BubbleOverlay {
                     .aria_max_numeric_value(f64::from(max))
                     .aria_numeric_value_step(1.0)
                     .tab_index(0)
-                    .h(px(16.0))
+                    .h(px(14.0))
                     .w_full()
                     .relative()
                     .cursor_pointer()
@@ -281,16 +301,13 @@ impl BubbleOverlay {
                         cx.stop_propagation();
                         this.patch_settings(json!({key:next}), window, cx);
                     }))
-                    .child(div().absolute().top(px(6.0)).w_full().h(px(4.0)).rounded_full().bg(rgb(0x3f3f46)))
-                    .child(
-                        div().absolute().top(px(6.0)).w(gpui::relative(share)).h(px(4.0)).rounded_full().bg(rgb(TEXT)),
-                    )
+                    .child(div().absolute().top(px(5.5)).w_full().h(px(3.0)).rounded_full().bg(rgb(0x3f3f46)))
                     .child(
                         div()
                             .absolute()
                             .left(gpui::relative(share))
-                            .ml(px(-6.0))
-                            .top(px(2.0))
+                            .ml(px(6.0 - 12.0 * share))
+                            .top(px(1.0))
                             .size(px(12.0))
                             .rounded_full()
                             .bg(rgb(TEXT)),
@@ -321,7 +338,7 @@ impl BubbleOverlay {
         match self.settings_tab {
             Some(SettingsTab::Camera) => {
                 let cameras = lock_unpoisoned(&self.slot.devices).clone();
-                let mut choices = cameras
+                let choices = cameras
                     .iter()
                     .map(|camera| (camera.label.clone(), json!({"cameraId":camera.id,"cameraLabel":camera.label})))
                     .collect::<Vec<_>>();
@@ -331,10 +348,7 @@ impl BubbleOverlay {
                     .or_else(|| cameras.first())
                     .map(|camera| camera.label.clone())
                     .unwrap_or_else(|| "No cameras found".into());
-                if choices.is_empty() {
-                    choices.push(("No cameras found".into(), json!({"cameraId":"","cameraLabel":""})));
-                }
-                body = body.child(self.select("camera", "Camera", selected, choices, cx));
+                body = body.child(self.select("camera", "Camera", selected, choices, bounds.width as f32 - 22.0, cx));
                 let resolutions = Resolution::ALL
                     .into_iter()
                     .map(|r| {
@@ -359,6 +373,7 @@ impl BubbleOverlay {
                                     })
                                     .into(),
                                     resolutions,
+                                    bounds.width as f32 - 22.0,
                                     cx,
                                 ),
                             ),
@@ -377,7 +392,7 @@ impl BubbleOverlay {
                     body = body.child(error.clone());
                 }
             }
-            Some(SettingsTab::Scenes) => body = self.render_scenes(bounds.width as f32 - 22.0, cx),
+            Some(SettingsTab::Scenes) => body = self.render_scenes(window, bounds.width as f32 - 22.0, cx),
             _ => {
                 let effects =
                     [(FrameEffect::None, "None"), (FrameEffect::Glow, "Glow"), (FrameEffect::Blur, "Progressive blur")];
@@ -387,6 +402,7 @@ impl BubbleOverlay {
                     "Frame effect",
                     selected.into(),
                     effects.into_iter().map(|(effect, name)| (name.into(), json!({"frameEffect":effect}))).collect(),
+                    bounds.width as f32 - 22.0,
                     cx,
                 ));
                 if self.settings.frame_effect == FrameEffect::Glow {
@@ -464,7 +480,12 @@ impl BubbleOverlay {
             .top(px(bounds.y as f32))
             .w(px(bounds.width as f32))
             .max_h(px(bounds.height as f32))
-            .bg(rgb(PANEL))
+            .bg(if self.high_contrast { rgb(PANEL) } else { gpui::rgba(0x0c0c0df5) })
+            .when(!self.high_contrast, |panel| {
+                panel.shadow(vec![
+                    gpui::BoxShadow::new(px(0.0), px(12.0), gpui::rgba(0x0000006b).into()).blur_radius(px(32.0)),
+                ])
+            })
             .border_1()
             .border_color(rgb(if self.high_contrast { TEXT } else { 0x252526 }))
             .rounded(px(12.0))

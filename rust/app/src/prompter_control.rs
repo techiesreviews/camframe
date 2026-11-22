@@ -168,10 +168,7 @@ impl BubbleOverlay {
             self.scene_edits.clear_change();
         }
         self.set_overlay_visible(true, window, cx);
-        let mut bounds = geometry::window_size(self.settings.shape, self.size()).at(plan.position);
-        if self.settings_tab.is_some() {
-            bounds.height = bounds.height.max(390);
-        }
+        let bounds = geometry::window_size(self.settings.shape, self.size()).at(plan.position);
         self.move_to(bounds, window, cx);
         self.sync_capture_view(window);
         self.save_now();

@@ -3,9 +3,10 @@ use super::*;
 use camframe_core::{scenes, settings::SceneView};
 use settings_panel::Control;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum SceneAction {
     Apply(usize),
+    Focus(usize),
     Save,
     Rename(usize),
     Delete(usize),
@@ -19,6 +20,32 @@ pub(super) enum SceneAction {
     CancelEdit,
 }
 
+fn scene_row_key(
+    key: &str,
+    modifiers: gpui::Modifiers,
+    renaming: bool,
+    index: usize,
+    count: usize,
+) -> Option<SceneAction> {
+    if renaming {
+        return None;
+    }
+    Some(match key {
+        "f2" => SceneAction::Rename(index),
+        "delete" | "backspace" => SceneAction::Delete(index),
+        "enter" | "space" => SceneAction::Apply(index),
+        "up" | "left" | "down" | "right" => {
+            let delta = if matches!(key, "up" | "left") { -1 } else { 1 };
+            if modifiers.alt {
+                SceneAction::Move(index, delta)
+            } else {
+                SceneAction::Focus((index as i32 + delta).clamp(0, count.saturating_sub(1) as i32) as usize)
+            }
+        }
+        "z" if modifiers.control || modifiers.platform => SceneAction::Undo,
+        _ => return None,
+    })
+}
 impl BubbleOverlay {
     pub(super) fn apply_scene_at(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.finish_guide(window, cx);
@@ -66,7 +93,10 @@ impl BubbleOverlay {
                 self.save_now();
                 self.update_tray_scenes();
             }
-            Err(error) => self.scene_status = error,
+            Err(error) => {
+                self.scene_status_action = None;
+                self.scene_status = error;
+            }
         }
         cx.notify();
     }
@@ -74,6 +104,11 @@ impl BubbleOverlay {
     pub(super) fn run_scene_action(&mut self, action: SceneAction, window: &mut Window, cx: &mut Context<Self>) {
         match action {
             SceneAction::Apply(i) => self.apply_scene_at(i, window, cx),
+            SceneAction::Focus(i) => {
+                if let Some(focus) = self.scene_focus.get(i) {
+                    focus.focus(window, cx);
+                }
+            }
             SceneAction::Save => {
                 let name = self.scene_input.read(cx).text.clone();
                 self.save_scene_name(&name, window, cx);
@@ -81,6 +116,8 @@ impl BubbleOverlay {
             SceneAction::Rename(i) => {
                 if let Some(scene) = self.settings.presets.get(i) {
                     self.scene_rename = Some(scene.id.clone());
+                    self.scene_status.clear();
+                    self.scene_status_action = None;
                     let name = scene.name.clone();
                     self.scene_input.update(cx, |input, cx| input.set_text(name, cx));
                     self.scene_input.focus_handle(cx).focus(window, cx);
@@ -252,9 +289,10 @@ impl BubbleOverlay {
             .p(px(0.0))
             .justify_center()
             .bg(transparent_black())
+            .focus(|s| s.opacity(1.0).border_color(rgb(0xfb923c)))
             .child(svg().path(icon).size(px(14.0)).text_color(rgb(0xa1a1aa)))
     }
-    pub(super) fn render_scenes(&self, available: f32, cx: &mut Context<Self>) -> gpui::Div {
+    pub(super) fn render_scenes(&self, window: &Window, available: f32, cx: &mut Context<Self>) -> gpui::Div {
         let grid = self.settings.scene_view == SceneView::Grid;
         let now = self.now_ms();
         let mut list = div().flex().flex_wrap().gap(px(if grid { 6.0 } else { 2.0 }));
@@ -311,7 +349,9 @@ impl BubbleOverlay {
             let i = slot - usize::from(removal.is_some_and(|(_, index, _)| slot > index));
             let scene = &self.settings.presets[i];
             let active = scene.id == self.active_scene_id;
+            let focused = self.scene_focus[i].contains_focused(window, cx);
             let undo = self.scene_edits.change_remaining(&scene.id, now);
+            let saved_flash = undo.is_some_and(|remaining| remaining > 8200);
             let scene_id = scene.id.clone();
             let current = geometry::window_size(self.settings.shape, self.size())
                 .at(self.settings.position.unwrap_or(primary.origin()));
@@ -320,7 +360,7 @@ impl BubbleOverlay {
             let camera = geometry::camera_rect_for(
                 geometry::window_size(opening.shape, opening.size).at(opening.position.unwrap_or(area.origin())),
             );
-            let screen_width = (row_width - 10.0).max(1.0);
+            let screen_width = (row_width - 12.0).max(1.0);
             let screen_height = screen_width * 9.0 / 16.0;
             let tile = div()
                 .relative()
@@ -345,13 +385,29 @@ impl BubbleOverlay {
                         .left(px((camera.x - area.x) as f32 / area.width.max(1) as f32 * screen_width))
                         .top(px((camera.y - area.y) as f32 / area.height.max(1) as f32 * screen_height))
                         .w(px(camera.width as f32 / area.width.max(1) as f32 * screen_width))
-                        .h(px(camera.height as f32 / area.height.max(1) as f32 * screen_height))
+                        .h(px(camera.height as f32 / area.width.max(1) as f32 * screen_width))
                         .rounded(px(geometry::corner_radius(opening.shape, opening.size) as f32
                             / area.width.max(1) as f32
                             * screen_width))
-                        .border(px(opening.border_width as f32 / area.width.max(1) as f32 * screen_width))
+                        .border(px(if opening.border_width >= 6 {
+                            2.0
+                        } else if opening.border_width > 0 {
+                            1.0
+                        } else {
+                            0.0
+                        }))
                         .border_color(rgb(0xffffff))
-                        .bg(rgb(0x71717a)),
+                        .bg(rgb(0x71717a))
+                        .when(opening.frame_effect == camframe_core::settings::FrameEffect::Glow, |camera| {
+                            camera.shadow(vec![
+                                gpui::BoxShadow::new(
+                                    px(0.0),
+                                    px(0.0),
+                                    rgb(hex_color(&opening.effect_color).unwrap_or(0xfb923c)).into(),
+                                )
+                                .blur_radius(px((opening.glow_spread as f32 / 2.0).round().max(3.0))),
+                            ])
+                        }),
                 );
             let badge = div()
                 .size(px(18.0))
@@ -368,8 +424,8 @@ impl BubbleOverlay {
                 } else {
                     0x18181b
                 }))
-                .text_color(rgb(if active || undo.is_some() { 0x0c0c0d } else { 0xa1a1aa }))
-                .child(if undo.is_some() { "✓".to_string() } else { (i + 1).to_string() });
+                .text_color(rgb(if active || saved_flash { 0x0c0c0d } else { 0xa1a1aa }))
+                .child(if saved_flash { "✓".to_string() } else { (i + 1).to_string() });
             let mut row = div()
                 .id(SharedString::from(format!("scene-row-{}", scene.id)))
                 .relative()
@@ -394,37 +450,31 @@ impl BubbleOverlay {
                 .focus(|s| s.border_color(rgb(0xfb923c)))
                 .hover(|s| s.bg(rgb(0x1c1c1f)))
                 .cursor_pointer()
-                .on_click(cx.listener(move |this, _, window, cx| this.apply_scene_at(i, window, cx)))
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    if this.scene_rename.as_deref() != this.settings.presets.get(i).map(|s| s.id.as_str()) {
+                        this.apply_scene_at(i, window, cx);
+                    }
+                }))
                 .on_key_down(cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
-                    let key = event.keystroke.key.as_str();
-                    let action = match key {
-                        "f2" => SceneAction::Rename(i),
-                        "delete" | "backspace" => SceneAction::Delete(i),
-                        "enter" | "space" => SceneAction::Apply(i),
-                        "up" | "left" | "down" | "right" => {
-                            let delta = if matches!(key, "up" | "left") { -1 } else { 1 };
-                            if event.keystroke.modifiers.alt {
-                                SceneAction::Move(i, delta)
-                            } else {
-                                let next = (i as i32 + delta)
-                                    .clamp(0, this.settings.presets.len().saturating_sub(1) as i32)
-                                    as usize;
-                                this.scene_focus[next].focus(window, cx);
-                                cx.stop_propagation();
-                                return;
-                            }
-                        }
-                        "z" if event.keystroke.modifiers.control || event.keystroke.modifiers.platform => {
-                            SceneAction::Undo
-                        }
-                        _ => return,
+                    let Some(action) = scene_row_key(
+                        event.keystroke.key.as_str(),
+                        event.keystroke.modifiers,
+                        this.scene_rename.as_deref() == this.settings.presets.get(i).map(|s| s.id.as_str()),
+                        i,
+                        this.settings.presets.len(),
+                    ) else {
+                        return;
                     };
                     cx.stop_propagation();
                     this.run_scene_action(action, window, cx);
                 }))
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(move |this, _, _, _| this.scene_drag = Some(scene_id.clone())),
+                    cx.listener(move |this, _, _, _| {
+                        if this.scene_rename.as_deref() != Some(scene_id.as_str()) {
+                            this.scene_drag = Some(scene_id.clone());
+                        }
+                    }),
                 )
                 .on_mouse_up(
                     MouseButton::Left,
@@ -440,32 +490,41 @@ impl BubbleOverlay {
                     }),
                 );
             if self.scene_rename.as_deref() == Some(scene.id.as_str()) {
-                row = row.flex().flex_col().gap(px(4.0)).p(px(5.0)).child(self.scene_input.clone()).child(
-                    div()
-                        .flex()
-                        .gap(px(3.0))
-                        .child(self.scene_icon(
-                            format!("rename-ok-{}", scene.id),
-                            "Save name".into(),
-                            "icons/check.svg",
-                            SceneAction::Save,
-                            cx,
-                        ))
-                        .child(self.scene_icon(
-                            format!("rename-cancel-{}", scene.id),
-                            "Cancel rename".into(),
-                            "icons/x.svg",
-                            SceneAction::CancelEdit,
-                            cx,
-                        ))
-                        .child(self.scene_icon(
-                            format!("delete-{}", scene.id),
-                            "Delete Scene".into(),
-                            "icons/trash.svg",
-                            SceneAction::Delete(i),
-                            cx,
-                        )),
-                );
+                row = row
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.0))
+                    .p(px(5.0))
+                    .child(self.scene_input.clone())
+                    .when(!self.scene_status.is_empty() && self.scene_status_action.is_none(), |row| {
+                        row.child(div().text_color(rgb(0xf97316)).child(self.scene_status.clone()))
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(3.0))
+                            .child(self.scene_icon(
+                                format!("rename-ok-{}", scene.id),
+                                "Save name".into(),
+                                "icons/check.svg",
+                                SceneAction::Save,
+                                cx,
+                            ))
+                            .child(self.scene_icon(
+                                format!("rename-cancel-{}", scene.id),
+                                "Cancel rename".into(),
+                                "icons/x.svg",
+                                SceneAction::CancelEdit,
+                                cx,
+                            ))
+                            .child(self.scene_icon(
+                                format!("delete-{}", scene.id),
+                                "Delete Scene".into(),
+                                "icons/trash.svg",
+                                SceneAction::Delete(i),
+                                cx,
+                            )),
+                    );
             } else {
                 let name = div()
                     .min_w_0()
@@ -494,15 +553,15 @@ impl BubbleOverlay {
                             .top(px(7.0))
                             .right(px(7.0))
                             .bg(rgb(0x0c0c0d))
-                            .opacity(0.0)
+                            .opacity(if focused { 1.0 } else { 0.0 })
                             .group_hover("scene", |s| s.opacity(1.0)),
                         );
                 } else {
                     let shape = match opening.shape {
                         camframe_core::settings::Shape::Circle => "Circle",
-                        camframe_core::settings::Shape::Rounded => "Square",
+                        camframe_core::settings::Shape::Rounded => "Rounded",
                         camframe_core::settings::Shape::Portrait => "Portrait",
-                        camframe_core::settings::Shape::Landscape => "Wide",
+                        camframe_core::settings::Shape::Landscape => "Landscape",
                     };
                     row = row
                         .flex()
@@ -512,16 +571,42 @@ impl BubbleOverlay {
                         .pl(px(14.0))
                         .pr(px(4.0))
                         .child(badge)
-                        .child(
-                            div().flex_1().min_w_0().child(name).child(
-                                div()
-                                    .text_size(px(10.0))
-                                    .line_height(px(13.0))
-                                    .text_color(rgb(0x71717a))
-                                    .truncate()
-                                    .child(format!("{shape} · {} px", opening.size)),
+                        .child(div().flex_1().min_w_0().child(name).child(
+                            div().text_size(px(10.0)).line_height(px(13.0)).text_color(rgb(0x71717a)).truncate().child(
+                                {
+                                    let third = |start: i64, length: i64, total: i64| {
+                                        let centre = (start as f64 + length as f64 / 2.0) / total.max(1) as f64;
+                                        if centre < 1.0 / 3.0 {
+                                            0
+                                        } else if centre > 2.0 / 3.0 {
+                                            2
+                                        } else {
+                                            1
+                                        }
+                                    };
+                                    let across = third(camera.x - area.x, camera.width, area.width);
+                                    let down = third(camera.y - area.y, camera.height, area.height);
+                                    let place = match (down, across) {
+                                        (0, 0) => "Top left",
+                                        (0, 1) => "Top",
+                                        (0, 2) => "Top right",
+                                        (1, 0) => "Left",
+                                        (1, 1) => "Center",
+                                        (1, 2) => "Right",
+                                        (2, 0) => "Bottom left",
+                                        (2, 1) => "Bottom",
+                                        _ => "Bottom right",
+                                    };
+                                    let effect = match opening.frame_effect {
+                                        camframe_core::settings::FrameEffect::Glow => " · Glow",
+                                        camframe_core::settings::FrameEffect::Blur => " · Blur",
+                                        _ => "",
+                                    };
+                                    let border = if opening.border_width > 0 { " · Border" } else { "" };
+                                    format!("{shape} · {} · {place}{effect}{border}", opening.size)
+                                },
                             ),
-                        )
+                        ))
                         .child(
                             div()
                                 .absolute()
@@ -530,7 +615,7 @@ impl BubbleOverlay {
                                 .flex()
                                 .gap(px(1.0))
                                 .bg(rgb(0x1c1c1f))
-                                .opacity(0.0)
+                                .opacity(if focused { 1.0 } else { 0.0 })
                                 .group_hover("scene", |s| s.opacity(1.0))
                                 .child(self.scene_icon(
                                     format!("rename-{}", scene.id),
@@ -606,21 +691,79 @@ impl BubbleOverlay {
                 list = list.child(div().text_color(rgb(0xf97316)).child(self.scene_status.clone()));
             }
         } else {
-            list = list.child(
-                self.control(
-                    "save-scene".into(),
-                    if self.settings.presets.len() >= 6 { "Full" } else { "Save look" }.into(),
-                    false,
-                    Control::Scene(SceneAction::SaveOpen),
-                    cx,
-                )
+            let full = self.settings.presets.len() >= 6;
+            let mut add = self
+                .control("save-scene".into(), String::new(), false, Control::Scene(SceneAction::SaveOpen), cx)
                 .w(px(if grid { row_width } else { available }))
-                .h(px(if grid { 82.0 } else { 40.0 }))
-                .justify_center()
+                .h(px(if grid { (row_width - 12.0) * 9.0 / 16.0 + 35.0 } else { 40.0 }))
+                .p(px(5.0))
+                .gap(px(5.0))
                 .bg(transparent_black())
                 .border_1()
+                .border_dashed()
                 .border_color(rgb(0x343438))
-                .child(svg().path("icons/plus.svg").size(px(14.0))),
+                .when(full, |button| button.opacity(0.5).tab_index(-1).cursor(CursorStyle::Arrow));
+            if grid {
+                let live_bounds = self.presentation.compact.unwrap_or_else(|| self.guide_base_bounds(window));
+                let area = scenes::work_area_at(live_bounds.origin(), &areas, primary);
+                let camera = geometry::camera_rect_for(
+                    geometry::window_size(self.settings.shape, self.size()).at(live_bounds.origin()),
+                );
+                let width = (row_width - 12.0).max(1.0);
+                add = add.flex_col().items_start().child(
+                    div()
+                        .relative()
+                        .w(px(width))
+                        .h(px(width * 9.0 / 16.0))
+                        .rounded(px(5.0))
+                        .overflow_hidden()
+                        .bg(rgb(0x0f0f11))
+                        .child(
+                            div()
+                                .absolute()
+                                .left(gpui::relative(0.08))
+                                .top(gpui::relative(0.14))
+                                .w(gpui::relative(0.46))
+                                .h(gpui::relative(0.26))
+                                .rounded(px(2.0))
+                                .bg(rgb(0x1d1d1f)),
+                        )
+                        .child(
+                            div()
+                                .absolute()
+                                .left(px((camera.x - area.x) as f32 / area.width.max(1) as f32 * width))
+                                .top(px((camera.y - area.y) as f32 / area.height.max(1) as f32 * width * 9.0 / 16.0))
+                                .w(px(camera.width as f32 / area.width.max(1) as f32 * width))
+                                .h(px(camera.height as f32 / area.width.max(1) as f32 * width))
+                                .rounded(px(geometry::corner_radius(self.settings.shape, self.size()) as f32
+                                    / area.width.max(1) as f32
+                                    * width))
+                                .bg(rgb(0xa1a1aa)),
+                        ),
+                );
+            }
+            list = list.child(
+                add.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(5.0))
+                        .child(
+                            div()
+                                .size(px(18.0))
+                                .flex_shrink_0()
+                                .border_1()
+                                .border_dashed()
+                                .border_color(rgb(0x52525b))
+                                .rounded(px(5.0))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_size(px(10.0))
+                                .child((self.settings.presets.len() + 1).to_string()),
+                        )
+                        .child(if full { "Full" } else { "Save look" }),
+                ),
             );
         }
         let mut body = div()
@@ -664,7 +807,15 @@ impl BubbleOverlay {
             files = files.child(
                 self.control(
                     label.into(),
-                    if status { self.scene_status.clone() } else { label.into() },
+                    if status {
+                        if self.scene_status.starts_with("Imported") || self.scene_status == "Exported" {
+                            self.scene_status.clone()
+                        } else {
+                            format!("Not {}", label.to_lowercase() + "ed")
+                        }
+                    } else {
+                        label.into()
+                    },
                     false,
                     Control::Scene(action),
                     cx,
@@ -674,10 +825,27 @@ impl BubbleOverlay {
                 .justify_center()
                 .gap(px(5.0))
                 .text_size(px(10.0))
-                .child(svg().path(if status { "icons/check.svg" } else { icon }).size(px(13.0))),
+                .child(
+                    svg().path(if status { "icons/check.svg" } else { icon }).size(px(13.0)).text_color(rgb(0xa1a1aa)),
+                ),
             );
         }
         body = body.child(files);
         body
+    }
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+    #[test]
+    fn typing_a_scene_name_never_runs_row_commands() {
+        for key in ["space", "backspace", "delete", "up", "down", "f2", "z"] {
+            let modifiers = gpui::Modifiers { control: true, ..Default::default() };
+            assert_eq!(scene_row_key(key, modifiers, true, 1, 3), None, "{key}");
+        }
+        assert_eq!(scene_row_key("space", gpui::Modifiers::default(), false, 1, 3), Some(SceneAction::Apply(1)));
+        assert_eq!(scene_row_key("up", gpui::Modifiers::default(), false, 0, 3), Some(SceneAction::Focus(0)));
+        assert_eq!(scene_row_key("down", gpui::Modifiers::default(), false, 2, 3), Some(SceneAction::Focus(2)));
     }
 }

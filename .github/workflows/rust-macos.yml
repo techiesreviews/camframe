@@ -64,6 +64,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          cache-on-failure: true
 
       - name: Make sure the Metal shader compiler is available
         run: |
@@ -118,12 +119,13 @@ jobs:
           if-no-files-found: error
 
       - name: Check native settings labels
-        run: rust/target/release/check-panel-text verification-macos/camera-panel.png verification-macos/style-panel.png verification-macos/scenes-panel.png
+        run: rust/target/release/check-panel-text verification-macos/camera-panel.png verification-macos/style-panel.png verification-macos/scenes-panel.png verification-macos/style-glow-panel.png verification-macos/style-blur-panel.png verification-macos/scenes-list-panel.png
 
       - name: Package the unsigned app
         run: |
           app="dist/CamFrame Rust.app"
-          mkdir -p "$app/Contents/MacOS"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp LICENSE "$app/Contents/Resources/LICENSE.txt"
           cp rust/target/release/camframe-rust "$app/Contents/MacOS/camframe-rust"
           cat > "$app/Contents/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -155,6 +157,7 @@ jobs:
           ./verify-macos --exe "$app/Contents/MacOS/camframe-rust" --out verification-macos/packaged-app
           rust/target/release/check-panel-text verification-macos/packaged-app/camera-panel.png
           cp rust/README.md dist/README.txt
+          cp LICENSE dist/LICENSE.txt
           (cd dist && ditto -c -k --keepParent "CamFrame Rust.app" "CamFrame-Rust-macOS-${{ matrix.arch }}-beta.zip")
           mkdir -p dist/dmg
           cp -R "$app" dist/dmg/

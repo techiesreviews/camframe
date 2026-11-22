@@ -212,18 +212,23 @@ impl Render for TextField {
             .rounded(px(7.0))
             .bg(rgb(0x202023))
             .text_color(rgb(0xf4f4f5))
-            .text_size(px(11.0))
+            .text_size(px(if self.label == "Effect color" { 10.0 } else { 11.0 }))
+            .when(self.label == "Effect color", |field| {
+                field.font_family(if cfg!(target_os = "windows") { "Cascadia Mono" } else { "Menlo" })
+            })
             .px(px(7.0))
-            .h(px(28.0))
+            .h(px(if self.label == "Effect color" { 30.0 } else { 28.0 }))
             .flex()
             .items_center()
             .overflow_hidden()
             .focus(|s| s.border_color(rgb(0xffffff)))
             .cursor_text()
+            .on_click(|_, _, cx| cx.stop_propagation())
             .on_key_down(cx.listener(Self::key))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
                     this.focus.focus(window, cx);
                     if let (Some(line), Some(bounds)) = (&this.line, this.bounds) {
                         let index = line.closest_index_for_x(event.position.x - bounds.left());
@@ -241,7 +246,8 @@ impl Render for TextField {
                     move |bounds, _, window, cx| {
                         let field = entity.read(cx);
                         let focus = field.focus.clone();
-                        let text = field.text.clone();
+                        let text =
+                            if field.label == "Effect color" { field.text.to_uppercase() } else { field.text.clone() };
                         let selection = field.selection.clone();
                         let style = window.text_style();
                         let run = TextRun {
@@ -252,7 +258,12 @@ impl Render for TextField {
                             underline: None,
                             strikethrough: None,
                         };
-                        let line = window.text_system().shape_line(text.into(), px(11.0), &[run], None);
+                        let line = window.text_system().shape_line(
+                            text.into(),
+                            px(if field.label == "Effect color" { 10.0 } else { 11.0 }),
+                            &[run],
+                            None,
+                        );
                         window.handle_input(&focus, ElementInputHandler::new(bounds, entity.clone()), cx);
                         if focus.is_focused(window) {
                             let x = line.x_for_index(selection.start);

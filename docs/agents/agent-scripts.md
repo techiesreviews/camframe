@@ -22,3 +22,13 @@ The launcher `scripts/agents/kit` is the shared kit's own `launcher/kit`, copied
 GitHub runs `.github/workflows/checks.yml` (`npm ci` without the Electron binary, then `npm test`, Node 24, no secrets) on every pull request and on every push to `dev`; the desktop build in `build-desktop.yml` is untouched and still only runs on `v*` tags and by hand; the real-Electron smoke test runs only there (on Windows), never on a pull request.
 
 The real-Electron smoke test (`npm run test:electron`, `scripts/electron-smoke.mjs`) needs `node_modules` (Electron and `playwright-core`, from `npm ci`) and a display; it is not wrapped by the kit. Its Prompter link test uses the real port `47833` and fails at once when that port is busy (quit a running CamFrame first). `.scratch/` is git-ignored. Do not use `kit pr`, `kit slice` or other publishing commands unless the lead authorises it.
+
+## Rust parity captures
+
+`kit parity <output-directory> <native-screenshot-directory>` runs the unchanged Electron 0.9.0
+source through Electron/Playwright, then places its captures beside the real GPUI desktop captures.
+It requires a Windows or Mac desktop, `npm ci`, the `v0.9.0` tag, and the release `compare-parity`
+binary. It refuses a changed Electron source baseline. Both Rust CI workflows run it; the artifacts
+include the bubble, fullscreen, small/large menus, Camera, Style (None/Glow/Blur), and Scenes
+(grid/list). The two synthetic video sources differ. This is visual evidence, not a pixel equality
+assertion or a physical camera check. `kit shots` continues to check the Electron baseline only.

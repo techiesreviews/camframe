@@ -344,7 +344,7 @@ try {
     # Full screen must work from the real toolbar and cover the display, then Escape restores
     # the exact compact bounds. Earlier checks exercised neither path.
     Refresh-Rect
-    $compactRect = $rect
+    $compactRect = @($rect.Left, $rect.Top, $rect.Right, $rect.Bottom)
     Move-To 162 228
     Move-To 105 44
     [Win32Verify]::mouse_event(0x02, 0, 0, 0, [UIntPtr]::Zero)
@@ -365,8 +365,8 @@ try {
     [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
     Start-Sleep -Milliseconds 700
     Refresh-Rect
-    if ($rect.Left -ne $compactRect.Left -or $rect.Top -ne $compactRect.Top -or
-        $rect.Right -ne $compactRect.Right -or $rect.Bottom -ne $compactRect.Bottom) {
+    if ($rect.Left -ne $compactRect[0] -or $rect.Top -ne $compactRect[1] -or
+        $rect.Right -ne $compactRect[2] -or $rect.Bottom -ne $compactRect[3]) {
         $failures += 'Escape did not restore the original compact window bounds'
     }
 

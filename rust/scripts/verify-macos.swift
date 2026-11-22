@@ -452,6 +452,7 @@ func checks() -> Int32 {
 
     // Full screen through the real toolbar, including all four drawable corners. Then Escape
     // must restore the same compact bounds without opening a second camera/window.
+    refresh()
     let compact = bubble.bounds
     let centre = cameraCenter(compact)
     moveMouse(global(centre.0, centre.1))
@@ -471,7 +472,8 @@ func checks() -> Int32 {
     pressKey(0x35, pid: pid)
     sleepMs(400)
     refresh()
-    if abs(bubble.bounds.width - compact.width) > 2 || abs(bubble.bounds.height - compact.height) > 2 {
+    if abs(bubble.bounds.width - compact.width) > 2 || abs(bubble.bounds.height - compact.height) > 2 ||
+       abs(bubble.bounds.minX - compact.minX) > 2 || abs(bubble.bounds.minY - compact.minY) > 2 {
         failures.append("Escape did not restore compact bounds")
     }
 

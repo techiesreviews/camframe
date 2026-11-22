@@ -49,6 +49,9 @@ impl BubbleOverlay {
         }
         let base = self.guide_base_bounds(window);
         self.guide_step = None;
+        self.settings_tab = None;
+        self.open_select = None;
+        self.framing = false;
         self.settings.completed_onboarding_version = 1;
         if !self.pinned_position {
             self.settings.position = Some(base.origin());
@@ -73,6 +76,7 @@ impl BubbleOverlay {
     pub(super) fn back_guide(&mut self, cx: &mut Context<Self>) {
         let step = self.guide_step.unwrap_or(0).saturating_sub(1);
         self.guide_step = Some(step);
+        self.announcement = format!("{}. Tip {} of 4.", TIPS[step].0, step + 1);
         self.settings_tab = if step == 0 { Some(SettingsTab::Camera) } else { None };
         self.framing = false;
         cx.notify();

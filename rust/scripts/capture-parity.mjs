@@ -30,8 +30,8 @@ for (const [name, patch, tab] of scenarios) {
   const userData = join(out, `electron-${name}-settings`)
   await mkdir(userData, { recursive: true })
   await writeFile(join(userData, 'preferences.json'), JSON.stringify({
-    schemaVersion: 15,
-    settings: { ...preferencesFromDocument(null), ...patch, position: { x: 200, y: 150 }, completedOnboardingVersion: 1 },
+    ...preferencesFromDocument(null), ...patch, schemaVersion: 15,
+    position: { x: 200, y: 150 }, completedOnboardingVersion: 1,
   }))
   const env = { ...process.env, CAMFRAME_E2E: '1', CAMFRAME_E2E_USER_DATA_DIR: userData }
   delete env.ELECTRON_RUN_AS_NODE

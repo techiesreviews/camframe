@@ -5,6 +5,10 @@ fn main() -> anyhow::Result<()> {
     anyhow::ensure!(args.len() == 4, "usage: compare-parity <electron.png> <rust.png> <out.png> <padding>");
     let left = image::open(&args[0])?.to_rgba8();
     let right = image::open(&args[1])?.to_rgba8();
+    for (name, image) in [("Electron", &left), ("Rust", &right)] {
+        let drawn = image.pixels().filter(|p| p[3] > 0 && !(p[0] >= 240 && p[1] <= 15 && p[2] >= 240)).count();
+        anyhow::ensure!(drawn > 100, "{name} capture is blank");
+    }
     let padding: u32 = args[3].parse()?;
     let left_width = left.width() + padding * 2;
     let left_height = left.height() + padding * 2;
