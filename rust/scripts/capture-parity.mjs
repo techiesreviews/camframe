@@ -27,6 +27,7 @@ const scenarios = [
 ]
 const manifest = []
 for (const [name, patch, tab] of scenarios) {
+  console.log(`parity: ${name}`)
   const userData = join(out, `electron-${name}-settings`)
   await mkdir(userData, { recursive: true })
   await writeFile(join(userData, 'preferences.json'), JSON.stringify({

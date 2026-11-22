@@ -84,6 +84,7 @@ impl AssetSource for Icons {
             "icons/x.svg" => include_bytes!("../assets/icons/x.svg"),
             "icons/download-simple.svg" => include_bytes!("../assets/icons/download-simple.svg"),
             "icons/upload-simple.svg" => include_bytes!("../assets/icons/upload-simple.svg"),
+            "icons/warning.svg" => include_bytes!("../assets/icons/warning.svg"),
             "icons/x-circle.svg" => include_bytes!("../assets/icons/x-circle.svg"),
             "icons/circle.svg" => include_bytes!("../assets/icons/circle.svg"),
             "icons/corners-in.svg" => include_bytes!("../assets/icons/corners-in.svg"),
@@ -220,6 +221,7 @@ pub struct BubbleOverlay {
     scene_rename: Option<String>,
     scene_status: String,
     scene_status_until: u64,
+    scene_status_ok: bool,
     scene_status_action: Option<&'static str>,
     scene_save_open: bool,
     scene_drag: Option<String>,
@@ -399,6 +401,7 @@ impl BubbleOverlay {
             scene_rename: None,
             scene_status: String::new(),
             scene_status_until: 0,
+            scene_status_ok: false,
             scene_status_action: None,
             scene_save_open: false,
             scene_drag: None,
@@ -1137,6 +1140,16 @@ impl Render for BubbleOverlay {
             .on_action(cx.listener(|this, _: &ShapePortrait, window, cx| this.set_shape(Shape::Portrait, window, cx)))
             .on_action(cx.listener(|this, _: &ShapeLandscape, window, cx| this.set_shape(Shape::Landscape, window, cx)))
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if event.keystroke.key == "z"
+                    && (event.keystroke.modifiers.control || event.keystroke.modifiers.platform)
+                    && this.settings_tab == Some(SettingsTab::Scenes)
+                    && this.scene_rename.is_none()
+                    && !this.scene_save_open
+                {
+                    cx.stop_propagation();
+                    this.run_scene_action(scenes_panel::SceneAction::Undo, window, cx);
+                    return;
+                }
                 if event.keystroke.key == "escape" {
                     if this.guide_step.is_some() {
                         this.finish_guide(window, cx);
@@ -1256,8 +1269,15 @@ fn toolbar_button(
         .rounded(px(8.0))
         .cursor_pointer()
         .text_color(rgb(0x8b8b90))
+        .group("toolbar-button")
         .hover(|style| style.bg(rgb(0x19191b)).text_color(rgb(0xe5e5e5)))
-        .child(svg().path(icon).size(px(TOOLBAR_ICON.min((width - 2.0).max(1.0)))).text_color(rgb(0x8b8b90)))
+        .child(
+            svg()
+                .path(icon)
+                .size(px(TOOLBAR_ICON.min((width - 2.0).max(1.0))))
+                .text_color(rgb(if selected { 0xe8e8e8 } else { 0x8b8b90 }))
+                .group_hover("toolbar-button", |s| s.text_color(rgb(0xe5e5e5))),
+        )
 }
 
 /// The capture size in device pixels and the framing from Preferences.

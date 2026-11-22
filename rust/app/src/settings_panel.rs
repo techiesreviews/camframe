@@ -306,7 +306,7 @@ impl BubbleOverlay {
                         div()
                             .absolute()
                             .left(gpui::relative(share))
-                            .ml(px(6.0 - 12.0 * share))
+                            .ml(px(-12.0 * share))
                             .top(px(1.0))
                             .size(px(12.0))
                             .rounded_full()
@@ -323,8 +323,7 @@ impl BubbleOverlay {
             self.presentation.fullscreen,
             self.guide_reserve(),
         );
-        let share = ((x - bounds.x as f64 - 11.0) / (bounds.width as f64 - 22.0)).clamp(0.0, 1.0);
-        self.patch_settings(json!({key:(f64::from(min)+share*f64::from(max-min)).round() as u32}), window, cx);
+        self.patch_settings(json!({key:camframe_core::chrome::slider_value(bounds,x,min,max)}), window, cx);
     }
     pub(super) fn render_settings(&self, window: &Window, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let native = rect_of(window.bounds());

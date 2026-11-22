@@ -150,6 +150,12 @@ impl BubbleOverlay {
                 }
             }
             SceneAction::Undo => {
+                if !self.scene_edits.can_undo_change(&self.active_scene_id, self.now_ms())
+                    && self.scene_edits.can_undo_delete(self.now_ms())
+                {
+                    self.run_scene_action(SceneAction::UndoDelete, window, cx);
+                    return;
+                }
                 if let Some(settings) =
                     self.scene_edits.undo_change(&self.settings, &self.active_scene_id, self.now_ms())
                 {
@@ -186,6 +192,8 @@ impl BubbleOverlay {
             SceneAction::SaveOpen => {
                 if self.settings.presets.len() < 6 {
                     self.scene_save_open = true;
+                    self.scene_status.clear();
+                    self.scene_status_action = None;
                     self.scene_input.update(cx, |input, cx| input.set_text(String::new(), cx));
                     self.scene_input.focus_handle(cx).focus(window, cx);
                 }
@@ -233,12 +241,17 @@ impl BubbleOverlay {
                         this.settings = imported.library.settings;
                         this.sync_color_input(cx);
                         this.scene_status = format!("Imported {}", imported.imported_count);
+                        this.scene_status_ok = true;
                         this.scene_edits.clear_delete();
                         this.save_now();
                         this.update_tray_scenes();
                     }
-                    Err(error) => this.scene_status = error,
+                    Err(error) => {
+                        this.scene_status = error;
+                        this.scene_status_ok = false;
+                    }
                 }
+                this.announcement = this.scene_status.clone();
                 this.scene_status_action = Some("Import");
                 this.scene_status_until = this.now_ms() + 2400;
                 cx.notify();
@@ -253,14 +266,17 @@ impl BubbleOverlay {
         );
         let text =
             serde_json::to_string_pretty(&scenes::scene_export(&self.settings)).expect("Scene export serializes");
+        let exported_count = self.settings.presets.len();
         cx.spawn_in(window, async move |entity, cx| {
             let Ok(Ok(Some(path))) = choose.await else { return };
             let result = std::fs::write(path, text);
             let _ = entity.update_in(cx, |this, _, cx| {
+                this.scene_status_ok = result.is_ok();
                 this.scene_status = match result {
-                    Ok(()) => "Exported".into(),
-                    Err(_) => "Not exported".into(),
+                    Ok(()) => format!("Exported {exported_count}"),
+                    Err(error) => format!("Export failed: {error}"),
                 };
+                this.announcement = this.scene_status.clone();
                 this.scene_status_action = Some("Export");
                 this.scene_status_until = this.now_ms() + 2400;
                 cx.notify();
@@ -808,7 +824,7 @@ impl BubbleOverlay {
                 self.control(
                     label.into(),
                     if status {
-                        if self.scene_status.starts_with("Imported") || self.scene_status == "Exported" {
+                        if self.scene_status_ok {
                             self.scene_status.clone()
                         } else {
                             format!("Not {}", label.to_lowercase() + "ed")
@@ -820,13 +836,22 @@ impl BubbleOverlay {
                     Control::Scene(action),
                     cx,
                 )
+                .aria_description(if status { self.scene_status.clone() } else { String::new() })
                 .h(px(26.0))
+                .text_color(rgb(if status { if self.scene_status_ok { 0x86efac } else { 0xf97316 } } else { 0xd4d4d8 }))
                 .flex_1()
                 .justify_center()
                 .gap(px(5.0))
                 .text_size(px(10.0))
                 .child(
-                    svg().path(if status { "icons/check.svg" } else { icon }).size(px(13.0)).text_color(rgb(0xa1a1aa)),
+                    svg()
+                        .path(if status {
+                            if self.scene_status_ok { "icons/check.svg" } else { "icons/warning.svg" }
+                        } else {
+                            icon
+                        })
+                        .size(px(13.0))
+                        .text_color(rgb(0xa1a1aa)),
                 ),
             );
         }

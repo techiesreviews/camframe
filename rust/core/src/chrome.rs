@@ -16,3 +16,9 @@ pub fn settings_bounds(window_width: u32, window_height: u32, fullscreen: bool, 
     let top = 76 + i64::from(reserve);
     Rect::new(camera_left + (camera_width - width) / 2, top, width, (i64::from(window_height) - top).max(1))
 }
+
+/// Map a pointer on a range input to its value.
+pub fn slider_value(panel: Rect, x: f64, min: u32, max: u32) -> u32 {
+    let share = ((x - panel.x as f64 - 17.0) / (panel.width as f64 - 34.0)).clamp(0.0, 1.0);
+    (f64::from(min) + share * f64::from(max - min)).round() as u32
+}
