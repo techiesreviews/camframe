@@ -48,7 +48,7 @@ impl BubbleOverlay {
             self.presentation.transition = None;
             platform::set_bounds(window, target, cx);
         } else {
-            self.presentation.transition = Some((rect_of(window.bounds()), target, Instant::now()));
+            self.presentation.transition = Some((self.current_bounds(window), target, Instant::now()));
         }
         self.last_origin = Some(target.origin());
         cx.notify();
@@ -66,7 +66,7 @@ impl BubbleOverlay {
         }
         self.framing = false;
         let target = if fullscreen {
-            self.presentation.compact = Some(rect_of(window.bounds()));
+            self.presentation.compact = Some(self.current_bounds(window));
             window.display(cx).map(|display| rect_of(display.bounds())).unwrap_or(work_areas(cx).1)
         } else {
             let (areas, primary) = work_areas(cx);

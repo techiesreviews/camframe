@@ -316,3 +316,8 @@ pub fn set_visible(_window: &Window, _visible: bool) {}
 pub fn primary_button_down() -> bool {
     false
 }
+
+/// Windows applies bounds synchronously; only the Mac shim has queued native frames.
+pub fn pending_bounds(_window: &Window) -> Option<camframe_core::geometry::Rect> {
+    None
+}

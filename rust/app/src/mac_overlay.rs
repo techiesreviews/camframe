@@ -123,6 +123,17 @@ fn main_screen_height() -> f64 {
     }
 }
 
+// Bounds requested in this UI turn remain authoritative until AppKit applies them.
+std::thread_local! {
+    static PENDING_BOUNDS: std::cell::RefCell<std::collections::HashMap<usize, camframe_core::geometry::Rect>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+pub fn pending_bounds(window: &Window) -> Option<camframe_core::geometry::Rect> {
+    let key = ns_window_of(window)? as usize;
+    PENDING_BOUNDS.with(|pending| pending.borrow().get(&key).copied())
+}
+
 /// Moves and sizes the window in one step. `bounds` are GPUI points (top-left origin).
 pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx: &mut gpui::App) {
     let Some(ns_window) = ns_window_of(window) else { return };
@@ -133,13 +144,27 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
     // Native frame changes can synchronously ask GPUI to resize and repaint. Run after the
     // current Window update returns so those callbacks can enter GPUI instead of painting the
     // cached Compact scene stretched to the new frame. Retain the NSWindow until the task runs.
+    // SAFETY: ns_window_of checked the pointer from this live GPUI Window; retain it on the UI thread.
     let Some(native) = (unsafe { Retained::retain(ns_window) }) else { return };
+    let key = ns_window as usize;
+    PENDING_BOUNDS.with(|pending| {
+        pending.borrow_mut().insert(key, bounds);
+    });
     cx.foreground_executor()
         .spawn(async move {
+            if PENDING_BOUNDS.with(|pending| pending.borrow().get(&key).copied()) != Some(bounds) {
+                return;
+            }
             // SAFETY: retained NSWindow, documented setter, and GPUI's foreground executor.
             unsafe {
                 let _: () = msg_send![&*native, setFrame: frame, display: Bool::YES];
             }
+            PENDING_BOUNDS.with(|pending| {
+                let mut pending = pending.borrow_mut();
+                if pending.get(&key).copied() == Some(bounds) {
+                    pending.remove(&key);
+                }
+            });
         })
         .detach();
 }

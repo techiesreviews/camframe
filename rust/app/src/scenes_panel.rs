@@ -51,7 +51,7 @@ impl BubbleOverlay {
     pub(super) fn apply_scene_at(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         self.finish_guide(window, cx);
         let Some(scene) = self.settings.presets.get(index).cloned() else { return };
-        let compact = self.presentation.compact.unwrap_or_else(|| rect_of(window.bounds()));
+        let compact = self.presentation.compact.unwrap_or_else(|| self.current_bounds(window));
         self.set_fullscreen(false, window, cx);
         let (areas, primary) = work_areas(cx);
         self.settings = scenes::apply_scene(&self.settings, &scene, compact, &areas, primary);

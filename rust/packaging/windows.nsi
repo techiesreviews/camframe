@@ -13,7 +13,7 @@ UninstPage instfiles
 Section "CamFrame Rust"
   SetOutPath "$INSTDIR"
   File /oname=camframe-rust.exe "${BINARY}"
-  File /oname=LICENSE.txt "${__FILEDIR__}\..\..\LICENSE"
+  File /oname=LICENSE.txt "..\..\LICENSE"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\CamFrame Rust.lnk" "$INSTDIR\camframe-rust.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CamFrameRust" "DisplayName" "CamFrame Rust (test)"

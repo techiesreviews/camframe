@@ -14,7 +14,7 @@ impl BubbleOverlay {
         if self.guide_step.is_some() { RESERVE } else { 0 }
     }
     pub(super) fn guide_base_bounds(&self, window: &Window) -> Rect {
-        let mut bounds = rect_of(window.bounds());
+        let mut bounds = self.current_bounds(window);
         let reserve = i64::from(self.guide_reserve());
         bounds.y += reserve;
         bounds.height -= reserve;
@@ -34,7 +34,7 @@ impl BubbleOverlay {
         if self.settings_tab.is_some() {
             self.toggle_settings(window, cx);
         }
-        let base = self.presentation.transition.take().map_or_else(|| rect_of(window.bounds()), |(_, to, _)| to);
+        let base = self.presentation.transition.take().map_or_else(|| self.current_bounds(window), |(_, to, _)| to);
         self.guide_step = Some(0);
         self.framing = false;
         self.settings_tab = Some(SettingsTab::Camera);

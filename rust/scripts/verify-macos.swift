@@ -469,6 +469,14 @@ func checks() -> Int32 {
             if shot.at(bubble.bounds,x,y).near(backdrop) { failures.append("Full screen camera leaves a transparent corner") }
         }
     }
+    moveMouse(CGPoint(x: display.midX, y: display.minY + 44), settleMs: 400)
+    if let toolbarShot = capture(around: bubble.bounds, name: "fullscreen-toolbar", padding: 0) {
+        let toolbarPixel = toolbarShot.at(bubble.bounds, bubble.bounds.width / 2, 44)
+        let cameraPixel = toolbarShot.at(bubble.bounds, bubble.bounds.width / 2, 120)
+        if toolbarPixel.b > 80 || cameraPixel.b < 80 {
+            failures.append("Full screen reuses a scaled Compact scene instead of repainting the toolbar and camera")
+        }
+    } else { failures.append("could not capture Full screen toolbar") }
     pressKey(0x35, pid: pid)
     sleepMs(400)
     refresh()

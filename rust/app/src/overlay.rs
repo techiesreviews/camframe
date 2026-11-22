@@ -208,6 +208,9 @@ pub struct BubbleOverlay {
     settings_tab: Option<SettingsTab>,
     framing: bool,
     open_select: Option<&'static str>,
+    settings_scroll: gpui::ScrollHandle,
+    settings_scrollbar: std::cell::Cell<bool>,
+    settings_scroll_drag: Option<f32>,
     framing_drag: Option<((f64, f64), camframe_core::settings::CameraPosition)>,
     color_input: gpui::Entity<crate::text_field::TextField>,
     color_error: bool,
@@ -388,6 +391,9 @@ impl BubbleOverlay {
             },
             framing: false,
             open_select: None,
+            settings_scroll: gpui::ScrollHandle::new(),
+            settings_scrollbar: std::cell::Cell::new(false),
+            settings_scroll_drag: None,
             framing_drag: None,
             color_input,
             color_error: false,
@@ -418,6 +424,10 @@ impl BubbleOverlay {
             demo_pattern: config.demo_pattern,
             announcement: String::new(),
         }
+    }
+
+    fn current_bounds(&self, window: &Window) -> Rect {
+        platform::pending_bounds(window).unwrap_or_else(|| rect_of(window.bounds()))
     }
 
     fn now_ms(&self) -> u64 {
@@ -546,6 +556,13 @@ impl BubbleOverlay {
             }
             return;
         };
+        if self.settings_scroll_drag.is_some() {
+            if platform::primary_button_down() {
+                self.update_settings_scroll((cursor.1 - f64::from(window.bounds().origin.y)) as f32, cx);
+            } else {
+                self.settings_scroll_drag = None;
+            }
+        }
         if self.presentation.fullscreen {
             let bounds = window.bounds();
             let local = (cursor.0 - f64::from(bounds.origin.x), cursor.1 - f64::from(bounds.origin.y));
@@ -1109,6 +1126,7 @@ impl Render for BubbleOverlay {
             .track_focus(&self.focus)
             .relative()
             .font_family(if cfg!(target_os = "windows") { "Segoe UI Variable" } else { "Arial" })
+            .font_weight(gpui::FontWeight::MEDIUM)
             .text_size(px(11.0))
             .line_height(px(16.0))
             .w(px(window_width as f32))
@@ -1127,6 +1145,7 @@ impl Render for BubbleOverlay {
                 cx.listener(|this, _, _, _| {
                     this.scene_drag = None;
                     this.slider_drag = None;
+                    this.settings_scroll_drag = None;
                 }),
             )
             .on_mouse_up_out(
@@ -1134,6 +1153,7 @@ impl Render for BubbleOverlay {
                 cx.listener(|this, _, _, _| {
                     this.scene_drag = None;
                     this.slider_drag = None;
+                    this.settings_scroll_drag = None;
                 }),
             )
             .when(cfg!(target_os = "linux"), |root| {

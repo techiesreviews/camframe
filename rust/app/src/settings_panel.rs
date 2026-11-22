@@ -63,6 +63,8 @@ impl BubbleOverlay {
     pub(super) fn toggle_settings(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.settings_tab = if self.settings_tab.is_some() { None } else { Some(SettingsTab::Camera) };
         self.open_select = None;
+        self.settings_scroll.set_offset(point(px(0.0), px(0.0)));
+        self.settings_scrollbar.set(false);
         self.framing = false;
         cx.notify();
     }
@@ -71,6 +73,8 @@ impl BubbleOverlay {
             Control::Patch(patch) => self.patch_settings(patch.clone(), window, cx),
             Control::Tab(tab) => {
                 self.settings_tab = Some(*tab);
+                self.settings_scroll.set_offset(point(px(0.0), px(0.0)));
+                self.settings_scrollbar.set(false);
                 self.open_select = None;
                 cx.notify();
             }
@@ -162,7 +166,7 @@ impl BubbleOverlay {
             .relative()
             .flex()
             .flex_col()
-            .gap(px(6.0))
+            .gap(px(if key == "quality" { 4.0 } else { 6.0 }))
             .min_w_0()
             .flex_shrink_0()
             .child(div().text_color(rgb(MUTED)).child(label.to_owned()))
@@ -213,10 +217,11 @@ impl BubbleOverlay {
             .aria_label(label)
             .aria_toggled(if checked { accesskit::Toggled::True } else { accesskit::Toggled::False })
             .w_full()
-            .h(px(31.0))
+            .h(px(if key == "alwaysOnTop" { 31.0 } else { 30.0 }))
             .px(px(0.0))
             .bg(transparent_black())
             .border_0()
+            .when(key == "alwaysOnTop", |row| row.border_t_1().border_color(rgb(0x1b1b1c)))
             .rounded_none()
             .justify_between()
             .child(div().text_color(rgb(MUTED)).child(label))
@@ -254,7 +259,14 @@ impl BubbleOverlay {
             .flex_col()
             .gap(px(6.0))
             .flex_shrink_0()
-            .child(div().flex().justify_between().text_color(rgb(MUTED)).child(label).child(format!("{value}{unit}")))
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .text_color(rgb(MUTED))
+                    .child(label)
+                    .child(div().text_size(px(10.0)).text_color(rgb(0x71717a)).child(format!("{value}{unit}"))),
+            )
             .child(
                 div()
                     .id(key)
@@ -316,8 +328,24 @@ impl BubbleOverlay {
             self.presentation.fullscreen,
             self.guide_reserve(),
         );
-        self.patch_settings(json!({key:camframe_core::chrome::slider_value(bounds,x,min,max)}), window, cx);
+        let mut range_bounds = bounds;
+        if self.settings_scrollbar.get() {
+            range_bounds.width -= 17;
+        }
+        self.patch_settings(json!({key:camframe_core::chrome::slider_value(range_bounds,x,min,max)}), window, cx);
     }
+    pub(super) fn update_settings_scroll(&mut self, y: f32, cx: &mut Context<Self>) {
+        let Some(grab) = self.settings_scroll_drag else { return };
+        let bounds = self.settings_scroll.bounds();
+        let height = f32::from(bounds.size.height).max(1.0);
+        let max = f32::from(self.settings_scroll.max_offset().y).max(0.0);
+        let track = (height - 34.0).max(1.0);
+        let thumb = (track * height / (height + max)).max(18.0).min(track);
+        let share = ((y - f32::from(bounds.top()) - 17.0 - grab) / (track - thumb).max(1.0)).clamp(0.0, 1.0);
+        self.settings_scroll.set_offset(point(px(0.0), px(-share * max)));
+        cx.notify();
+    }
+
     pub(super) fn render_settings(&self, window: &Window, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let native = rect_of(window.bounds());
         let bounds = camframe_core::chrome::settings_bounds(
@@ -326,6 +354,22 @@ impl BubbleOverlay {
             self.presentation.fullscreen,
             self.guide_reserve(),
         );
+        let scroll_height = f32::from(self.settings_scroll.bounds().size.height);
+        let max_scroll = f32::from(self.settings_scroll.max_offset().y);
+        let rows = (self.settings.presets.len() + 1).div_ceil(2) as f32;
+        let width_correction = if self.settings_scrollbar.get()
+            && self.settings_tab == Some(SettingsTab::Scenes)
+            && self.settings.scene_view == camframe_core::settings::SceneView::Grid
+        {
+            17.0 * rows * 9.0 / 32.0
+        } else {
+            0.0
+        };
+        let show_scrollbar = cfg!(target_os = "windows")
+            && scroll_height + max_scroll + width_correction > bounds.height as f32 - 2.0 + 0.5;
+        self.settings_scrollbar.set(show_scrollbar);
+        let rail = if show_scrollbar { 17.0 } else { 0.0 };
+        let available = bounds.width as f32 - 22.0 - rail;
         let mut body = div().flex().flex_col().gap(px(8.0)).min_w_0();
         match self.settings_tab {
             Some(SettingsTab::Camera) => {
@@ -340,7 +384,7 @@ impl BubbleOverlay {
                     .or_else(|| cameras.first())
                     .map(|camera| camera.label.clone())
                     .unwrap_or_else(|| "No cameras found".into());
-                body = body.child(self.select("camera", "Camera", selected, choices, bounds.width as f32 - 22.0, cx));
+                body = body.child(self.select("camera", "Camera", selected, choices, available, cx));
                 let resolutions = Resolution::ALL
                     .into_iter()
                     .map(|r| {
@@ -352,7 +396,7 @@ impl BubbleOverlay {
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(4.0))
+                            .gap(px(0.0))
                             .child(div().text_color(rgb(MUTED)).child("Camera quality"))
                             .child(
                                 self.select(
@@ -365,7 +409,7 @@ impl BubbleOverlay {
                                     })
                                     .into(),
                                     resolutions,
-                                    bounds.width as f32 - 22.0,
+                                    available,
                                     cx,
                                 ),
                             ),
@@ -374,6 +418,9 @@ impl BubbleOverlay {
                         div()
                             .flex()
                             .flex_col()
+                            .border_t_1()
+                            .border_b_1()
+                            .border_color(rgb(0x202021))
                             .child(self.switch("mirror", "Mirror camera", self.settings.mirror, cx))
                             .child(self.switch("alwaysOnTop", "Always on top", self.settings.always_on_top, cx)),
                     );
@@ -384,7 +431,7 @@ impl BubbleOverlay {
                     body = body.child(error.clone());
                 }
             }
-            Some(SettingsTab::Scenes) => body = self.render_scenes(window, bounds.width as f32 - 22.0, cx),
+            Some(SettingsTab::Scenes) => body = self.render_scenes(window, available, cx),
             _ => {
                 let effects =
                     [(FrameEffect::None, "None"), (FrameEffect::Glow, "Glow"), (FrameEffect::Blur, "Progressive blur")];
@@ -394,7 +441,7 @@ impl BubbleOverlay {
                     "Frame effect",
                     selected.into(),
                     effects.into_iter().map(|(effect, name)| (name.into(), json!({"frameEffect":effect}))).collect(),
-                    bounds.width as f32 - 22.0,
+                    available,
                     cx,
                 ));
                 if self.settings.frame_effect == FrameEffect::Glow {
@@ -454,18 +501,54 @@ impl BubbleOverlay {
                                 )
                                 .when(self.color_error, |body| body.child("Use #RGB or #RRGGBB.")),
                         )
-                        .child(self.numeric("glowStrength", "Glow strength", self.settings.glow_strength, 10, 100, cx))
-                        .child(self.numeric("glowSpread", "Glow spread", self.settings.glow_spread, 4, 18, cx));
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(10.0))
+                                .child(self.numeric(
+                                    "glowStrength",
+                                    "Glow strength",
+                                    self.settings.glow_strength,
+                                    10,
+                                    100,
+                                    cx,
+                                ))
+                                .child(self.numeric("glowSpread", "Glow spread", self.settings.glow_spread, 4, 18, cx)),
+                        );
                 }
                 if self.settings.frame_effect == FrameEffect::Blur {
-                    body = body
-                        .child(self.numeric("blurAmount", "Blur", self.settings.blur_amount, 4, 18, cx))
-                        .child(self.numeric("blurOpacity", "Opacity", self.settings.blur_opacity, 10, 100, cx));
+                    body = body.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(10.0))
+                            .child(self.numeric("blurAmount", "Blur", self.settings.blur_amount, 4, 18, cx))
+                            .child(self.numeric("blurOpacity", "Opacity", self.settings.blur_opacity, 10, 100, cx)),
+                    );
                 }
                 body = body.child(self.numeric("borderWidth", "Frame", self.settings.border_width, 0, 12, cx));
             }
         }
-        div()
+        let tabs = div().flex().gap(px(3.0)).p(px(3.0)).rounded(px(9.0)).bg(rgb(0x181819)).children(
+            [(SettingsTab::Camera, "Camera"), (SettingsTab::Style, "Style"), (SettingsTab::Scenes, "Scenes")]
+                .into_iter()
+                .map(|(tab, name)| {
+                    self.control(
+                        format!("{}-tab", name.to_lowercase()),
+                        name.into(),
+                        self.settings_tab == Some(tab),
+                        Control::Tab(tab),
+                        cx,
+                    )
+                    .flex_1()
+                    .justify_center()
+                    .bg(if self.settings_tab == Some(tab) { rgb(0x27272a).into() } else { transparent_black() })
+                    .text_color(rgb(if self.settings_tab == Some(tab) { 0xfafafa } else { 0x71717a }))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                }),
+        );
+        let panel = div()
             .id("inline-settings")
             .absolute()
             .left(px(bounds.x as f32))
@@ -481,33 +564,103 @@ impl BubbleOverlay {
             .border_1()
             .border_color(rgb(if self.high_contrast { TEXT } else { 0x252526 }))
             .rounded(px(12.0))
-            .p(px(10.0))
             .flex()
-            .flex_col()
-            .gap(px(8.0))
             .text_size(px(11.0))
             .line_height(px(16.0))
             .text_color(rgb(TEXT))
             .child(
-                div().flex().gap(px(3.0)).p(px(3.0)).rounded(px(9.0)).bg(rgb(0x181819)).children(
-                    [(SettingsTab::Camera, "Camera"), (SettingsTab::Style, "Style"), (SettingsTab::Scenes, "Scenes")]
-                        .into_iter()
-                        .map(|(tab, name)| {
-                            self.control(
-                                format!("{}-tab", name.to_lowercase()),
-                                name.into(),
-                                self.settings_tab == Some(tab),
-                                Control::Tab(tab),
-                                cx,
-                            )
-                            .flex_1()
-                            .justify_center()
-                            .bg(if self.settings_tab == Some(tab) { rgb(0x27272a).into() } else { transparent_black() })
-                            .text_color(rgb(if self.settings_tab == Some(tab) { 0xfafafa } else { 0x71717a }))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                        }),
+                div()
+                    .id("settings-scroll")
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .max_h(px(bounds.height as f32 - 2.0))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.settings_scroll)
+                    .p(px(10.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.0))
+                    .on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
+                    .child(tabs.flex_shrink_0())
+                    .child(body.flex_shrink_0()),
+            );
+        if !show_scrollbar {
+            return panel;
+        }
+        let height = scroll_height.max(1.0);
+        let track = (height - 34.0).max(1.0);
+        let thumb = (track * height / (height + max_scroll.max(0.0))).max(18.0).min(track);
+        let top = 17.0
+            + if max_scroll > 0.0 {
+                -f32::from(self.settings_scroll.offset().y) / max_scroll * (track - thumb)
+            } else {
+                0.0
+            };
+        panel.child(
+            div()
+                .id("settings-scrollbar")
+                .relative()
+                .w(px(17.0))
+                .flex_shrink_0()
+                .h(px(height))
+                .bg(rgb(0xf1f1f1))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                        cx.stop_propagation();
+                        let local = f32::from(event.position.y) - f32::from(this.settings_scroll.bounds().top());
+                        if local >= top && local <= top + thumb && max_scroll > 0.0 {
+                            this.settings_scroll_drag = Some(local - top);
+                            this.update_settings_scroll(f32::from(event.position.y), cx);
+                        } else {
+                            let delta = if local < 17.0 {
+                                20.0
+                            } else if local > height - 17.0 {
+                                -20.0
+                            } else if local < top {
+                                height
+                            } else {
+                                -height
+                            };
+                            let offset =
+                                (f32::from(this.settings_scroll.offset().y) + delta).clamp(-max_scroll.max(0.0), 0.0);
+                            this.settings_scroll.set_offset(point(px(0.0), px(offset)));
+                            cx.notify();
+                        }
+                    }),
+                )
+                .when(max_scroll > 0.0, |bar| {
+                    bar.child(div().absolute().left(px(2.0)).top(px(top)).w(px(13.0)).h(px(thumb)).bg(rgb(0xc1c1c1)))
+                })
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .w_full()
+                        .h(px(17.0))
+                        .bg(rgb(0xf1f1f1))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(8.0))
+                        .text_color(rgb(0x5e5e5e))
+                        .child("▲"),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .bottom_0()
+                        .w_full()
+                        .h(px(17.0))
+                        .bg(rgb(0xf1f1f1))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(8.0))
+                        .text_color(rgb(0x5e5e5e))
+                        .child("▼"),
                 ),
-            )
-            .child(div().id("settings-scroll").min_h_0().overflow_y_scroll().child(body))
+        )
     }
 }
