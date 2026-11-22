@@ -71,8 +71,8 @@ Export reports its Scene count; import/export failures remain on the respective 
 | Side-by-side capture | Pass | 11 Electron 0.9.0/native comparisons per platform; 33 committed PNGs below. |
 | Signing/notarization | Not run | Test builds are intentionally unsigned/ad-hoc signed; no release was made. |
 
-The first `1f4701f` Windows push job failed its new “Camera controls opened before Space”
-precondition. The PR job passed the native checks but timed out opening the unchanged
+The first [`1f4701f` Windows push job](https://github.com/techiesreviews/camframe/actions/runs/45036921786/job/137252659621) failed its new “Camera controls opened before Space”
+precondition. The [PR job](https://github.com/techiesreviews/camframe/actions/runs/45036927695/attempts/1) passed the native checks but timed out opening the unchanged
 Electron Style tab during comparisons. A rerun passed both native checks and all 11
 comparisons, followed by NSIS install/uninstall. These failures are recorded as input/capture
 flakiness, not erased or counted as passing attempts.
@@ -174,7 +174,7 @@ R11 after checking the aspect-ratio calculation; it is resolved, not an open sho
   Mac `fullscreen-toolbar.png` checks that the toolbar is repainted at its normal size.
   Full hide/show timing still needs a focused manual parity check.
 - New probes exposed the stale Windows viewport and Escape focus bug, then a stale Mac
-  repaint and pending-bounds race. Their failed CI runs are retained below.
+  repaint and pending-bounds race. Their failed CI runs are linked in Build and artifact checks above.
 - The first comparison run used nested preferences instead of the app’s flat document;
   fixed before accepting comparisons. The Mac runner’s Bash 3.2 could not run the kit;
   CI now installs modern Bash.
@@ -204,7 +204,7 @@ the test PR was updated, not that those findings were accepted or that a release
 - **Decision:** No-go
 - **Reason:** Test build only; Lex has not approved a release.
 - **Known exceptions accepted by:** Lex, ADR 0042 (simpler guide and deferred switch-over).
-- **Follow-ups:** Physical-camera and accessibility checks below; Lex tries the test build.
+- **Follow-ups:** Physical-camera and accessibility checks in the Manual checks table; Lex tries the test build.
 
 Test build only. No merge, release, switch-over, tag or production update. Physical-camera
 quality/hot-plug/continuity, NVDA/VoiceOver and real-camera performance remain unverified release

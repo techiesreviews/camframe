@@ -545,7 +545,7 @@ func checks() -> Int32 {
             }
             if let shot = capture(around: panelWindow.bounds, name: "\(panel)-panel") {
                 if scrollerCase {
-                    let rail = shot.at(panelWindow.bounds, 274, 120)
+                    let rail = shot.at(panelWindow.bounds, 280, 120)
                     let bright = rail.r > 220 && rail.g > 220 && rail.b > 220
                     log("\(panel): native scroll rail pixel = \(rail)")
                     if bright != (panel == "scenes-legacy") { failures.append("\(panel) does not follow Show scroll bars") }
