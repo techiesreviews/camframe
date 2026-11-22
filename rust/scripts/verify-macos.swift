@@ -455,54 +455,58 @@ func checks() -> Int32 {
     // Finder was raised for the inactive-app check. Restore the controlled backdrop so the
     // post-Escape transparency probe compares against magenta rather than a Finder window.
     DispatchQueue.main.sync { backdropWindow.orderFrontRegardless() }
-    refresh()
-    let compact = bubble.bounds
-    let centre = cameraCenter(compact)
-    moveMouse(global(centre.0, centre.1))
-    moveMouse(global(compact.width / 2 - 57, 44), settleMs: 300)
-    leftClick(global(compact.width / 2 - 57, 44))
-    sleepMs(700)
-    refresh()
-    let display = CGDisplayBounds(CGMainDisplayID())
-    if abs(bubble.bounds.width - display.width) > 2 || abs(bubble.bounds.height - display.height) > 2 {
-        failures.append("Full screen toolbar did not fill the display: \(bubble.bounds)")
-    }
-    if let shot = capture(around: bubble.bounds, name: "fullscreen", padding: 0) {
-        for (name,x,y) in [("TL",4.0,4.0),("TR",bubble.bounds.width-5,4.0),("BL",4.0,bubble.bounds.height-5),("BR",bubble.bounds.width-5,bubble.bounds.height-5)] {
-            let pixel = shot.at(bubble.bounds,x,y)
-            pixels["fullscreen.\(name)"] = "\(pixel)"
-            log("Full screen \(name) at (\(x),\(y)): \(pixel), window \(bubble.bounds), display \(display)")
-            if pixel.near(backdrop) { failures.append("Full screen camera leaves a transparent corner") }
-            // generate_demo_pattern (camera.rs) is blue/teal at every corner. A stale scene can
-            // expose Finder or the menu bar, which is not the magenta backdrop.
-            else if pixel.r >= 150 || pixel.b < 80 { failures.append("Full screen \(name) does not show the camera") }
+    for round in 1...6 {
+        let suffix = round == 1 ? "" : "-round-\(round)"
+        log("Full screen round trip \(round)/6")
+        refresh()
+        let compact = bubble.bounds
+        let centre = cameraCenter(compact)
+        moveMouse(global(centre.0, centre.1))
+        moveMouse(global(compact.width / 2 - 57, 44), settleMs: 300)
+        leftClick(global(compact.width / 2 - 57, 44))
+        sleepMs(700)
+        refresh()
+        let display = CGDisplayBounds(CGMainDisplayID())
+        if abs(bubble.bounds.width - display.width) > 2 || abs(bubble.bounds.height - display.height) > 2 {
+            failures.append("Full screen toolbar did not fill the display: \(bubble.bounds)")
         }
-    }
-    moveMouse(CGPoint(x: display.midX, y: display.minY + 44), settleMs: 400)
-    if let toolbarShot = capture(around: bubble.bounds, name: "fullscreen-toolbar", padding: 0) {
-        let toolbarPixel = toolbarShot.at(bubble.bounds, bubble.bounds.width / 2, 44)
-        let cameraPixel = toolbarShot.at(bubble.bounds, bubble.bounds.width / 2, 120)
-        if toolbarPixel.b > 80 || cameraPixel.b < 80 {
-            failures.append("Full screen reuses a scaled Compact scene instead of repainting the toolbar and camera")
+        if let shot = capture(around: bubble.bounds, name: "fullscreen\(suffix)", padding: 0) {
+            for (name,x,y) in [("TL",4.0,4.0),("TR",bubble.bounds.width-5,4.0),("BL",4.0,bubble.bounds.height-5),("BR",bubble.bounds.width-5,bubble.bounds.height-5)] {
+                let pixel = shot.at(bubble.bounds,x,y)
+                pixels["fullscreen\(suffix).\(name)"] = "\(pixel)"
+                log("Full screen \(name) at (\(x),\(y)): \(pixel), window \(bubble.bounds), display \(display)")
+                if pixel.near(backdrop) { failures.append("Full screen camera leaves a transparent corner") }
+                // generate_demo_pattern (camera.rs) is blue/teal at every corner. A stale scene can
+                // expose Finder or the menu bar, which is not the magenta backdrop.
+                else if pixel.r >= 150 || pixel.b < 80 { failures.append("Full screen \(name) does not show the camera") }
+            }
+        } else { failures.append("could not capture Full screen") }
+        moveMouse(CGPoint(x: display.midX, y: display.minY + 44), settleMs: 400)
+        if let toolbarShot = capture(around: bubble.bounds, name: "fullscreen-toolbar\(suffix)", padding: 0) {
+            let toolbarPixel = toolbarShot.at(bubble.bounds, bubble.bounds.width / 2, 44)
+            let cameraPixel = toolbarShot.at(bubble.bounds, bubble.bounds.width / 2, 120)
+            if toolbarPixel.b > 80 || cameraPixel.b < 80 {
+                failures.append("Full screen reuses a scaled Compact scene instead of repainting the toolbar and camera")
+            }
+        } else { failures.append("could not capture Full screen toolbar") }
+        pressKey(0x35, pid: pid)
+        sleepMs(400)
+        refresh()
+        if abs(bubble.bounds.width - compact.width) > 2 || abs(bubble.bounds.height - compact.height) > 2 ||
+           abs(bubble.bounds.minX - compact.minX) > 2 || abs(bubble.bounds.minY - compact.minY) > 2 {
+            failures.append("Escape did not restore compact bounds")
         }
-    } else { failures.append("could not capture Full screen toolbar") }
-    pressKey(0x35, pid: pid)
-    sleepMs(400)
-    refresh()
-    if abs(bubble.bounds.width - compact.width) > 2 || abs(bubble.bounds.height - compact.height) > 2 ||
-       abs(bubble.bounds.minX - compact.minX) > 2 || abs(bubble.bounds.minY - compact.minY) > 2 {
-        failures.append("Escape did not restore compact bounds")
+        if let shot = capture(around: bubble.bounds, name: "compact-after-escape\(suffix)") {
+            let corner = shot.at(bubble.bounds, 4, 4)
+            let centre = cameraCenter(bubble.bounds)
+            let camera = shot.at(bubble.bounds, centre.0, centre.1)
+            pixels["compactAfterEscape\(suffix).corner"] = "\(corner)"
+            pixels["compactAfterEscape\(suffix).camera"] = "\(camera)"
+            if !corner.near(backdrop) || camera.r >= 150 || camera.b < 80 {
+                failures.append("Escape did not repaint the Compact camera before the next pointer event")
+            }
+        } else { failures.append("could not capture Compact after Escape") }
     }
-    if let shot = capture(around: bubble.bounds, name: "compact-after-escape") {
-        let corner = shot.at(bubble.bounds, 4, 4)
-        let centre = cameraCenter(bubble.bounds)
-        let camera = shot.at(bubble.bounds, centre.0, centre.1)
-        pixels["compactAfterEscape.corner"] = "\(corner)"
-        pixels["compactAfterEscape.camera"] = "\(camera)"
-        if !corner.near(backdrop) || camera.r >= 150 || camera.b < 80 {
-            failures.append("Escape did not repaint the Compact camera before the next pointer event")
-        }
-    } else { failures.append("could not capture Compact after Escape") }
 
     // Whole screen for the record.
     _ = run("/usr/sbin/screencapture", ["-x", (outDir as NSString).appendingPathComponent("desktop.png")])

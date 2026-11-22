@@ -159,7 +159,9 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             }
             // SAFETY: retained NSWindow, documented setter, and GPUI's foreground executor.
             unsafe {
-                let _: () = msg_send![&*native, setFrame: frame, display: Bool::YES];
+                // Let GPUI present after its viewport is synchronized. Immediate AppKit display
+                // can enter its layer callback while the scene still has Compact geometry.
+                let _: () = msg_send![&*native, setFrame: frame, display: Bool::NO];
             }
             PENDING_BOUNDS.with(|pending| {
                 let mut pending = pending.borrow_mut();
@@ -169,13 +171,16 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             });
             // AppKit may coalesce resize callbacks or deliver them during another GPUI turn.
             // Synchronize after setFrame even if that callback could not update the Window.
-            let _ = handle.update(&mut async_cx, |_, window, cx| {
+            let refreshed = handle.update(&mut async_cx, |_, window, cx| {
                 window.bounds_changed(cx);
                 // A dirty scene alone does not wake an already-paused Metal display link.
                 // Explicit frame demand prevents AppKit stretching the previous Compact frame
                 // until the next mouse event, including the final frame of a Full screen move.
                 window.on_next_frame(|window, _cx| window.refresh());
             });
+            if let Err(error) = refreshed {
+                eprintln!("[DEBUG-p6] deferred Mac bounds refresh failed: {error:#}");
+            }
         })
         .detach();
 }

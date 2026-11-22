@@ -168,6 +168,21 @@ impl BubbleOverlay {
             )
         };
         self.presentation.change_mode(fullscreen, cx.reduce_motion(), Instant::now());
+        if self.demo_pattern {
+            eprintln!("[DEBUG-p6] mode full={fullscreen} target={target:?}");
+            for delay in [400, 1000] {
+                let app = cx.to_async();
+                cx.foreground_executor()
+                    .spawn(async move {
+                        app.background_executor().timer(Duration::from_millis(delay)).await;
+                        app.update(|cx| {
+                            let state = cx.debug_state();
+                            eprintln!("[DEBUG-p6] full={fullscreen} after={delay} windows={}", state["windows"]);
+                        });
+                    })
+                    .detach();
+            }
+        }
         // The hover toolbar can disappear after activation. Keep Escape routed to the root.
         self.focus.focus(window, cx);
         if fullscreen {
