@@ -147,7 +147,7 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
     // SAFETY: ns_window_of checked the pointer from this live GPUI Window; retain it on the UI thread.
     let Some(native) = (unsafe { Retained::retain(ns_window) }) else { return };
     let key = ns_window as usize;
-    let handle = window.window_handle();
+    let handle = Window::window_handle(window);
     let mut async_cx = cx.to_async();
     PENDING_BOUNDS.with(|pending| {
         pending.borrow_mut().insert(key, bounds);
