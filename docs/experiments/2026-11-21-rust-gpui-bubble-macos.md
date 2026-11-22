@@ -114,3 +114,27 @@ Opus's immutable review of variant D identified a P3 edge where GPUI's generic l
 thermal frame interval could defer the final synchronous repaint to the stalled link. The
 small Mac-only correction at `2a72a34` sets those intervals to `None`; Windows options are
 unchanged. All temporary traces are removed. Final repeated native results remain pending.
+
+### 2026-11-23: variant D fails one entry in twelve
+
+Variant D with the pacing correction (`86a9f1a`) passed Mac Intel and failed Mac ARM in run
+`45079004090`: one entry of twelve (round 3) showed the Compact scene stretched over the full
+window until the next pointer move. Forced display on every resize step is therefore better
+than the display link alone (which failed every entry) but not reliable.
+
+The cause is not proven. The earlier diagnostics could not prove it: the app had no `log`
+backend, so GPUI's own errors were dropped, and the dirty/woken snapshots were taken while the
+demo camera kept the window dirty.
+
+Variant E keeps variant D and commits the Core Animation transaction straight after the forced
+display, so each new window size reaches the screen together with its picture and before
+GPUI's re-attached display link can present. It also adds a `--demo-pattern`-only resize trace
+and a stderr logger for GPUI warnings, described in
+[the Metal repaint verification](../verification/runs/2026-11-22-rust-metal-fullscreen.md).
+Status: uncertain. Native results pending; one green ARM run would not prove reliability,
+because variant D alone passes a whole run about one time in three.
+
+Rejected without a trial in this round: animating inside a window that is already full size
+(changes both move directions and the 0.9.0 window motion), extra repaint requests after the
+move (later frames did not reach the screen either, so this would only hide the cause), and any
+relaxed or longer verifier step.

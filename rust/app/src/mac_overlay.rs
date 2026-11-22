@@ -20,6 +20,70 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+// Resize trace for the native verifier. Off unless `--demo-pattern` starts it; the counters
+// below stay at zero cost for a normal launch.
+static TRACE_START: OnceLock<Instant> = OnceLock::new();
+static RENDERS: AtomicU64 = AtomicU64::new(0);
+static RESIZES: AtomicU64 = AtomicU64::new(0);
+
+/// Prints GPUI's warnings and errors, which are otherwise dropped: the app installs no logger.
+struct StderrLog;
+
+impl log::Log for StderrLog {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::Level::Warn
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        if self.enabled(record.metadata()) {
+            eprintln!("[gpui-log] {} {}: {}", record.level(), record.target(), record.args());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static STDERR_LOG: StderrLog = StderrLog;
+
+/// Starts the resize trace on stderr. Test runs only (`--demo-pattern`).
+pub fn trace_resizes() {
+    TRACE_START.get_or_init(Instant::now);
+    if log::set_logger(&STDERR_LOG).is_ok() {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
+}
+
+/// Counts one render of the overlay, so the trace can tell a drawn frame from a skipped one.
+pub fn count_render() {
+    RENDERS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// The frame-delivery part of GPUI's debug state, one entry per window.
+fn frame_delivery_state(state: &serde_json::Value) -> String {
+    let Some(windows) = state.get("windows").and_then(|windows| windows.as_array()) else {
+        return "no windows".into();
+    };
+    windows
+        .iter()
+        .map(|window| {
+            let platform = &window["platform"];
+            format!(
+                "frame={} source={} renderer={} key={} visible={} callback={}",
+                window["frame"],
+                platform["frame_source"],
+                platform["renderer"],
+                platform["is_key_window"],
+                platform["occlusion_state_visible"],
+                platform["request_frame_callback_installed"],
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
 
 /// `NSWindowStyleMaskBorderless` is 0; only the non-activating panel bit stays set.
 const NS_WINDOW_STYLE_MASK_NONACTIVATING_PANEL: usize = 1 << 7;
@@ -157,12 +221,16 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             if PENDING_BOUNDS.with(|pending| pending.borrow().get(&key).copied()) != Some(bounds) {
                 return;
             }
+            let trace_start = TRACE_START.get().copied();
+            let renders_before = RENDERS.load(Ordering::Relaxed);
+            let frame_started = Instant::now();
             // SAFETY: retained NSWindow, documented setter, and GPUI's foreground executor.
             unsafe {
                 // Let GPUI present after its viewport is synchronized. Immediate AppKit display
                 // can enter its layer callback while the scene still has Compact geometry.
                 let _: () = msg_send![&*native, setFrame: frame, display: Bool::NO];
             }
+            let frame_ms = frame_started.elapsed().as_millis();
             PENDING_BOUNDS.with(|pending| {
                 let mut pending = pending.borrow_mut();
                 if pending.get(&key).copied() == Some(bounds) {
@@ -181,6 +249,7 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             // a new drawable. Ask AppKit to display the backing layer after the GPUI update
             // has returned. GPUI's displayLayer delegate then draws the synchronized scene;
             // doing this inside handle.update would re-enter an already-borrowed Window.
+            let paint_started = Instant::now();
             // SAFETY: the retained NSWindow owns its content view/layer, all on the UI thread.
             unsafe {
                 let view: *mut AnyObject = msg_send![&*native, contentView];
@@ -191,7 +260,37 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
                 if !layer.is_null() {
                     let _: () = msg_send![layer, setNeedsDisplay];
                     let _: () = msg_send![layer, displayIfNeeded];
+                    // GPUI presents that frame with the Core Animation transaction and then
+                    // attaches a new display link. Commit now, so the new frame size and its
+                    // picture reach the screen together, before that link can present anything.
+                    let _: () = msg_send![class!(CATransaction), flush];
                 }
+            }
+            let Some(trace_start) = trace_start else { return };
+            let resize = RESIZES.fetch_add(1, Ordering::Relaxed) + 1;
+            let renders = RENDERS.load(Ordering::Relaxed);
+            eprintln!(
+                "[resize-trace] {} ms: {}x{} frame {} ms, paint {} ms, drew {}",
+                trace_start.elapsed().as_millis(),
+                bounds.width,
+                bounds.height,
+                frame_ms,
+                paint_started.elapsed().as_millis(),
+                renders - renders_before,
+            );
+            // After the last resize of a move, report whether frames keep arriving on their own.
+            for wait_ms in [150, 200] {
+                async_cx.background_executor().timer(Duration::from_millis(wait_ms)).await;
+                if RESIZES.load(Ordering::Relaxed) != resize {
+                    return; // A newer resize reports instead.
+                }
+                let state = async_cx.update(|cx| cx.debug_state());
+                eprintln!(
+                    "[resize-trace] {} ms: settled, {} renders since the last resize, {}",
+                    trace_start.elapsed().as_millis(),
+                    RENDERS.load(Ordering::Relaxed) - renders,
+                    frame_delivery_state(&state),
+                );
             }
         })
         .detach();

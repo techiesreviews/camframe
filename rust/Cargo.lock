@@ -625,6 +625,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "log",
  "nokhwa",
  "objc2 0.6.5",
  "raw-window-handle",
