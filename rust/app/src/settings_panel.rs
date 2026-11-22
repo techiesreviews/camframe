@@ -56,7 +56,7 @@ impl BubbleOverlay {
         if previous.always_on_top != self.settings.always_on_top {
             platform::set_always_on_top(window, self.settings.always_on_top);
         }
-        self.sync_capture_view(window);
+        self.sync_capture_view(window, cx);
         self.save_at = Some(self.now_ms() + POSITION_SAVE_DELAY_MS);
         cx.notify();
     }

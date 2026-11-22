@@ -349,6 +349,10 @@ try {
     Start-Sleep -Milliseconds 60
     [Win32Verify]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 350
+    $openBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir 'keyboard-controls-open.png')
+    $beforeSpace = Sample-Rel $openBmp 60 100
+    if ($beforeSpace.B -ge 80) { $failures += 'Mouse click did not open Camera controls before the keyboard check' }
+    $openBmp.Dispose()
     [System.Windows.Forms.SendKeys]::SendWait(' ')
     Start-Sleep -Milliseconds 350
     $keyboardBmp = Capture-ScreenRegion -X $cropX -Y $cropY -W $cropW -H $cropH -Path (Join-Path $OutDir 'keyboard-controls.png')

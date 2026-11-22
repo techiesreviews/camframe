@@ -170,7 +170,7 @@ impl BubbleOverlay {
         self.set_overlay_visible(true, window, cx);
         let bounds = geometry::window_size(self.settings.shape, self.size()).at(plan.position);
         self.move_to(bounds, window, cx);
-        self.sync_capture_view(window);
+        self.sync_capture_view(window, cx);
         self.save_now();
         self.update_tray_scenes();
         (

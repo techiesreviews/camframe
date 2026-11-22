@@ -440,7 +440,7 @@ impl BubbleOverlay {
             self.camera_notice = message;
             if self.settings.camera_id == rejected.device && self.settings.overlay_resolution == rejected.resolution {
                 self.settings.overlay_resolution = resolution;
-                self.sync_capture_view(window);
+                self.sync_capture_view(window, cx);
                 self.save_at = Some(self.now_ms() + POSITION_SAVE_DELAY_MS);
             }
         }
@@ -474,10 +474,18 @@ impl BubbleOverlay {
         cx.notify();
     }
 
-    fn sync_capture_view(&self, window: &Window) {
+    fn sync_capture_view(&self, window: &Window, cx: &App) {
         let mut view = output_view(&self.settings, self.size(), window.scale_factor());
         if self.presentation.fullscreen {
-            let target = self.presentation.transition.map_or_else(|| rect_of(window.bounds()), |(_, to, _)| to);
+            let target = self.presentation.transition.map_or_else(
+                || {
+                    window
+                        .display(cx)
+                        .map(|display| rect_of(display.bounds()))
+                        .unwrap_or_else(|| rect_of(window.bounds()))
+                },
+                |(_, to, _)| to,
+            );
             view.width = (target.width as f32 * window.scale_factor()).round().max(1.0) as u32;
             view.height = (target.height as f32 * window.scale_factor()).round().max(1.0) as u32;
         }
@@ -504,7 +512,7 @@ impl BubbleOverlay {
             cx.set_reduce_motion(reduced);
             if reduced && let Some((_, target, _)) = self.presentation.transition.take() {
                 platform::set_bounds(window, target, cx);
-                self.sync_capture_view(window);
+                self.sync_capture_view(window, cx);
             }
             if contrast != self.high_contrast {
                 self.high_contrast = contrast;
@@ -579,7 +587,7 @@ impl BubbleOverlay {
                     cx,
                 );
                 self.last_origin = Some(origin);
-                self.sync_capture_view(window);
+                self.sync_capture_view(window, cx);
                 cx.notify();
             }
             if !platform::primary_button_down() {
@@ -662,7 +670,7 @@ impl BubbleOverlay {
             self.now_ms(),
         );
         self.save_now();
-        self.sync_capture_view(window);
+        self.sync_capture_view(window, cx);
         cx.notify();
     }
 
@@ -704,7 +712,7 @@ impl BubbleOverlay {
             self.now_ms(),
         );
         self.save_now();
-        self.sync_capture_view(window);
+        self.sync_capture_view(window, cx);
         cx.notify();
     }
 

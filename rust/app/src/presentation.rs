@@ -19,7 +19,7 @@ impl BubbleOverlay {
             platform::set_bounds(window, geometry::interpolate_bounds(from, to, progress), cx);
             if progress >= 1.0 {
                 self.presentation.transition = None;
-                self.sync_capture_view(window);
+                self.sync_capture_view(window, cx);
             }
             cx.notify();
         }
@@ -38,7 +38,7 @@ impl BubbleOverlay {
             } else if self.presentation.fullscreen && self.presentation.transition.is_none() {
                 let target = window.display(cx).map(|display| rect_of(display.bounds())).unwrap_or(primary);
                 platform::set_bounds(window, target, cx);
-                self.sync_capture_view(window);
+                self.sync_capture_view(window, cx);
             }
         }
     }
@@ -90,6 +90,6 @@ impl BubbleOverlay {
         self.presentation.chrome_shown = true;
         self.set_overlay_visible(true, window, cx);
         self.move_to(target, window, cx);
-        self.sync_capture_view(window);
+        self.sync_capture_view(window, cx);
     }
 }

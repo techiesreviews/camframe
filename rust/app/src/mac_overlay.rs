@@ -16,6 +16,7 @@
 
 use gpui::Window;
 use objc2::encode::{Encode, Encoding};
+use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -129,11 +130,18 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
         origin: CgPoint { x: bounds.x as f64, y: main_screen_height() - (bounds.y + bounds.height) as f64 },
         size: CgSize { width: bounds.width as f64, height: bounds.height as f64 },
     };
-    // SAFETY: documented NSWindow setter on the main thread.
-    unsafe {
-        let _: () = msg_send![ns_window, setFrame: frame, display: Bool::YES];
-    }
-    window.bounds_changed(cx);
+    // Native frame changes can synchronously ask GPUI to resize and repaint. Run after the
+    // current Window update returns so those callbacks can enter GPUI instead of painting the
+    // cached Compact scene stretched to the new frame. Retain the NSWindow until the task runs.
+    let Some(native) = (unsafe { Retained::retain(ns_window) }) else { return };
+    cx.foreground_executor()
+        .spawn(async move {
+            // SAFETY: retained NSWindow, documented setter, and GPUI's foreground executor.
+            unsafe {
+                let _: () = msg_send![&*native, setFrame: frame, display: Bool::YES];
+            }
+        })
+        .detach();
 }
 
 pub fn set_click_through(window: &Window, through: bool) {
