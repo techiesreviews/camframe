@@ -78,3 +78,9 @@ event. Final Windows/ARM/Intel results and artifact links are recorded on PR #72
 Disposition: adopt the explicit frame demand for native resizing. The frame-bounds sync stays;
 no change to the 280 ms motion curve or frame-default migration. Physical-camera and real-Mac
 permission/Gatekeeper checks remain open, as above.
+
+The reverse probe added at `43b0ca1` failed on ARM in run `45075847277`, but the image shows
+correct Compact rendering over Finder. The probe expected the magenta window that Finder had
+covered earlier. The follow-up restores the controlled backdrop before the round trip and
+retains the strict transparency assertion; it does not change the app or insert pointer input
+after Escape. The failing image and diagnosis are recorded in the Metal verification run.

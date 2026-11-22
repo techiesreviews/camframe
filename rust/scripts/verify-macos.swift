@@ -452,6 +452,9 @@ func checks() -> Int32 {
 
     // Full screen through the real toolbar, including all four drawable corners. Then Escape
     // must restore the same compact bounds without opening a second camera/window.
+    // Finder was raised for the inactive-app check. Restore the controlled backdrop so the
+    // post-Escape transparency probe compares against magenta rather than a Finder window.
+    DispatchQueue.main.sync { backdropWindow.orderFrontRegardless() }
     refresh()
     let compact = bubble.bounds
     let centre = cameraCenter(compact)

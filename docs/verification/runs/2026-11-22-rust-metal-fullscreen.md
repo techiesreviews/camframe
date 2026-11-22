@@ -59,6 +59,23 @@ The native verifier now records all four Full screen pixel values and rejects Fi
 pixels as well as the magenta backdrop. It still takes its first Full screen image before the
 next pointer movement. The pre-fix ARM image fails this stronger check at all four corners.
 
+### Escape fixture correction after e200df8
+
+[ARM PR run 45075847277](https://github.com/techiesreviews/camframe/actions/runs/45075847277/job/137372857586)
+passed all Full screen probes but failed the new Compact-after-Escape test. Inspection of
+[artifact 14775193395](https://github.com/techiesreviews/camframe/actions/runs/45075847277/artifacts/14775193395)
+shows a correctly drawn 288 × 162 Landscape camera and clear margins. The camera centre is
+`rgb(51,146,183)`. The corner is white, just like the earlier `otherApp.TL` and `otherApp.BL`
+probes, because the inactive-app check opened Finder above the magenta backdrop.
+
+The new reverse check incorrectly assumed its initial backdrop was still exposed. Correct the
+fixture by bringing the controlled magenta window above Finder before the Full screen/Escape
+round trip. The bubble stays above it at level 101. Keep the exact magenta-corner and camera-
+centre assertions, with no pointer event between Escape and the capture. No additional app
+rendering change is justified by this image: the explicit frame-demand adapter already runs
+on both entry and exit. The new native jobs verify the corrected controlled-background check.
+Local `kit rust` passes 72 tests, formatting and Clippy (`.scratch/kit-jobs/p5-checks/log`).
+
 Failure PNGs were already uploaded by the workflow's final `if: always()` native-verification
 step; that is how the failing image was obtained. That upload remains. The comparison upload
 now runs only when comparison PNGs exist, so an earlier native failure does not add a second,
