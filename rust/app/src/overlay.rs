@@ -296,7 +296,9 @@ impl BubbleOverlay {
             loop {
                 let Ok(resizing) = entity.update_in(cx, |this, window, cx| {
                     this.poll_pointer(window, cx);
-                    this.resize.is_some() || this.presentation.transition.is_some()
+                    this.resize.is_some()
+                        || this.presentation.transition.is_some()
+                        || this.presentation.surface_transition.is_some()
                 }) else {
                     break;
                 };
@@ -531,6 +533,9 @@ impl BubbleOverlay {
                 cx.notify();
             }
             cx.set_reduce_motion(reduced);
+            if reduced {
+                self.presentation.surface_transition = None;
+            }
             if reduced && let Some((_, target, _)) = self.presentation.transition.take() {
                 platform::set_bounds(window, target, cx);
                 self.sync_capture_view(window, cx);
@@ -718,7 +723,7 @@ impl BubbleOverlay {
             .compact
             .or(self.presentation.transition.map(|(_, to, _)| to))
             .unwrap_or_else(|| self.guide_base_bounds(window));
-        self.presentation.fullscreen = false;
+        self.presentation.change_mode(false, cx.reduce_motion(), Instant::now());
         self.presentation.compact = None;
         self.presentation.transition = None;
         let mut base = geometry::compact_base_bounds(shape, self.settings.size, None, Some(current), primary, true);
@@ -903,12 +908,8 @@ impl BubbleOverlay {
         )
     }
 
-    fn render_camera(&self, camera_width: f32, camera_height: f32, cx: &mut Context<Self>) -> impl IntoElement {
-        let radius = if self.presentation.fullscreen {
-            0.0
-        } else {
-            geometry::corner_radius(self.settings.shape, self.size()) as f32
-        };
+    fn render_camera(&self, layout: presentation::CameraLayout, cx: &mut Context<Self>) -> impl IntoElement {
+        let radius = layout.radius;
         let status_label: Option<SharedString> = match &self.status {
             CameraStatus::Starting if self.frame.is_none() => Some("Starting camera.".into()),
             CameraStatus::Unavailable(message) if self.frame.is_none() => Some(message.clone().into()),
@@ -918,14 +919,10 @@ impl BubbleOverlay {
         let mut camera = div()
             .id("camera-surface")
             .absolute()
-            .left(px(if self.presentation.fullscreen { 0.0 } else { OVERLAY_CHROME.left as f32 }))
-            .top(px(if self.presentation.fullscreen {
-                0.0
-            } else {
-                OVERLAY_CHROME.top as f32 + self.guide_reserve() as f32
-            }))
-            .w(px(camera_width))
-            .h(px(camera_height))
+            .left(px(layout.left))
+            .top(px(layout.top))
+            .w(px(layout.width))
+            .h(px(layout.height))
             .rounded(px(radius))
             .overflow_hidden()
             .bg(rgb(0x18181b))
@@ -1056,9 +1053,6 @@ impl BubbleOverlay {
                     .blur_radius(px(self.settings.glow_spread as f32)),
             ]);
         }
-        if self.high_contrast {
-            camera = camera.border_2().border_color(rgb(0xffffff));
-        }
         camera
     }
 
@@ -1120,11 +1114,8 @@ impl Render for BubbleOverlay {
         } else {
             dimensions_for(shape, self.size())
         };
-        let (window_width, window_height) = if self.presentation.fullscreen {
-            (camera_width, camera_height)
-        } else {
-            overlay_dimensions_for(shape, self.size())
-        };
+        let viewport = window.viewport_size();
+        let (window_width, window_height) = (f32::from(viewport.width), f32::from(viewport.height));
         let (camera_width, camera_height) = (camera_width as f32, camera_height as f32);
         let show_chrome = if self.presentation.fullscreen {
             self.presentation.chrome_shown || self.settings_tab.is_some() || self.framing
@@ -1144,8 +1135,8 @@ impl Render for BubbleOverlay {
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_size(px(11.0))
             .line_height(px(16.0))
-            .w(px(window_width as f32))
-            .h(px((window_height + self.guide_reserve()) as f32))
+            .w(px(window_width))
+            .h(px(window_height))
             .bg(transparent_black())
             .on_mouse_down(
                 MouseButton::Left,
@@ -1240,9 +1231,18 @@ impl Render for BubbleOverlay {
                     }))
                 },
             )
-            .child(self.render_camera(camera_width, camera_height, cx))
+            .child(self.render_camera(
+                self.presentation.camera_layout(
+                    (window_width, window_height),
+                    shape,
+                    self.size(),
+                    self.guide_reserve(),
+                    Instant::now(),
+                ),
+                cx,
+            ))
             .when(show_chrome, |root| {
-                root.child(self.render_toolbar(window_width as f32, cx)).when(!self.presentation.fullscreen, |root| {
+                root.child(self.render_toolbar(window_width, cx)).when(!self.presentation.fullscreen, |root| {
                     root.children(self.render_handles(camera_width, camera_height, cx))
                 })
             })

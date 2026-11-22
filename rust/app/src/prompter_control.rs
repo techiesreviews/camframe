@@ -159,7 +159,7 @@ impl BubbleOverlay {
         self.finish_guide(window, cx);
         let current = self.compact_reference(window);
         let keep = bare && plan.size == self.size() && plan.position == current.origin();
-        self.presentation.fullscreen = false;
+        self.presentation.change_mode(false, cx.reduce_motion(), Instant::now());
         self.presentation.compact = None;
         self.settings.size = plan.size;
         self.settings.position = Some(plan.position);

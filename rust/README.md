@@ -10,6 +10,8 @@ feature to match CamFrame 0.9.0 (TOOLS-393); this file lists what works so far.
 - **Runs beside CamFrame 0.9.0.** It keeps its own Preferences in a "CamFrame Rust" folder next to
   0.9.0's "CamFrame" folder (`%APPDATA%` on Windows, `~/Library/Application Support` on macOS). On
   its first start it copies 0.9.0's Preferences once; 0.9.0's file is only read, never changed.
+  The camera frame starts at 0 px, white. Imported settings and earlier Rust test settings reset
+  only that frame once; a frame chosen afterwards survives restarts (ADR 0043).
 - **Unsigned test downloads.** No release or auto-update. The macOS app carries only the ad-hoc
   signature Apple Silicon needs to start a program.
 
@@ -130,6 +132,11 @@ Escape back to Compact and a real corner resize. Native window changes explicitl
 GPUI's viewport: synchronous native resize callbacks cannot re-enter a window already in use.
 Settings keep 0.9.0's 240 px maximum width, three tabs, selects, switches and sliders, and scroll
 inside the current native window. They do not enlarge the window.
+
+Full screen animates the native bounds and camera surface together for 280 ms. Camera offsets,
+size and corners change continuously; the surface follows 0.9.0's CSS easing, while the window
+keeps its original cubic curve. Reduced motion skips both geometry animations. The camera has
+no additional high-contrast outline; its frame is controlled by the Frame setting.
 
 `kit parity <output> <native captures>` captures the unchanged 0.9.0 Electron source beside the
 Rust app on each CI desktop. The test-only `--demo-pattern --settings-panel` values are `camera`,

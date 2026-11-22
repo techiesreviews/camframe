@@ -147,6 +147,8 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
     // SAFETY: ns_window_of checked the pointer from this live GPUI Window; retain it on the UI thread.
     let Some(native) = (unsafe { Retained::retain(ns_window) }) else { return };
     let key = ns_window as usize;
+    let handle = window.window_handle();
+    let mut async_cx = cx.to_async();
     PENDING_BOUNDS.with(|pending| {
         pending.borrow_mut().insert(key, bounds);
     });
@@ -165,6 +167,9 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
                     pending.remove(&key);
                 }
             });
+            // AppKit may coalesce resize callbacks or deliver them during another GPUI turn.
+            // Synchronize after setFrame even if that callback could not update the Window.
+            let _ = handle.update(&mut async_cx, |_, window, cx| window.bounds_changed(cx));
         })
         .detach();
 }
