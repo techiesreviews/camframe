@@ -1287,6 +1287,7 @@ fn toolbar_button(
             svg()
                 .path(icon)
                 .size(px(TOOLBAR_ICON))
+                .flex_shrink_0()
                 .text_color(rgb(if selected { 0xe8e8e8 } else { 0x8b8b90 }))
                 .group_hover("toolbar-button", |s| s.text_color(rgb(0xe5e5e5))),
         )
