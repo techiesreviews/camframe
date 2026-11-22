@@ -864,7 +864,7 @@ impl BubbleOverlay {
                 .aria_description(if status { self.scene_status.clone() } else { String::new() })
                 .h(px(26.0))
                 .bg(transparent_black())
-                .border_color(gpui::rgba(0xffffff14))
+                .border_color(settings_panel::scene_file_border(self.high_contrast))
                 .rounded(px(7.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .flex_row_reverse()

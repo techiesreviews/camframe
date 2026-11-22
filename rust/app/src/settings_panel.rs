@@ -44,6 +44,10 @@ fn scrollbar_mode(overlay: bool, overflow: bool, scrolling: bool) -> Scrollbar {
     }
 }
 
+pub(super) fn scene_file_border(high_contrast: bool) -> gpui::Hsla {
+    if high_contrast { rgb(TEXT).into() } else { gpui::rgba(0xffffff14).into() }
+}
+
 fn scrollbar_width() -> f32 {
     if cfg!(target_os = "windows") { 17.0 } else { 15.0 }
 }
@@ -751,5 +755,20 @@ mod scrollbar_tests {
         assert_eq!(scrollbar_mode(true, true, false), Scrollbar::Hidden);
         assert_eq!(scrollbar_mode(false, false, true), Scrollbar::Hidden);
         assert_eq!(scrollbar_mode(true, false, true), Scrollbar::Hidden);
+    }
+
+    #[test]
+    fn high_contrast_file_button_edges_remain_readable_against_the_panel() {
+        let edge = scene_file_border(true).to_rgb();
+        let background = rgb(PANEL);
+        let linear = |v: f32| if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+        let luminance = |r, g, b| 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        let blend = |value, base| value * edge.a + base * (1.0 - edge.a);
+        let edge_luma =
+            luminance(blend(edge.r, background.r), blend(edge.g, background.g), blend(edge.b, background.b));
+        let panel_luma = luminance(background.r, background.g, background.b);
+        assert!((edge_luma + 0.05) / (panel_luma + 0.05) >= 7.0);
+        assert_eq!(scene_file_border(true), rgb(TEXT).into());
+        assert!(scene_file_border(false).to_rgb().a < 0.1);
     }
 }
