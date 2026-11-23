@@ -43,6 +43,8 @@ Colors retain input case in persisted state when accepted. The live hex text edi
 
 `preferencesFromDocument(text)` turns the raw file text (undefined when missing) into launch settings. It applies the legacy migrations below, sanitizes, then always sets `alwaysOnTop` and `overlayVisible` to `true`. Main reads the text through `createPreferencesStore()` (ADR 0039): when `preferences.json` exists but is unreadable or not a JSON object, it hands over `preferences.last-good.json` instead when that one is. A missing `preferences.json`, and invalid JSON or a non-object document with no good copy, start a new installation. The stored values can change during a session and are written, but false values are intentionally not restored on launch.
 
+Before writing, both stores must read the current primary or establish that it is missing. Any other filesystem read error fails the save before replacing either file (ADR 0044). Electron throws the original error to main's debounced/quit save handler, which logs it; Rust returns the I/O error to its existing save handler, including during startup migration. This does not change load selection, schema 15, readable malformed-file repair, or the best-effort backup refresh of a readable primary.
+
 The integration harness is the only exception to the normal user-data path: in an unpackaged build, when `CAMFRAME_E2E=1` and `CAMFRAME_E2E_USER_DATA_DIR` is absolute, main selects that isolated directory before reading Preferences and enables Chromium's synthetic video device/permission switches. These process-environment hooks are not exposed through preload, persisted, or honored by packaged launches.
 
 ### Legacy migration

@@ -77,9 +77,15 @@ function loadSettings() {
 
 function saveSettings() {
   clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
+  saveTimer = setTimeout(writeSettings, 120)
+}
+
+function writeSettings() {
+  try {
     openPreferencesStore().write(JSON.stringify(settings(), null, 2))
-  }, 120)
+  } catch (error) {
+    console.error('CamFrame: could not save Preferences:', error)
+  }
 }
 
 // Where each Scene's camera opens on its display, for the Scenes tab tiles (ADR 0037): fitted to the
@@ -460,7 +466,7 @@ app.on('before-quit', () => {
   overlayGeometry?.stopDrag()
   overlayGeometry?.stopResize()
   clearTimeout(saveTimer)
-  openPreferencesStore().write(JSON.stringify(settings(), null, 2))
+  writeSettings()
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())

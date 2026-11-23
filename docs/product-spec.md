@@ -189,6 +189,8 @@ Global shortcut registration failures are not surfaced. Tray actions remain the 
 
 Preferences are stored per OS user as `preferences.json` under Electron's `app.getPath('userData')`. Writes are debounced by 120 ms and forced synchronously before quit. Each write replaces the file in one step (a temporary file renamed over it; written in place only when Windows refuses the rename because another program holds the file) and keeps the previous complete file as `preferences.last-good.json`. A broken file loads that last good copy quietly (ADR 0039). A missing file, or a broken one with no good copy, falls back to defaults. A pre-schema-3 migration resets frame width and size. A schema-12 onboarding migration marks existing Preferences documents complete when the new field is absent. The schema-15 migration adds the starter Scenes to a file without Scenes and drops `launchAtLogin`.
 
+Before every save, both apps read the primary file. A filesystem read failure other than a missing file stops the save and leaves the primary and last-good copy untouched, including Rust's startup frame migration (ADR 0044). The existing quiet load fallback stays the same. Reopening after access returns recovers the original saved Scenes. Session changes are not persisted while reads remain blocked; save failures are logged without a new notice or native error dialog.
+
 Start at login is removed (ADR 0037). A packaged build whose loaded Preferences had it on turns the login item off once. The application remains alive with no normal windows because `window-all-closed` intentionally does nothing; the tray is the process anchor.
 
 ## Security and packaging constraints
