@@ -312,3 +312,29 @@ usage were exhausted. No GPT fallback is authorized or used.
 - **Follow-ups:** Run three native targets; inspect all ARM/Intel repeated raw and packaged captures; report the clean head. If this last repair fails, escalate to the lead with the trace evidence above.
 - **Follow-ups after 2026-11-23:** Repeat the ARM job two or three times on the follow-up head and read `camframe-rust-output.txt` each time, pass or fail. Remove the resize trace, the `log` dependency and the render counter once the cause is settled. Ask for the fault to be looked for on a real Apple Silicon Mac: every sighting so far is on the virtual runner.
 - **Follow-ups after follow-up 3:** Read the next ARM trace with the four readings in follow-up 3. If an entry is stale although its repeats drew, or no drawable is free, stop repainting from the app and take the real-Mac check to Lex.
+
+## 2026-11-23: temporary trace removed on request
+
+The lead's latest TOOLS-393 brief supersedes the trace-retention follow-ups above: remove the
+temporary resize trace, keep the repaint fix, and leave PR #72 open without a release. The
+brief records Lex's desk check as “Works like 0.9.0”; his main-PC prompter check and release
+approval remain outstanding. This does not establish the underlying virtual-runner cause.
+
+Commit `ade5371473c4572b28c13624e4991abf4e70d50f` removes the stderr trace/logger, diagnostic
+render counters and timing, the final diagnostic-only timer, and the direct `log` dependency.
+The GPUI bounds synchronization, immediate Metal-layer display, 150/500 ms repeat displays,
+superseded-resize guard and drawable timeout remain unchanged. Future native results are read
+from the existing stale-frame assertions and captures; the four trace readings above are
+historical instructions and cannot be applied to new output.
+
+Local evidence: `RESULT: ok doctor 12/12 checks passed`,
+`RESULT: ok unit none affected` (`--affected --base 0e3b848`), and
+`RESULT: pass cargo test and clippy (rust/)` (72 tests, formatting and Clippy).
+Native Windows, Intel Mac and Apple Silicon jobs are pending at this entry's write time;
+Linux does not compile the Mac shim. No new manual Mac result or release approval is claimed.
+
+One Opus review completed on the immutable removal commit. Declined: its P1 spec finding
+requires the older trace-retention condition, which today's explicit instruction supersedes.
+Its P3 documentation finding is addressed by this entry and the experiment status below.
+The native-validation gap remains open until the new native jobs finish. No additional code
+change or review round is needed for the optional comment wording suggestions.

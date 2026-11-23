@@ -209,3 +209,12 @@ repeat draws and no entry is stale; the repeat draws and an entry is still stale
 is free; or `drew 0` again, which means the display did not reach GPUI's drawing. The second
 and third put the fault below the app, and a check on a real Apple Silicon Mac is then the next
 step rather than another repaint.
+
+### 2026-11-23: trace removal requested
+
+The latest lead brief supersedes the pending trace-reading plan above. Commit
+`ade5371473c4572b28c13624e4991abf4e70d50f` removes the temporary trace, stderr logger,
+diagnostic counters/timers and direct `log` dependency while retaining variant G's repaint
+code. New ARM runs use the existing stale-frame assertions and captures, without the four
+trace readings. This cleanup does not settle the virtual-runner cause. Native checks remain
+pending at write time; PR #72 stays open for Lex's main-PC check and release decision.
