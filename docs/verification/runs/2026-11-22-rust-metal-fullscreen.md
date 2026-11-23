@@ -194,7 +194,7 @@ and the verifier are untouched):
      repeat. `R` counts overlay renders since the display before it, and the state is sampled
      just before the repeat draws. `drew 0` means the repeat did not render.
    - `[resize-trace] T ms: not shown again, the window is closed or in use`: a repeat that
-     could not enter the GPUI window; the later steps are then skipped too.
+     could not enter the GPUI window. Only that repeat is skipped.
    - `[resize-trace] T ms: settled, N renders since it was last shown, …`: once, 1000 ms after
      the last resize, without drawing.
 
@@ -205,7 +205,8 @@ different way of resizing, not more repaints. A stale entry with `drew 0` or a `
 error points at GPUI not drawing the repeat. A run without a stale entry proves little alone,
 as before.
 
-Checks for this follow-up: `kit rust` pass (tests, formatting and Clippy on Linux);
+Checks for this follow-up, run on `3180d1a` and again after each of the two review-fix commits
+that follow it: `kit rust` pass (tests, formatting and Clippy on Linux);
 `kit unit --affected` none affected; `kit ux` fails as before (no `docs/agents/features.md`),
 not counted as a pass. Linux still cannot compile the Mac shim: a check for the
 `aarch64-apple-darwin` target stops in the Objective-C build script. So only the native CI jobs

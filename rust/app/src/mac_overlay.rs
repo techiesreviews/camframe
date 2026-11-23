@@ -288,24 +288,22 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             for after_ms in SHOW_AGAIN_AFTER_MS {
                 async_cx.background_executor().timer(Duration::from_millis(after_ms - waited_ms)).await;
                 waited_ms = after_ms;
-                // A newer resize shows its own picture. One that is still queued must not have its
-                // scene drawn into the old frame first.
-                let newer_resize_queued = PENDING_BOUNDS.with(|pending| pending.borrow().contains_key(&key));
-                if RESIZES.load(Ordering::Relaxed) != resize || newer_resize_queued {
-                    return;
+                if superseded(resize, key) {
+                    return; // A newer resize shows its own picture.
                 }
                 let renders_since = RENDERS.load(Ordering::Relaxed) - renders;
                 let state_before = trace_start.map(|_| frame_delivery_state(&async_cx.update(|cx| cx.debug_state())));
                 // GPUI's delegate only draws a window that asks for a frame.
                 if handle.update(&mut async_cx, |_, window, _| window.refresh()).is_err() {
-                    // The GPUI window is closed, or in use by a nested AppKit loop.
+                    // The GPUI window is closed, or in use by a nested AppKit loop. Skip this
+                    // repeat only: a window in use can still take the next one.
                     if let Some(trace_start) = trace_start {
                         eprintln!(
                             "[resize-trace] {} ms: not shown again, the window is closed or in use",
                             trace_start.elapsed().as_millis(),
                         );
                     }
-                    return;
+                    continue;
                 }
                 let paint_started = Instant::now();
                 let renders_before = RENDERS.load(Ordering::Relaxed);
@@ -326,7 +324,7 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             }
             let Some(trace_start) = trace_start else { return };
             async_cx.background_executor().timer(Duration::from_millis(SETTLED_TRACE_AFTER_MS - waited_ms)).await;
-            if RESIZES.load(Ordering::Relaxed) != resize {
+            if superseded(resize, key) {
                 return; // A newer resize reports instead.
             }
             let state = async_cx.update(|cx| cx.debug_state());
@@ -338,6 +336,12 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             );
         })
         .detach();
+}
+
+/// Whether a resize newer than number `resize` was applied to the window, or is still queued for
+/// it. A queued one must not have its scene drawn into the old frame first.
+fn superseded(resize: u64, key: usize) -> bool {
+    RESIZES.load(Ordering::Relaxed) != resize || PENDING_BOUNDS.with(|pending| pending.borrow().contains_key(&key))
 }
 
 /// Draws the window's GPUI scene now and puts it on screen together with the window's current
