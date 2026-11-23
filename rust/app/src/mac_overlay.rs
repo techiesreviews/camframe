@@ -37,11 +37,14 @@ static RESIZES: AtomicU64 = AtomicU64::new(0);
 /// before the resize on screen, stretched, until the next pointer event. It appears to be a frame
 /// the old display link presented late, after the resize frame; why later frames do not replace
 /// it is not proven. So the window draws and commits itself again several display frames after
-/// the move, when a late frame has landed, and once more as a second chance. This is redundancy
+/// the move, when a late frame would have landed, and once more as a second chance. Redundancy
 /// against a lost frame, not a repair of the cause.
 const SHOW_AGAIN_AFTER_MS: [u64; 2] = [150, 500];
 /// Test runs only: when the trace reports, without drawing, whether frames keep arriving.
 const SETTLED_TRACE_AFTER_MS: u64 = 1000;
+// The waits between these steps are differences, so the times must rise.
+const _: () =
+    assert!(SHOW_AGAIN_AFTER_MS[0] < SHOW_AGAIN_AFTER_MS[1] && SHOW_AGAIN_AFTER_MS[1] < SETTLED_TRACE_AFTER_MS);
 
 /// Prints GPUI's warnings and errors, which are otherwise dropped: the app installs no logger.
 struct StderrLog;
@@ -285,14 +288,24 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             for after_ms in SHOW_AGAIN_AFTER_MS {
                 async_cx.background_executor().timer(Duration::from_millis(after_ms - waited_ms)).await;
                 waited_ms = after_ms;
-                if RESIZES.load(Ordering::Relaxed) != resize {
-                    return; // A newer resize shows its own picture.
+                // A newer resize shows its own picture. One that is still queued must not have its
+                // scene drawn into the old frame first.
+                let newer_resize_queued = PENDING_BOUNDS.with(|pending| pending.borrow().contains_key(&key));
+                if RESIZES.load(Ordering::Relaxed) != resize || newer_resize_queued {
+                    return;
                 }
                 let renders_since = RENDERS.load(Ordering::Relaxed) - renders;
                 let state_before = trace_start.map(|_| frame_delivery_state(&async_cx.update(|cx| cx.debug_state())));
                 // GPUI's delegate only draws a window that asks for a frame.
                 if handle.update(&mut async_cx, |_, window, _| window.refresh()).is_err() {
-                    return; // The GPUI window closed in the meantime.
+                    // The GPUI window is closed, or in use by a nested AppKit loop.
+                    if let Some(trace_start) = trace_start {
+                        eprintln!(
+                            "[resize-trace] {} ms: not shown again, the window is closed or in use",
+                            trace_start.elapsed().as_millis(),
+                        );
+                    }
+                    return;
                 }
                 let paint_started = Instant::now();
                 let renders_before = RENDERS.load(Ordering::Relaxed);
@@ -344,8 +357,8 @@ fn display_now(native: &AnyObject) -> bool {
             let _: () = msg_send![layer, setNeedsDisplay];
             let _: () = msg_send![layer, displayIfNeeded];
             // GPUI presents that frame with the Core Animation transaction and then attaches a
-            // new display link. Commit now, so the frame size and its picture reach the screen
-            // together, before that link can present anything.
+            // new display link. Commit now, so the picture (after a resize, with the new frame
+            // size) reaches the screen before that link can present anything.
             let _: () = msg_send![class!(CATransaction), flush];
         }
     }

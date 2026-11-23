@@ -184,14 +184,17 @@ and the verifier are untouched):
 
 1. After the last resize of a move, the shim shows the picture again: 150 ms and 500 ms later
    it marks the GPUI window for a redraw and repeats the forced display and the transaction
-   commit. A newer resize cancels the repeats. The first repeat comes several display frames
-   after the move, when a late frame from the old display link has landed; the second is one
-   more chance. This is redundancy against a lost frame, not a repair of the cause.
+   commit. A newer resize, applied or still queued, cancels the repeats. The first repeat comes
+   several display frames after the move, when a late frame from the old display link would
+   have landed; the second is one more chance. This is redundancy against a lost frame, not a
+   repair of the cause.
 2. The trace (`--demo-pattern` only) changes:
    - The resize line ends with `reduce motion true|false`, the value the app acts on.
    - `[resize-trace] T ms: shown again, paint B ms, drew N, R renders before it, …`: one line per
      repeat. `R` counts overlay renders since the display before it, and the state is sampled
      just before the repeat draws. `drew 0` means the repeat did not render.
+   - `[resize-trace] T ms: not shown again, the window is closed or in use`: a repeat that
+     could not enter the GPUI window; the later steps are then skipped too.
    - `[resize-trace] T ms: settled, N renders since it was last shown, …`: once, 1000 ms after
      the last resize, without drawing.
 
