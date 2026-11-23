@@ -28,7 +28,20 @@ use std::time::{Duration, Instant};
 // only pays one relaxed atomic add per render.
 static TRACE_START: OnceLock<Instant> = OnceLock::new();
 static RENDERS: AtomicU64 = AtomicU64::new(0);
+// Counts native resizes in every launch, so a delayed step can tell that a newer resize started.
 static RESIZES: AtomicU64 = AtomicU64::new(0);
+
+/// When the picture is shown again after the last resize of a move, in milliseconds.
+///
+/// On Apple Silicon CI about one Full screen entry in six to twelve kept a picture drawn just
+/// before the resize on screen, stretched, until the next pointer event. It appears to be a frame
+/// the old display link presented late, after the resize frame; why later frames do not replace
+/// it is not proven. So the window draws and commits itself again several display frames after
+/// the move, when a late frame has landed, and once more as a second chance. This is redundancy
+/// against a lost frame, not a repair of the cause.
+const SHOW_AGAIN_AFTER_MS: [u64; 2] = [150, 500];
+/// Test runs only: when the trace reports, without drawing, whether frames keep arriving.
+const SETTLED_TRACE_AFTER_MS: u64 = 1000;
 
 /// Prints GPUI's warnings and errors, which are otherwise dropped: the app installs no logger.
 struct StderrLog;
@@ -250,50 +263,93 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             // has returned. GPUI's displayLayer delegate then draws the synchronized scene;
             // doing this inside handle.update would re-enter an already-borrowed Window.
             let paint_started = Instant::now();
-            // SAFETY: the retained NSWindow owns its content view/layer, all on the UI thread.
-            unsafe {
-                let view: *mut AnyObject = msg_send![&*native, contentView];
-                if view.is_null() {
+            if !display_now(&native) {
+                return;
+            }
+            let resize = RESIZES.fetch_add(1, Ordering::Relaxed) + 1;
+            let mut renders = RENDERS.load(Ordering::Relaxed);
+            if let Some(trace_start) = trace_start {
+                eprintln!(
+                    "[resize-trace] {} ms: {}x{} frame {} ms, paint {} ms, drew {}, reduce motion {}",
+                    trace_start.elapsed().as_millis(),
+                    bounds.width,
+                    bounds.height,
+                    frame_ms,
+                    paint_started.elapsed().as_millis(),
+                    renders - renders_before,
+                    async_cx.update(|cx| cx.reduce_motion()),
+                );
+            }
+            // After the last resize of a move, show the picture again: see SHOW_AGAIN_AFTER_MS.
+            let mut waited_ms = 0;
+            for after_ms in SHOW_AGAIN_AFTER_MS {
+                async_cx.background_executor().timer(Duration::from_millis(after_ms - waited_ms)).await;
+                waited_ms = after_ms;
+                if RESIZES.load(Ordering::Relaxed) != resize {
+                    return; // A newer resize shows its own picture.
+                }
+                let renders_since = RENDERS.load(Ordering::Relaxed) - renders;
+                let state_before = trace_start.map(|_| frame_delivery_state(&async_cx.update(|cx| cx.debug_state())));
+                // GPUI's delegate only draws a window that asks for a frame.
+                if handle.update(&mut async_cx, |_, window, _| window.refresh()).is_err() {
+                    return; // The GPUI window closed in the meantime.
+                }
+                let paint_started = Instant::now();
+                let renders_before = RENDERS.load(Ordering::Relaxed);
+                if !display_now(&native) {
                     return;
                 }
-                let layer: *mut AnyObject = msg_send![view, layer];
-                if !layer.is_null() {
-                    let _: () = msg_send![layer, setNeedsDisplay];
-                    let _: () = msg_send![layer, displayIfNeeded];
-                    // GPUI presents that frame with the Core Animation transaction and then
-                    // attaches a new display link. Commit now, so the new frame size and its
-                    // picture reach the screen together, before that link can present anything.
-                    let _: () = msg_send![class!(CATransaction), flush];
+                renders = RENDERS.load(Ordering::Relaxed);
+                if let (Some(trace_start), Some(state_before)) = (trace_start, state_before) {
+                    eprintln!(
+                        "[resize-trace] {} ms: shown again, paint {} ms, drew {}, {} renders before it, {}",
+                        trace_start.elapsed().as_millis(),
+                        paint_started.elapsed().as_millis(),
+                        renders - renders_before,
+                        renders_since,
+                        state_before,
+                    );
                 }
             }
             let Some(trace_start) = trace_start else { return };
-            let resize = RESIZES.fetch_add(1, Ordering::Relaxed) + 1;
-            let renders = RENDERS.load(Ordering::Relaxed);
-            eprintln!(
-                "[resize-trace] {} ms: {}x{} frame {} ms, paint {} ms, drew {}",
-                trace_start.elapsed().as_millis(),
-                bounds.width,
-                bounds.height,
-                frame_ms,
-                paint_started.elapsed().as_millis(),
-                renders - renders_before,
-            );
-            // After the last resize of a move, report whether frames keep arriving on their own.
-            for wait_ms in [150, 200] {
-                async_cx.background_executor().timer(Duration::from_millis(wait_ms)).await;
-                if RESIZES.load(Ordering::Relaxed) != resize {
-                    return; // A newer resize reports instead.
-                }
-                let state = async_cx.update(|cx| cx.debug_state());
-                eprintln!(
-                    "[resize-trace] {} ms: settled, {} renders since the last resize, {}",
-                    trace_start.elapsed().as_millis(),
-                    RENDERS.load(Ordering::Relaxed) - renders,
-                    frame_delivery_state(&state),
-                );
+            async_cx.background_executor().timer(Duration::from_millis(SETTLED_TRACE_AFTER_MS - waited_ms)).await;
+            if RESIZES.load(Ordering::Relaxed) != resize {
+                return; // A newer resize reports instead.
             }
+            let state = async_cx.update(|cx| cx.debug_state());
+            eprintln!(
+                "[resize-trace] {} ms: settled, {} renders since it was last shown, {}",
+                trace_start.elapsed().as_millis(),
+                RENDERS.load(Ordering::Relaxed) - renders,
+                frame_delivery_state(&state),
+            );
         })
         .detach();
+}
+
+/// Draws the window's GPUI scene now and puts it on screen together with the window's current
+/// frame. Returns false when the window has no content view left.
+///
+/// Call it on the UI thread and outside any GPUI window update: GPUI's displayLayer delegate has
+/// to enter the window to draw.
+fn display_now(native: &AnyObject) -> bool {
+    // SAFETY: a live NSWindow owns its content view and that view's layer; documented selectors.
+    unsafe {
+        let view: *mut AnyObject = msg_send![native, contentView];
+        if view.is_null() {
+            return false;
+        }
+        let layer: *mut AnyObject = msg_send![view, layer];
+        if !layer.is_null() {
+            let _: () = msg_send![layer, setNeedsDisplay];
+            let _: () = msg_send![layer, displayIfNeeded];
+            // GPUI presents that frame with the Core Animation transaction and then attaches a
+            // new display link. Commit now, so the frame size and its picture reach the screen
+            // together, before that link can present anything.
+            let _: () = msg_send![class!(CATransaction), flush];
+        }
+    }
+    true
 }
 
 pub fn set_click_through(window: &Window, through: bool) {

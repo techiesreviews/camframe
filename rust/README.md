@@ -132,6 +132,8 @@ mouse-down on the camera starts a native window drag.
 The native verifiers now exercise the Full screen toolbar button, all four display corners,
 Escape back to Compact and a real corner resize. Native window changes explicitly synchronize
 GPUI's viewport: synchronous native resize callbacks cannot re-enter a window already in use.
+On macOS the window also draws itself again 150 ms and 500 ms after a move ends, because a
+frame drawn just before a resize has stayed on screen in CI.
 Settings keep 0.9.0's 240 px maximum width, three tabs, selects, switches and sliders, and scroll
 inside the current native window. They do not enlarge the window.
 

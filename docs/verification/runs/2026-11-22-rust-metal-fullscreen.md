@@ -139,6 +139,75 @@ change; the six-trip native verifier is the failing test.
 One green ARM run is weak proof: `86a9f1a` failed one entry in twelve, so an unrepaired build
 would still pass a whole run about one time in three. Repeat the ARM job before trusting it.
 
+## Follow-up 2, 2026-11-23: frames are drawn, one entry still stays stale
+
+Observer: Claude Fable 5.2, from the captures and `camframe-rust-output.txt` of
+[run 45083634125](https://github.com/techiesreviews/camframe/actions/runs/45083634125) at
+`8b31e26` (the transaction commit and the trace above). Mac ARM failed in
+[job 137397171158](https://github.com/techiesreviews/camframe/actions/runs/45083634125/job/137397171158)
+on the raw binary; the packaged app was not reached. Mac Intel was still running and is not
+read here.
+
+What the run shows:
+
+- Entry 2 of six failed (`fullscreen-round-2.png`): the Compact scene stretched to 1024 × 768.
+  The other five entries, all six returns to Compact, and the capture after the next pointer
+  move (`fullscreen-toolbar-round-2.png`) are correct.
+- The trace line for the failing entry is the same as for the passing ones:
+  `27893 ms: 1024x768 frame 0 ms, paint 4 ms, drew 1`, then 3 and 4 overlay renders 178 ms and
+  380 ms later, display link attached and not paused, drawable size 1024 × 768. The only
+  `[gpui-log]` line of the run is at startup. So the forced display drew, GPUI kept drawing, and
+  GPUI reported no skipped frame and no missing drawable. In the reading guide above this is
+  the second case: drawn but not shown.
+- The transaction commit added at `c8f1b14` is therefore not a repair on its own.
+- Each change of mode printed one resize line, at the final size. The 280 ms window move did
+  not run on this runner, which fits Reduce Motion being on there. The stale entry does not
+  need the animation.
+- The stale picture shows the Full screen button with its keyboard-focus border. Focus goes
+  back to the window on every change of mode, so that border only exists after this round's
+  mouse-down: the picture was drawn in the 60 ms between mouse-down and the click taking
+  effect, and it was on screen 1.2 s later. A frame drawn just before the resize ended up
+  above the resize frame.
+- In the five passing entries the test picture's moving ring advances by 110° to 122° between
+  the Full screen capture and the toolbar capture. That only fits a live picture at both
+  captures; a picture frozen at the resize would be about 18° behind. So in a passing entry
+  display-link frames do reach the screen without pointer input, and the failing entry is a
+  stuck state, not the normal one.
+
+What is still unknown: why the frames drawn after the stale one did not replace it until a
+pointer event arrived. The evidence fits a late present from the display link that the resize
+stops, followed by a display link that presents nothing visible; it does not prove it. No real
+Mac has shown this fault. It has only been seen on the virtual 1024 × 768 ARM runner.
+
+Change in this follow-up (Mac only; Windows, the 280 ms curves, the 0 px/white frame defaults
+and the verifier are untouched):
+
+1. After the last resize of a move, the shim shows the picture again: 150 ms and 500 ms later
+   it marks the GPUI window for a redraw and repeats the forced display and the transaction
+   commit. A newer resize cancels the repeats. The first repeat comes several display frames
+   after the move, when a late frame from the old display link has landed; the second is one
+   more chance. This is redundancy against a lost frame, not a repair of the cause.
+2. The trace (`--demo-pattern` only) changes:
+   - The resize line ends with `reduce motion true|false`, the value the app acts on.
+   - `[resize-trace] T ms: shown again, paint B ms, drew N, R renders before it, …`: one line per
+     repeat. `R` counts overlay renders since the display before it, and the state is sampled
+     just before the repeat draws. `drew 0` means the repeat did not render.
+   - `[resize-trace] T ms: settled, N renders since it was last shown, …`: once, 1000 ms after
+     the last resize, without drawing.
+
+How to read the next ARM result: a stale entry with two normal `shown again … drew 1` lines
+means a forced, committed frame can itself fail to reach the screen, and the fault is below
+the app (window server or virtual display); repeating is then no cure and the next step is a
+different way of resizing, not more repaints. A stale entry with `drew 0` or a `[gpui-log]`
+error points at GPUI not drawing the repeat. A run without a stale entry proves little alone,
+as before.
+
+Checks for this follow-up: `kit rust` pass (tests, formatting and Clippy on Linux);
+`kit unit --affected` none affected; `kit ux` fails as before (no `docs/agents/features.md`),
+not counted as a pass. Linux still cannot compile the Mac shim: a check for the
+`aarch64-apple-darwin` target stops in the Objective-C build script. So only the native CI jobs
+compile and run this change, and no portable test can fail first.
+
 ## Review ledger
 
 Earlier Opus reviews returned P3 findings and validation gaps; they did not prove native
@@ -156,4 +225,4 @@ usage were exhausted. No GPT fallback is authorized or used.
 - **Reason:** Clean native repeated results and Lex's visual judgment are still required.
 - **Known exceptions accepted by:** None added.
 - **Follow-ups:** Run three native targets; inspect all ARM/Intel repeated raw and packaged captures; report the clean head. If this last repair fails, escalate to the lead with the trace evidence above.
-- **Follow-ups after 2026-11-23:** Repeat the ARM job two or three times on the follow-up head and read `camframe-rust-output.txt` each time, pass or fail. Remove the resize trace, the `log` dependency and the render counter once the cause is settled.
+- **Follow-ups after 2026-11-23:** Repeat the ARM job two or three times on the follow-up head and read `camframe-rust-output.txt` each time, pass or fail. Remove the resize trace, the `log` dependency and the render counter once the cause is settled. Ask for the fault to be looked for on a real Apple Silicon Mac: every sighting so far is on the virtual runner.

@@ -138,3 +138,44 @@ Rejected without a trial in this round: animating inside a window that is alread
 (changes both move directions and the 0.9.0 window motion), extra repaint requests after the
 move (later frames did not reach the screen either, so this would only hide the cause), and any
 relaxed or longer verifier step.
+
+### 2026-11-23: variant E fails one entry in six
+
+Variant E (`c8f1b14`, tested at `8b31e26`) failed Mac ARM in run `45083634125`: entry 2 of six
+on the raw binary showed the stretched Compact scene until the next pointer move. Disposition:
+rejected as a repair on its own. The transaction commit stays: it is harmless and variant F
+reuses it.
+
+The trace settled one question. For the failing entry it reads like every passing one: the
+forced display drew one frame in 4 ms, GPUI drew 3 and then 4 more overlay renders, the display
+link was attached and not paused, and GPUI logged no skipped frame or missing drawable. Frames
+are drawn and handed to the system, and one entry is still not shown. Two details from the
+captures narrow it further: the stale picture carries the focus border that only this round's
+mouse-down can produce, so it was drawn within 60 ms before the resize and ended up above the
+resize frame; and in passing entries the moving ring of the test picture shows that display-link
+frames reach the screen without pointer input. Details are in
+[the Metal repaint verification](../verification/runs/2026-11-22-rust-metal-fullscreen.md).
+
+Variant F keeps variant E and shows the picture again after the last resize of a move: 150 ms
+and 500 ms later the shim marks the GPUI window for a redraw and repeats the forced display and
+the transaction commit. A newer resize cancels the repeats. The trace gains a line per repeat,
+a late sample without drawing, and the Reduce Motion state.
+
+This revises the rejection above of "extra repaint requests after the move". That rejection
+was about asking the display link for more frames, which variants B and C had already shown to
+be unreliable. Variant F repeats the one path that has put the right picture on screen in
+every observed passing entry (a synchronous draw committed with its transaction), at a moment
+when a late frame from the old display link has landed. The objection that it does not explain
+the cause still stands: variant F is redundancy against a lost frame. If a stale entry appears
+with two normal repeat lines in the trace, repainting is ruled out as a cure and the fault is
+below the app.
+
+Status: uncertain. Native results pending. One green ARM run is weak proof, as before. The
+fault has only been seen on the virtual 1024 × 768 ARM runner, with Reduce Motion apparently
+on, so the 280 ms window move itself is not exercised there.
+
+Rejected without a trial in this round: keeping every present inside a transaction (GPUI's
+renderer owns that switch and resets it after each forced display), a temporary next-drawable
+timeout around the repeats (the trace shows drawables are available, so it would guard against
+a fault not seen), an extra AppKit window display pass (no evidence it differs from the layer
+display), and any change to the verifier.
