@@ -18,8 +18,12 @@ the unreadable file already held the migration marker and valid saved Scenes.
   other filesystem read failure aborts the save before touching the primary or the last-good copy.
 - Keep the unreadable original at its existing path. Do not rename it or create an archive. This
   preserves its bytes and permissions without needing to copy bytes that cannot be read.
-- Recheck on each save. Once reading succeeds, the normal best-effort last-good refresh and save
-  work again. Reopening after access returns loads the original saved Scenes.
+- If loading cannot read the primary, make that store read-only for the entire session. Electron
+  keeps the same store for loading and all saves; Rust already does. Access returning during the
+  session must not allow fallback settings to replace the saved Scenes. Restart after access
+  returns to load the original; the new session can then save normally.
+- For a session that loaded without a read error, recheck on each save. A temporary pre-save
+  read failure refuses that save; a later successful read permits normal saving.
 - Loading keeps ADR 0039's choices: a usable last-good copy wins over an unreadable or malformed
   primary; without one, defaults remain quiet. A missing primary ignores a leftover last-good copy.
   Readable malformed documents can still be repaired by saving.
@@ -29,9 +33,9 @@ the unreadable file already held the migration marker and valid saved Scenes.
 
 ## Consequences
 
-Changes made while the primary remains unreadable are not persisted. A successful save after
-access returns may replace the primary, keeping the readable original as the last-good copy under
-the existing best-effort policy. There is no automatic merge of fallback settings and old Scenes.
+Changes made in a session that loaded after a primary read error are not persisted, even if access
+returns before quit. Restarting after access returns recovers the saved Scenes and permits normal
+saving. There is no automatic merge of fallback settings and old Scenes.
 The one-time Rust frame reset is retried on reopening if its marker could not be saved.
 
 This guard does not add locking between running app copies or strengthen the durability of a

@@ -830,28 +830,39 @@ test('real Electron: unreadable Preferences survive debounced saves and quit wit
   const { mode } = await stat(path)
   await chmod(path, 0o000)
   let application
+  let saveOutput = ''
   try {
     await assert.rejects(readFile(path), { code: 'EACCES' })
     application = await launchCamFrame(userDataDirectory)
+    application.process().stderr.on('data', (chunk) => { saveOutput += chunk.toString() })
     // An uncaught timer error opens Electron's native error dialog. Capture calls without showing it.
     await application.evaluate(({ dialog }) => {
       const errors = []
       dialog.showErrorBox = (title, message) => errors.push({ title, message })
       globalThis.preferencesSaveErrors = errors
+      globalThis.preferencesSaveLogs = []
+      const log = console.error
+      console.error = (...args) => {
+        globalThis.preferencesSaveLogs.push({ message: args[0], code: args[1]?.code })
+        log(...args)
+      }
     })
     const page = await application.firstWindow()
     await page.locator('#overlay').waitFor({ state: 'visible' })
     await page.evaluate(() => window.camFrame.updateState({ size: 340 }))
     await page.waitForTimeout(350)
     assert.deepEqual(await application.evaluate(() => globalThis.preferencesSaveErrors), [])
+    assert.ok(await application.evaluate(() => globalThis.preferencesSaveLogs.some(
+      (entry) => entry.message.includes('could not save Preferences') && entry.code === 'EACCES',
+    )), 'the debounced save was tried and refused')
     await chmod(path, mode)
     assert.equal(await readFile(path, 'utf8'), original, 'debounced saves keep the original')
-    await chmod(path, 0o000)
 
+    saveOutput = ''
     await application.close()
     application = undefined
-    await chmod(path, mode)
-    assert.equal(await readFile(path, 'utf8'), original, 'the quit save keeps the original')
+    assert.match(saveOutput, /could not save Preferences:[\s\S]*EACCES/, 'quit tried and refused a save after access returned')
+    assert.equal(await readFile(path, 'utf8'), original, 'the fallback session keeps the original after access returns')
 
     application = await launchCamFrame(userDataDirectory)
     const restored = await (await application.firstWindow()).evaluate(() => window.camFrame.getState())

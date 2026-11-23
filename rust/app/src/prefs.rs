@@ -152,6 +152,7 @@ mod tests {
                 let (prefs, settings) = Prefs::open(Some(root.clone()));
                 prefs.save(&settings);
                 fs::set_permissions(&file, permissions).unwrap();
+                prefs.save(&settings);
 
                 assert_eq!(fs::read_to_string(&file).unwrap(), original, "version {version}, spare {spare:?}");
                 assert_eq!(fs::read_to_string(&last_good).ok().as_deref(), spare);

@@ -94,6 +94,9 @@ Existing Preferences documents without the schema-12 onboarding field are treate
 Every Preferences save rechecks the primary. A non-missing filesystem read error aborts before
 any replacement and keeps both files untouched (ADR 0044). Main's shared `writeSettings()` handles
 errors for both the 120 ms debounce and synchronous quit save without a native error dialog.
+Both stores also latch a read error during loading and refuse saves for that entire session,
+even after access returns. Main reuses one store, so its quit save cannot bypass the block.
+Restarting creates a new store and loads the original saved Scenes before permitting saves.
 Rust's store applies the same guard to later saves and `Prefs::open()`'s frame migration; its
 existing save handler logs failures. Readable malformed files and genuine first saves keep the
 previous repair and migration behavior.

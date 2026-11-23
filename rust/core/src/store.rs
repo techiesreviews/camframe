@@ -10,6 +10,7 @@
 //! The Rust app keeps its own folder ("CamFrame Rust"), so CamFrame 0.9.0 keeps working untouched
 //! beside it. On its first start it copies 0.9.0's Preferences once (`adopt_from`).
 
+use std::cell::Cell;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -43,12 +44,13 @@ fn is_document(text: &str) -> bool {
 pub struct PreferencesStore {
     path: PathBuf,
     last_good: PathBuf,
+    session_read_error: Cell<Option<io::ErrorKind>>,
 }
 
 impl PreferencesStore {
     pub fn new(path: PathBuf) -> PreferencesStore {
         let last_good = path.with_file_name(PREFERENCES_FILE.replace(".json", ".last-good.json"));
-        PreferencesStore { path, last_good }
+        PreferencesStore { path, last_good, session_read_error: Cell::new(None) }
     }
 
     /// The store in the app's own folder under `root`.
@@ -66,7 +68,12 @@ impl PreferencesStore {
         let current = match fs::read(&self.path) {
             Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
             Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
-            Err(_) => String::new(),
+            Err(error) => {
+                // Fallback settings must not replace the original if access returns before quit.
+                // Opening a new store on restart allows the original Scenes to load again.
+                self.session_read_error.set(Some(error.kind()));
+                String::new()
+            }
         };
         if is_document(&current) {
             return Some(current);
@@ -78,6 +85,9 @@ impl PreferencesStore {
     }
 
     pub fn write(&self, text: &str) -> io::Result<()> {
+        if let Some(kind) = self.session_read_error.get() {
+            return Err(io::Error::new(kind, "Preferences could not be read in this session; restart before saving"));
+        }
         if let Some(folder) = self.path.parent() {
             fs::create_dir_all(folder)?;
         }

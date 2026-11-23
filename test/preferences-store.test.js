@@ -221,12 +221,34 @@ for (const code of ['EACCES', 'EIO']) {
 
         unreadable = false
         assert.equal(store.read(), original, 'restoring access recovers the saved Scene')
-        store.write(document('Later change'))
+        assert.throws(() => store.write(document('Later change')), { code }, 'a fallback session stays read-only')
+        assert.equal(readFileSync(path, 'utf8'), original)
+        createPreferencesStore(path).write(document('Later change'))
         assert.equal(readFileSync(lastGood, 'utf8'), original, 'later saves keep the readable original')
       })
     }
   }
 }
+
+test('access restored before the first automatic save does not replace Scenes with startup defaults', () => {
+  const directory = folder()
+  const path = join(directory, 'preferences.json')
+  const original = document('Saved Interview')
+  writeFileSync(path, original)
+  let unreadable = true
+  const store = createPreferencesStore(path, {
+    ...fs,
+    readFileSync: (file, ...rest) => {
+      if (file === path && unreadable) throw Object.assign(new Error('cannot read'), { code: 'EIO' })
+      return fs.readFileSync(file, ...rest)
+    },
+  })
+  const loaded = preferencesFromDocument(store.read())
+  unreadable = false
+  assert.throws(() => store.write(JSON.stringify(loaded)), { code: 'EIO' })
+  assert.equal(readFileSync(path, 'utf8'), original)
+  assert.deepEqual(preferencesFromDocument(createPreferencesStore(path).read()).presets.map((scene) => scene.name), ['Saved Interview'])
+})
 
 test('each save keeps the previous complete file as the last good copy', () => {
   const directory = folder()
