@@ -20,14 +20,9 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-// Resize trace for the native verifier. Off unless `--demo-pattern` starts it; a normal launch
-// only pays one relaxed atomic add per render.
-static TRACE_START: OnceLock<Instant> = OnceLock::new();
-static RENDERS: AtomicU64 = AtomicU64::new(0);
 // Counts native resizes in every launch, so a delayed step can tell that a newer resize started.
 static RESIZES: AtomicU64 = AtomicU64::new(0);
 
@@ -41,66 +36,8 @@ static RESIZES: AtomicU64 = AtomicU64::new(0);
 /// display frames after the move and once more as a second chance. Redundancy against a lost
 /// frame, not a repair of the cause.
 const SHOW_AGAIN_AFTER_MS: [u64; 2] = [150, 500];
-/// Test runs only: when the trace reports, without drawing, whether frames keep arriving.
-const SETTLED_TRACE_AFTER_MS: u64 = 1000;
 // The waits between these steps are differences, so the times must rise.
-const _: () =
-    assert!(SHOW_AGAIN_AFTER_MS[0] < SHOW_AGAIN_AFTER_MS[1] && SHOW_AGAIN_AFTER_MS[1] < SETTLED_TRACE_AFTER_MS);
-
-/// Prints GPUI's warnings and errors, which are otherwise dropped: the app installs no logger.
-struct StderrLog;
-
-impl log::Log for StderrLog {
-    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
-        metadata.level() <= log::Level::Warn
-    }
-
-    fn log(&self, record: &log::Record<'_>) {
-        if self.enabled(record.metadata()) {
-            eprintln!("[gpui-log] {} {}: {}", record.level(), record.target(), record.args());
-        }
-    }
-
-    fn flush(&self) {}
-}
-
-static STDERR_LOG: StderrLog = StderrLog;
-
-/// Starts the resize trace on stderr. Test runs only (`--demo-pattern`).
-pub fn trace_resizes() {
-    TRACE_START.get_or_init(Instant::now);
-    if log::set_logger(&STDERR_LOG).is_ok() {
-        log::set_max_level(log::LevelFilter::Warn);
-    }
-}
-
-/// Counts one render of the overlay, so the trace can tell a drawn frame from a skipped one.
-pub fn count_render() {
-    RENDERS.fetch_add(1, Ordering::Relaxed);
-}
-
-/// The frame-delivery part of GPUI's debug state, one entry per window.
-fn frame_delivery_state(state: &serde_json::Value) -> String {
-    let Some(windows) = state.get("windows").and_then(|windows| windows.as_array()) else {
-        return "no windows".into();
-    };
-    windows
-        .iter()
-        .map(|window| {
-            let platform = &window["platform"];
-            format!(
-                "frame={} source={} renderer={} key={} visible={} callback={}",
-                window["frame"],
-                platform["frame_source"],
-                platform["renderer"],
-                platform["is_key_window"],
-                platform["occlusion_state_visible"],
-                platform["request_frame_callback_installed"],
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(" | ")
-}
+const _: () = assert!(SHOW_AGAIN_AFTER_MS[0] < SHOW_AGAIN_AFTER_MS[1]);
 
 /// `NSWindowStyleMaskBorderless` is 0; only the non-activating panel bit stays set.
 const NS_WINDOW_STYLE_MASK_NONACTIVATING_PANEL: usize = 1 << 7;
@@ -246,16 +183,12 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             if PENDING_BOUNDS.with(|pending| pending.borrow().get(&key).copied()) != Some(bounds) {
                 return;
             }
-            let trace_start = TRACE_START.get().copied();
-            let renders_before = RENDERS.load(Ordering::Relaxed);
-            let frame_started = Instant::now();
             // SAFETY: retained NSWindow, documented setter, and GPUI's foreground executor.
             unsafe {
                 // Let GPUI present after its viewport is synchronized. Immediate AppKit display
                 // can enter its layer callback while the scene still has Compact geometry.
                 let _: () = msg_send![&*native, setFrame: frame, display: Bool::NO];
             }
-            let frame_ms = frame_started.elapsed().as_millis();
             PENDING_BOUNDS.with(|pending| {
                 let mut pending = pending.borrow_mut();
                 if pending.get(&key).copied() == Some(bounds) {
@@ -274,24 +207,10 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
             // a new drawable. Have GPUI's Metal layer displayed after the GPUI update has
             // returned. GPUI's displayLayer delegate then draws the synchronized scene;
             // doing this inside handle.update would re-enter an already-borrowed Window.
-            let paint_started = Instant::now();
             if !display_now(&gpui_view) {
                 return;
             }
             let resize = RESIZES.fetch_add(1, Ordering::Relaxed) + 1;
-            let mut renders = RENDERS.load(Ordering::Relaxed);
-            if let Some(trace_start) = trace_start {
-                eprintln!(
-                    "[resize-trace] {} ms: {}x{} frame {} ms, paint {} ms, drew {}, reduce motion {}",
-                    trace_start.elapsed().as_millis(),
-                    bounds.width,
-                    bounds.height,
-                    frame_ms,
-                    paint_started.elapsed().as_millis(),
-                    renders - renders_before,
-                    async_cx.update(|cx| cx.reduce_motion()),
-                );
-            }
             // After the last resize of a move, show the picture again: see SHOW_AGAIN_AFTER_MS.
             let mut waited_ms = 0;
             for after_ms in SHOW_AGAIN_AFTER_MS {
@@ -300,49 +219,16 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
                 if superseded(resize, key) {
                     return; // A newer resize shows its own picture.
                 }
-                let renders_since = RENDERS.load(Ordering::Relaxed) - renders;
-                let state_before = trace_start.map(|_| frame_delivery_state(&async_cx.update(|cx| cx.debug_state())));
                 // GPUI's delegate only draws a window that asks for a frame.
                 if handle.update(&mut async_cx, |_, window, _| window.refresh()).is_err() {
                     // The GPUI window is closed, or in use by a nested AppKit loop. Skip this
                     // repeat only: a window in use can still take the next one.
-                    if let Some(trace_start) = trace_start {
-                        eprintln!(
-                            "[resize-trace] {} ms: not shown again, the window is closed or in use",
-                            trace_start.elapsed().as_millis(),
-                        );
-                    }
                     continue;
                 }
-                let paint_started = Instant::now();
-                let renders_before = RENDERS.load(Ordering::Relaxed);
                 if !display_now(&gpui_view) {
                     return;
                 }
-                renders = RENDERS.load(Ordering::Relaxed);
-                if let (Some(trace_start), Some(state_before)) = (trace_start, state_before) {
-                    eprintln!(
-                        "[resize-trace] {} ms: shown again, paint {} ms, drew {}, {} renders before it, {}",
-                        trace_start.elapsed().as_millis(),
-                        paint_started.elapsed().as_millis(),
-                        renders - renders_before,
-                        renders_since,
-                        state_before,
-                    );
-                }
             }
-            let Some(trace_start) = trace_start else { return };
-            async_cx.background_executor().timer(Duration::from_millis(SETTLED_TRACE_AFTER_MS - waited_ms)).await;
-            if superseded(resize, key) {
-                return; // A newer resize reports instead.
-            }
-            let state = async_cx.update(|cx| cx.debug_state());
-            eprintln!(
-                "[resize-trace] {} ms: settled, {} renders since it was last shown, {}",
-                trace_start.elapsed().as_millis(),
-                RENDERS.load(Ordering::Relaxed) - renders,
-                frame_delivery_state(&state),
-            );
         })
         .detach();
 }

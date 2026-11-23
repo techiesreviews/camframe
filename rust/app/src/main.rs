@@ -64,8 +64,6 @@ fn main() {
         cx.set_activation_policy(gpui::ActivationPolicy::Accessory);
         if config.demo_pattern {
             overlay::bind_test_keys(cx);
-            #[cfg(target_os = "macos")]
-            mac_overlay::trace_resizes();
         }
         if let Err(err) = overlay::open(config, cx) {
             eprintln!("CamFrame could not open the camera bubble: {err:#}");

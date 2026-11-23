@@ -1103,8 +1103,6 @@ impl Focusable for BubbleOverlay {
 impl Render for BubbleOverlay {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.record_startup_if_needed(window);
-        #[cfg(target_os = "macos")]
-        platform::count_render();
 
         let shape = self.settings.shape;
         let (camera_width, camera_height) = if self.presentation.fullscreen {
