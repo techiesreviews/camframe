@@ -212,6 +212,83 @@ not counted as a pass. Linux still cannot compile the Mac shim: a check for the
 `aarch64-apple-darwin` target stops in the Objective-C build script. So only the native CI jobs
 compile and run this change, and no portable test can fail first.
 
+## Follow-up 3, 2026-11-23: the repeat display never drew
+
+Observer: Claude Fable 5.2, from the captures and `camframe-rust-output.txt` of
+[run 45087539195](https://github.com/techiesreviews/camframe/actions/runs/45087539195) at
+`5125ddd` (follow-up 2). Mac ARM failed in
+[job 137409470258](https://github.com/techiesreviews/camframe/actions/runs/45087539195/job/137409470258)
+on the raw binary; the packaged app was not reached.
+
+What the run shows:
+
+- Three of twelve moves kept the previous picture, stretched or shrunk to the new window size:
+  Full screen entries 1 and 3 (`fullscreen.png`, `fullscreen-round-3.png`: the Compact scene
+  over 1024 × 768) and the return to Compact in round 6 (`compact-after-escape-round-6.png`:
+  the Full screen scene inside the Compact window). The verifier's "Escape did not repaint the
+  Compact camera" is this same fault in the other direction, not a second fault. After the next
+  pointer move both failed entries show the Full screen camera at the right size. In entry 1
+  that capture, 400 ms after the move, still lacks the toolbar (the verifier's "reuses a scaled
+  Compact scene" line; the camera in it is repainted, not scaled). In entry 3 it is correct.
+- Every resize line after startup still reads `drew 1`.
+- Every `shown again` line reads `paint 0 ms, drew 0`. The repeat displays of follow-up 2 never
+  drew, so follow-up 2 was not tested by this run and its reading guide could not apply.
+- The cause is a fault in the shim, not in GPUI. `display_now` asked the layer of the window's
+  content view to display. GPUI's view is a subview of that content view
+  (`gpui-pre-macos` 0.3.13, `window.rs`: `addSubview`), and its own backing layer is the Metal
+  layer. Displaying the content view's layer draws nothing. The display right after a resize
+  only drew because the Metal layer's bounds had changed and the transaction commit that
+  follows displayed it.
+- In 10 of the 12 moves, all six Full screen entries among them, the `settled` line, about
+  500 ms after the second repeat marked the window for a redraw, reads
+  `0 renders since it was last shown` with `dirty: true`, display link attached, not paused
+  and woken. The window asked for a frame and the display link handed none out for half a
+  second or more. Before that, 1 to 7 renders arrived between the two repeats. This happens in
+  entries whose capture is correct too, so it does not explain the stale picture alone. The
+  run before this one, without repeats, already showed only 4 to 5 renders in the first 450 ms
+  after a move, for a test picture that changes 30 times a second. So slow or stopped frame
+  delivery after a resize was there before follow-up 2.
+- The one `[gpui-log]` error (`handling resize … RefCell already borrowed`) is the first line
+  of the output, before the first resize line at 893 ms, and is the same first line in run
+  45083634125. It is a resize callback at startup, not the repeat display: the first repeat
+  cannot run until 150 ms after a resize line. The repeat already runs in a task on GPUI's
+  foreground executor, between GPUI updates.
+
+What is still unknown: why the display link stops handing out frames after a resize on this
+runner, and why the frames drawn before it stops do not replace the stale picture. No real Mac
+has shown the fault.
+
+Change in this follow-up (Mac only; Windows, the 280 ms curves, the 0 px/white frame defaults
+and the verifier are untouched):
+
+1. `display_now` takes GPUI's own view, marks that view's Metal layer for display and commits
+   the transaction. GPUI's displayLayer delegate then draws with the transaction, without the
+   display link, and attaches a fresh display link. The display after a resize and both
+   repeats use it.
+2. While it displays, the Metal layer may give up waiting for a free drawable after one second.
+   GPUI normally waits without limit; if the stopped display link means that no drawable is
+   free, the repeat would otherwise freeze the app. Follow-up 2 rejected this guard because the
+   trace then showed drawables arriving; the `settled` lines above are the reason to add it.
+
+How to read the next ARM result:
+
+- `shown again … drew 1` with a paint time of a few milliseconds on every line, and no stale
+  capture: the repeat works as redundancy. Repeat the job two or three times before trusting it.
+- A stale capture although both of its `shown again` lines read `drew 1` and no `[gpui-log]`
+  error follows them: a frame drawn and committed by the app does not reach the screen. The
+  fault is then below the app (window server or virtual display) and cannot be repaired from
+  the app; the next step is a check on a real Apple Silicon Mac, not another repaint.
+- `shown again` with a paint time near 1000 ms and
+  `[gpui-log] ERROR … failed to retrieve next drawable`: the system holds every drawable. The
+  count in `drew` is 1 in this case too, because it counts the scene being built, not the
+  frame being presented. This also puts the fault below the app.
+- `drew 0` again: the Metal layer was not reached, a fault in the shim.
+
+Checks for this follow-up: `kit rust` pass (tests, formatting and Clippy on Linux);
+`kit unit --affected` none affected; `kit ux` fails as before (no `docs/agents/features.md`),
+not counted as a pass. Linux cannot compile the Mac shim, so only the native CI jobs compile
+and run this change, and no portable test can fail first.
+
 ## Review ledger
 
 Earlier Opus reviews returned P3 findings and validation gaps; they did not prove native
@@ -230,3 +307,4 @@ usage were exhausted. No GPT fallback is authorized or used.
 - **Known exceptions accepted by:** None added.
 - **Follow-ups:** Run three native targets; inspect all ARM/Intel repeated raw and packaged captures; report the clean head. If this last repair fails, escalate to the lead with the trace evidence above.
 - **Follow-ups after 2026-11-23:** Repeat the ARM job two or three times on the follow-up head and read `camframe-rust-output.txt` each time, pass or fail. Remove the resize trace, the `log` dependency and the render counter once the cause is settled. Ask for the fault to be looked for on a real Apple Silicon Mac: every sighting so far is on the virtual runner.
+- **Follow-ups after follow-up 3:** Read the next ARM trace with the four readings in follow-up 3. If an entry is stale although its repeats drew, or no drawable is free, stop repainting from the app and take the real-Mac check to Lex.

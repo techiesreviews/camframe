@@ -33,12 +33,13 @@ static RESIZES: AtomicU64 = AtomicU64::new(0);
 
 /// When the picture is shown again after the last resize of a move, in milliseconds.
 ///
-/// On Apple Silicon CI about one Full screen entry in six to twelve kept a picture drawn just
-/// before the resize on screen, stretched, until the next pointer event. It appears to be a frame
-/// the old display link presented late, after the resize frame; why later frames do not replace
-/// it is not proven. So the window draws and commits itself again several display frames after
-/// the move, when a late frame would have landed, and once more as a second chance. Redundancy
-/// against a lost frame, not a repair of the cause.
+/// On Apple Silicon CI some moves (up to three in twelve) kept the picture from before the resize
+/// on screen, stretched, until the next pointer event. The trace shows that after a resize the
+/// display link can stop handing out frames for half a second and more, while the window asks
+/// for one; the cause is not proven. So the window draws itself again through AppKit, which
+/// does not need the display link and attaches a fresh one, several display frames after the
+/// move and once more as a second chance. Redundancy against a lost frame, not a repair of the
+/// cause.
 const SHOW_AGAIN_AFTER_MS: [u64; 2] = [150, 500];
 /// Test runs only: when the trace reports, without drawing, whether frames keep arriving.
 const SETTLED_TRACE_AFTER_MS: u64 = 1000;
@@ -179,11 +180,17 @@ unsafe impl Encode for CgRect {
     const ENCODING: Encoding = Encoding::Struct("CGRect", &[CgPoint::ENCODING, CgSize::ENCODING]);
 }
 
-fn ns_window_of(window: &Window) -> Option<*mut AnyObject> {
+/// GPUI's own view. It is a subview of the window's content view, and its backing layer is the
+/// Metal layer GPUI draws into.
+fn gpui_view_of(window: &Window) -> Option<*mut AnyObject> {
     let RawWindowHandle::AppKit(appkit) = HasWindowHandle::window_handle(window).ok()?.as_raw() else {
         return None;
     };
-    let ns_view = appkit.ns_view.as_ptr().cast::<AnyObject>();
+    Some(appkit.ns_view.as_ptr().cast::<AnyObject>())
+}
+
+fn ns_window_of(window: &Window) -> Option<*mut AnyObject> {
+    let ns_view = gpui_view_of(window)?;
     // SAFETY: GPUI's live NSView on the main thread.
     let ns_window: *mut AnyObject = unsafe { msg_send![ns_view, window] };
     (!ns_window.is_null()).then_some(ns_window)
@@ -226,6 +233,8 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
     // cached Compact scene stretched to the new frame. Retain the NSWindow until the task runs.
     // SAFETY: ns_window_of checked the pointer from this live GPUI Window; retain it on the UI thread.
     let Some(native) = (unsafe { Retained::retain(ns_window) }) else { return };
+    // SAFETY: the same live GPUI view ns_window_of just read; retained for the queued task too.
+    let Some(gpui_view) = gpui_view_of(window).and_then(|view| unsafe { Retained::retain(view) }) else { return };
     let key = ns_window as usize;
     let handle = Window::window_handle(window);
     let mut async_cx = cx.to_async();
@@ -262,11 +271,11 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
                 return; // The GPUI window closed while the native request was queued.
             }
             // Resizing can leave CAMetalDisplayLink attached and unpaused without delivering
-            // a new drawable. Ask AppKit to display the backing layer after the GPUI update
-            // has returned. GPUI's displayLayer delegate then draws the synchronized scene;
+            // a new drawable. Have GPUI's Metal layer displayed after the GPUI update has
+            // returned. GPUI's displayLayer delegate then draws the synchronized scene;
             // doing this inside handle.update would re-enter an already-borrowed Window.
             let paint_started = Instant::now();
-            if !display_now(&native) {
+            if !display_now(&gpui_view) {
                 return;
             }
             let resize = RESIZES.fetch_add(1, Ordering::Relaxed) + 1;
@@ -307,7 +316,7 @@ pub fn set_bounds(window: &mut Window, bounds: camframe_core::geometry::Rect, cx
                 }
                 let paint_started = Instant::now();
                 let renders_before = RENDERS.load(Ordering::Relaxed);
-                if !display_now(&native) {
+                if !display_now(&gpui_view) {
                     return;
                 }
                 renders = RENDERS.load(Ordering::Relaxed);
@@ -345,25 +354,37 @@ fn superseded(resize: u64, key: usize) -> bool {
 }
 
 /// Draws the window's GPUI scene now and puts it on screen together with the window's current
-/// frame. Returns false when the window has no content view left.
+/// frame. Returns false when GPUI's view has no layer left.
+///
+/// `gpui_view` must be GPUI's own view (see `gpui_view_of`), not the window's content view. The
+/// content view's layer is a different one: asking that layer to display draws nothing, which is
+/// why the first version of the repeat display never drew.
 ///
 /// Call it on the UI thread and outside any GPUI window update: GPUI's displayLayer delegate has
 /// to enter the window to draw.
-fn display_now(native: &AnyObject) -> bool {
-    // SAFETY: a live NSWindow owns its content view and that view's layer; documented selectors.
+fn display_now(gpui_view: &AnyObject) -> bool {
+    // SAFETY: a retained NSView on the main thread; documented CALayer, CAMetalLayer and
+    // CATransaction selectors, the CAMetalLayer one only after checking the layer's class.
     unsafe {
-        let view: *mut AnyObject = msg_send![native, contentView];
-        if view.is_null() {
+        let layer: *mut AnyObject = msg_send![gpui_view, layer];
+        if layer.is_null() {
             return false;
         }
-        let layer: *mut AnyObject = msg_send![view, layer];
-        if !layer.is_null() {
-            let _: () = msg_send![layer, setNeedsDisplay];
-            let _: () = msg_send![layer, displayIfNeeded];
-            // GPUI presents that frame with the Core Animation transaction and then attaches a
-            // new display link. Commit now, so the picture (after a resize, with the new frame
-            // size) reaches the screen before that link can present anything.
-            let _: () = msg_send![class!(CATransaction), flush];
+        // GPUI waits without limit for a free drawable. If the system never frees one, that wait
+        // would freeze the app here. With the limit on, Metal gives up after a second and GPUI
+        // logs "failed to retrieve next drawable" instead.
+        let is_metal: Bool = msg_send![layer, isKindOfClass: class!(CAMetalLayer)];
+        if is_metal.as_bool() {
+            let _: () = msg_send![layer, setAllowsNextDrawableTimeout: Bool::YES];
+        }
+        let _: () = msg_send![layer, setNeedsDisplay];
+        // Committing the transaction displays the marked layer through GPUI's displayLayer
+        // delegate. GPUI presents that frame with the transaction and then attaches a new
+        // display link, so the picture (after a resize, with the new frame size) reaches the
+        // screen before that link can present anything.
+        let _: () = msg_send![class!(CATransaction), flush];
+        if is_metal.as_bool() {
+            let _: () = msg_send![layer, setAllowsNextDrawableTimeout: Bool::NO];
         }
     }
     true

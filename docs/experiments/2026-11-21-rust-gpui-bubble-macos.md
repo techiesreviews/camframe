@@ -179,3 +179,32 @@ renderer owns that switch and resets it after each forced display), a temporary 
 timeout around the repeats (the trace shows drawables are available, so it would guard against
 a fault not seen), an extra AppKit window display pass (no evidence it differs from the layer
 display), and any change to the verifier.
+
+### 2026-11-23: variant F was never exercised; variant G
+
+Variant F (tested at `5125ddd`) failed Mac ARM in run `45087539195`: three stale moves of
+twelve, two Full screen entries and one return to Compact. Disposition: void, not rejected.
+Every repeat line in the trace reads `drew 0`. The shim asked the layer of the window's content
+view to display, and GPUI's Metal layer belongs to GPUI's own view, a subview of that content
+view. The repeats therefore drew nothing, and the run says nothing about whether a repeated
+display helps.
+
+The same trace adds one finding. In 10 of 12 moves the window was still marked for a redraw
+about 500 ms after the second repeat, with the display link attached, not paused and woken, and
+no frame had been drawn in that time. Frame delivery stops after a resize on this runner, in
+entries that pass too. The run before it, without repeats, already showed slow delivery, so the
+repeats did not cause it.
+
+Variant G is variant F with the display aimed at the right layer: the shim marks the Metal
+layer of GPUI's view and commits the transaction, for the display after a resize and for both
+repeats. It also lets the Metal layer give up waiting for a free drawable after one second
+while it displays. This revises the rejection of that timeout above: a display link that hands
+out no frames may mean that no drawable is free, and GPUI's wait without limit would then
+freeze the app in the repeat. The timeout is a guard against that freeze, not a repair.
+
+Status: uncertain. Native results pending. The next ARM trace decides between three readings,
+listed in
+[the Metal repaint verification](../verification/runs/2026-11-22-rust-metal-fullscreen.md): the
+repeat draws and no entry is stale; the repeat draws and an entry is still stale; or no drawable
+is free. The last two put the fault below the app, and a check on a real Apple Silicon Mac is
+then the next step rather than another repaint.
