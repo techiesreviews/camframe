@@ -81,7 +81,14 @@ impl PreferencesStore {
         if let Some(folder) = self.path.parent() {
             fs::create_dir_all(folder)?;
         }
-        if let Ok(current) = fs::read_to_string(&self.path)
+        let current = match fs::read(&self.path) {
+            Ok(bytes) => String::from_utf8(bytes).ok(),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            // A rename can succeed even when reading fails. Keep the original in place until a
+            // later save can read it, including saves from the app's startup migration.
+            Err(error) => return Err(error),
+        };
+        if let Some(current) = current
             && is_document(&current)
             && current != text
         {
@@ -190,6 +197,38 @@ mod tests {
             .count();
         assert_eq!(leftovers, 0, "no temporary files left behind");
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saves_keep_an_unreadable_original_until_access_returns() {
+        use std::os::unix::fs::PermissionsExt;
+
+        for spare in [None, Some("{broken"), Some(r#"{"size":350}"#)] {
+            let root = folder(&format!("unreadable-{}", spare.unwrap_or("missing").len()));
+            let store = PreferencesStore::in_folder(&root);
+            let original = r#"{"size":412,"presets":[{"name":"Saved Interview"}]}"#;
+            store.write(original).unwrap();
+            if let Some(text) = spare {
+                fs::write(&store.last_good, text).unwrap();
+            }
+            let permissions = fs::metadata(store.path()).unwrap().permissions();
+            fs::set_permissions(store.path(), fs::Permissions::from_mode(0o000)).unwrap();
+            let read_error = fs::read(store.path()).unwrap_err();
+            assert_eq!(read_error.kind(), io::ErrorKind::PermissionDenied);
+
+            let first_save = store.write(r#"{"size":288}"#);
+            let quit_save = store.write(r#"{"size":288}"#);
+            fs::set_permissions(store.path(), permissions).unwrap();
+
+            assert_eq!(store.read().as_deref(), Some(original), "the saved Scene comes back");
+            assert_eq!(first_save.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(quit_save.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(fs::read_to_string(&store.last_good).ok().as_deref(), spare);
+            store.write(r#"{"size":320}"#).unwrap();
+            assert_eq!(fs::read_to_string(&store.last_good).unwrap(), original);
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]

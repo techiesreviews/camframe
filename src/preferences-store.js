@@ -19,7 +19,7 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
     try {
       return { text: fs.readFileSync(file, 'utf8') }
     } catch (error) {
-      return { missing: error?.code === 'ENOENT' }
+      return { missing: error?.code === 'ENOENT', error }
     }
   }
 
@@ -97,6 +97,9 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
     },
     write(text) {
       const current = load(path)
+      // An unreadable file may still contain the only saved Scenes. Keep it in place until a
+      // later save can read it; even a successful rename or Windows in-place write would lose it.
+      if (current.error && !current.missing) throw current.error
       if (isDocument(current.text) && current.text !== text) {
         try {
           replace(lastGoodPath, current.text)

@@ -177,11 +177,56 @@ test('an unreadable preferences.json loads the last good copy, and with no copy 
   store.write(document('Newer'))
   assert.equal(createPreferencesStore(path, locked).read(), document('Kept'))
 
-  // Saving while preferences.json is unreadable leaves the last good copy alone.
-  createPreferencesStore(path, locked).write(document('Third'))
+  // Saving while preferences.json is unreadable leaves both files alone.
+  assert.throws(() => createPreferencesStore(path, locked).write(document('Third')), { code: 'EACCES' })
   assert.equal(readFileSync(join(directory, 'preferences.last-good.json'), 'utf8'), document('Kept'))
-  assert.equal(readFileSync(path, 'utf8'), document('Third'))
+  assert.equal(readFileSync(path, 'utf8'), document('Newer'))
 })
+
+for (const code of ['EACCES', 'EIO']) {
+  for (const spare of ['missing', 'broken', 'good']) {
+    for (const blockedRename of [false, true]) {
+      test(`automatic saves keep an unreadable original (${code}, ${spare} spare, rename blocked: ${blockedRename})`, () => {
+        const directory = folder()
+        const path = join(directory, 'preferences.json')
+        const lastGood = join(directory, 'preferences.last-good.json')
+        const original = document('Saved Interview')
+        writeFileSync(path, original)
+        const spareText = spare === 'good' ? document('Older Interview') : '{broken'
+        if (spare !== 'missing') writeFileSync(lastGood, spareText)
+        let unreadable = true
+        const store = createPreferencesStore(path, {
+          ...fs,
+          readFileSync: (file, ...rest) => {
+            if (file === path && unreadable) throw Object.assign(new Error('cannot read'), { code })
+            return fs.readFileSync(file, ...rest)
+          },
+          renameSync: (from, to) => {
+            if (to === path && blockedRename) throw Object.assign(new Error('busy'), { code: 'EBUSY' })
+            return fs.renameSync(from, to)
+          },
+        }, 'win32')
+        const loaded = preferencesFromDocument(store.read())
+        assert.deepEqual(loaded.presets.map((scene) => scene.name),
+          spare === 'good' ? ['Older Interview'] : ['Small bottom', 'Big right'])
+
+        // The same write serves the debounce and quit paths. Neither may replace unreadable bytes.
+        for (let save = 0; save < 2; save += 1) {
+          assert.throws(() => store.write(JSON.stringify(loaded)), { code })
+          assert.equal(readFileSync(path, 'utf8'), original)
+          assert.equal(existsSync(lastGood), spare !== 'missing')
+          if (spare !== 'missing') assert.equal(readFileSync(lastGood, 'utf8'), spareText)
+          assert.deepEqual(temporaryFiles(directory), [])
+        }
+
+        unreadable = false
+        assert.equal(store.read(), original, 'restoring access recovers the saved Scene')
+        store.write(document('Later change'))
+        assert.equal(readFileSync(lastGood, 'utf8'), original, 'later saves keep the readable original')
+      })
+    }
+  }
+}
 
 test('each save keeps the previous complete file as the last good copy', () => {
   const directory = folder()

@@ -121,6 +121,48 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn startup_migration_and_later_saves_keep_unreadable_preferences() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        for version in [0, 1] {
+            for spare in [None, Some("{broken"), Some(r#"{"schemaVersion":15,"size":350}"#)] {
+                let root = std::env::temp_dir().join(format!(
+                    "camframe-unreadable-{version}-{}-{}",
+                    spare.unwrap_or("missing").len(),
+                    std::process::id()
+                ));
+                let _ = fs::remove_dir_all(&root);
+                let file = root.join(APP_FOLDER).join(PREFERENCES_FILE);
+                let last_good = file.with_file_name("preferences.last-good.json");
+                fs::create_dir_all(file.parent().unwrap()).unwrap();
+                let original = format!(
+                    r#"{{"schemaVersion":15,"size":412,"rustFrameDefaultsVersion":{version},"presets":[{{"id":"saved","name":"Saved Interview","settings":{{"size":412}}}}]}}"#
+                );
+                fs::write(&file, &original).unwrap();
+                if let Some(text) = spare {
+                    fs::write(&last_good, text).unwrap();
+                }
+                let permissions = fs::metadata(&file).unwrap().permissions();
+                fs::set_permissions(&file, fs::Permissions::from_mode(0o000)).unwrap();
+                assert_eq!(fs::read(&file).unwrap_err().kind(), std::io::ErrorKind::PermissionDenied);
+
+                let (prefs, settings) = Prefs::open(Some(root.clone()));
+                prefs.save(&settings);
+                fs::set_permissions(&file, permissions).unwrap();
+
+                assert_eq!(fs::read_to_string(&file).unwrap(), original, "version {version}, spare {spare:?}");
+                assert_eq!(fs::read_to_string(&last_good).ok().as_deref(), spare);
+                let (_, restored) = Prefs::open(Some(root.clone()));
+                assert_eq!(restored.size, 412);
+                assert_eq!(restored.presets[0].name, "Saved Interview");
+                fs::remove_dir_all(root).unwrap();
+            }
+        }
+    }
+
     #[test]
     fn the_first_start_opens_with_the_090_look_and_saves_to_its_own_folder() {
         let root = std::env::temp_dir().join(format!("camframe-prefs-{}", std::process::id()));

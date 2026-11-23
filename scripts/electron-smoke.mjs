@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { createServer, request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -812,5 +812,54 @@ test('real Electron: a cut-off preferences.json opens with the last good copy, a
     if (resolve(userDataDirectory).startsWith(expectedPrefix)) {
       await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
     }
+  }
+})
+
+test('real Electron: unreadable Preferences survive debounced saves and quit without an error dialog', {
+  skip: process.platform === 'win32' ? 'Unix read permissions; Windows rename failures are covered by the store suite' : false,
+}, async () => {
+  const userDataDirectory = await mkdtemp(join(tmpdir(), 'camframe-electron-smoke-'))
+  const path = join(userDataDirectory, 'preferences.json')
+  const original = JSON.stringify({
+    schemaVersion: 15,
+    completedOnboardingVersion: 1,
+    size: 412,
+    presets: [{ id: 'saved', name: 'Saved Interview', settings: { size: 412 } }],
+  })
+  await writeFile(path, original)
+  const { mode } = await stat(path)
+  await chmod(path, 0o000)
+  let application
+  try {
+    await assert.rejects(readFile(path), { code: 'EACCES' })
+    application = await launchCamFrame(userDataDirectory)
+    // An uncaught timer error opens Electron's native error dialog. Capture calls without showing it.
+    await application.evaluate(({ dialog }) => {
+      const errors = []
+      dialog.showErrorBox = (title, message) => errors.push({ title, message })
+      globalThis.preferencesSaveErrors = errors
+    })
+    const page = await application.firstWindow()
+    await page.locator('#overlay').waitFor({ state: 'visible' })
+    await page.evaluate(() => window.camFrame.updateState({ size: 340 }))
+    await page.waitForTimeout(350)
+    assert.deepEqual(await application.evaluate(() => globalThis.preferencesSaveErrors), [])
+    await chmod(path, mode)
+    assert.equal(await readFile(path, 'utf8'), original, 'debounced saves keep the original')
+    await chmod(path, 0o000)
+
+    await application.close()
+    application = undefined
+    await chmod(path, mode)
+    assert.equal(await readFile(path, 'utf8'), original, 'the quit save keeps the original')
+
+    application = await launchCamFrame(userDataDirectory)
+    const restored = await (await application.firstWindow()).evaluate(() => window.camFrame.getState())
+    assert.equal(restored.size, 412)
+    assert.deepEqual(restored.presets.map((scene) => scene.name), ['Saved Interview'])
+  } finally {
+    await chmod(path, mode).catch(() => {})
+    await application?.close().catch(() => {})
+    await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
   }
 })

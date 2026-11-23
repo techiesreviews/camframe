@@ -38,7 +38,7 @@ global shortcuts / tray
 | `src/prompter-link.js` | The opt-in Prompter link: the `127.0.0.1:47833` HTTP server's lifecycle and state, origin/host/body checks, cue parsing, what a cue means (`cueAction`), and the status, which formats the Scene library's answers (`linkStatusBody`, `sceneDetail`, `lookOf`) | Main, `src/prompter-control.js` (`cueAction`, `linkStatusBody`, `sceneDetail`); injected `createServer` |
 | `src/prompter-control.js` | What a checked Prompter link request does: cues (`cueAction` then geometry), layout Scene saves, the small size, and the status `view` (ADR 0035) | Main; injected geometry, Scene state and commit |
 | `src/prompter-link-view.js` | What the Overlay shows for the Prompter link (on, off/starting/on/error, status text, button title) from `prompterLink` and `prompterLinkStatus`; the toolbar button and its hidden description render it | Overlay, tests |
-| `src/preferences-store.js` | The Preferences file on disk: one-step saves (temporary file, flush, rename), the last good copy, and which text to load (ADR 0039) | Main; injected `fs` and platform |
+| `src/preferences-store.js` | The Preferences file on disk: one-step saves (temporary file, flush, rename), the last good copy, which text to load (ADR 0039), and refusing saves over an unreadable primary (ADR 0044) | Main; injected `fs` and platform |
 | `src/settings.js` | Preferences schema, sanitization, loading/migration (`preferencesFromDocument`), Scene snapshots, camera/window dimensions | Main, Scene library, geometry, Overlay, tests |
 | `src/overlay.js` | DOM rendering and event wiring for the Overlay, Inline settings and the onboarding view; mounts the Scenes tab; in the browser QA preview, a bridge fake that runs the real Scene library | `overlay.html` |
 | `src/overlay-interaction.js` | Whether the chrome shows and whether the window is interactive; compact and Full screen hide delays; the toolbar hotspot | Overlay |
@@ -90,6 +90,13 @@ The active Scene (`activeSceneId` in the Scene session, `activePresetId` on the 
 9. After camera startup reaches a working or error state, Overlay offers onboarding when the persisted completed version is older than the current onboarding version.
 
 Existing Preferences documents without the schema-12 onboarding field are treated as completed. Missing/invalid Preferences use the default incomplete version and follow the new-install path.
+
+Every Preferences save rechecks the primary. A non-missing filesystem read error aborts before
+any replacement and keeps both files untouched (ADR 0044). Main's shared `writeSettings()` handles
+errors for both the 120 ms debounce and synchronous quit save without a native error dialog.
+Rust's store applies the same guard to later saves and `Prefs::open()`'s frame migration; its
+existing save handler logs failures. Readable malformed files and genuine first saves keep the
+previous repair and migration behavior.
 
 ## State update flow
 

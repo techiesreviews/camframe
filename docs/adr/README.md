@@ -44,6 +44,7 @@ ADRs explain what CamFrame has committed to. They are not experiment diaries. Pu
 - [`0041-rebuild-camframe-in-rust-beside-0-9-0.md`](0041-rebuild-camframe-in-rust-beside-0-9-0.md)
 - [`0042-rust-test-downloads-and-native-controls.md`](0042-rust-test-downloads-and-native-controls.md)
 - [`0043-reset-the-unreleased-rust-camera-frame-once.md`](0043-reset-the-unreleased-rust-camera-frame-once.md)
+- [`0044-keep-unreadable-preferences-in-place.md`](0044-keep-unreadable-preferences-in-place.md)
 - [`0013-establish-overlay-accessibility-contract.md`](0013-establish-overlay-accessibility-contract.md)
 - [`0014-add-scoped-custom-frame-effects.md`](0014-add-scoped-custom-frame-effects.md)
 - [`0015-sign-releases-before-enabling-updates.md`](0015-sign-releases-before-enabling-updates.md)
