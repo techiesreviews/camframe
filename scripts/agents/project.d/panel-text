@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# kit: check real native settings captures for missing text
+# Usage: kit panel-text <camera-panel.png> [style-panel.png ...]
+set -euo pipefail
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+  echo 'Usage: kit panel-text <camera-panel.png> [style-panel.png ...]'
+  exit 0
+fi
+root=$(git rev-parse --show-toplevel)
+if cargo run --quiet --manifest-path "$root/rust/Cargo.toml" --locked --bin check-panel-text -- "$@"; then
+  echo 'RESULT: ok panel-text native labels visible'
+else
+  echo 'RESULT: fail panel-text native labels missing'
+  exit 1
+fi

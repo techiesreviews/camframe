@@ -1,0 +1,46 @@
+[package]
+name = "camframe-rust"
+default-run = "camframe-rust"
+description = "CamFrame rebuilt in Rust with GPUI: a floating webcam Overlay for Windows and macOS."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+camframe-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow = "1.0"
+tiny_http = "0.12"
+async-channel = "2"
+accesskit = "0.24"
+gpui = { package = "gpui-pre", version = "0.3.13" }
+# The macOS backend otherwise selects NoopTextSystem and draws no labels.
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.13", features = ["font-kit"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Capture backends only; MJPEG is decoded with pure-Rust zune-jpeg (avoids C libjpeg-turbo).
+nokhwa = { version = "0.10.11", default-features = false, features = ["input-native"] }
+raw-window-handle = "0.6"
+smallvec = "1.13"
+zune-jpeg = "0.5"
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+tray-icon = { version = "0.26", default-features = false }
+global-hotkey = "=0.10.0"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Accessibility",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
+[lints]
+workspace = true

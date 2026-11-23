@@ -1,0 +1,154 @@
+name: Rust app (Windows)
+
+# Builds, tests and checks the Rust app (rust/) on a real Windows desktop and uploads an unsigned
+# build as a CI artifact. Never publishes a release, never creates a tag, never signs.
+
+on:
+  workflow_dispatch:
+  # The Preferences fixtures and 0.9.0's settings and Scenes rules are the Rust app's contract
+  # (ADR 0041), so a change there runs this job too.
+  pull_request:
+    paths:
+      - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
+      - 'src/camera-session.js'
+      - '.github/workflows/rust-windows.yml'
+  push:
+    branches:
+      - 'build/tools-393-**'
+    paths:
+      - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
+      - 'src/camera-session.js'
+      - '.github/workflows/rust-windows.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    name: Build & verify camframe-rust.exe (windows-x64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          cache-on-failure: true
+
+      - name: Check formatting
+        working-directory: rust
+        run: cargo fmt --all --check
+
+      - name: Run Rust unit tests
+        working-directory: rust
+        run: cargo test --workspace --locked
+
+      - name: Run Clippy
+        working-directory: rust
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Build release binary
+        working-directory: rust
+        run: cargo build --release --locked -p camframe-rust
+
+      - name: Download CamFrame 0.9.0 Portable for baseline comparison
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path baseline | Out-Null
+          gh release download v0.9.0 --repo "${{ github.repository }}" --pattern "CamFrame-Portable-0.9.0-Windows-x64.exe" --dir baseline
+        continue-on-error: true
+
+      - name: Verify on the real desktop and measure against 0.9.0
+        shell: pwsh
+        run: |
+          $baselineExe = Get-ChildItem -Path baseline -Filter "CamFrame-Portable-*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          powershell -ExecutionPolicy Bypass -File rust/scripts/verify-windows.ps1 `
+            -ExePath "rust/target/release/camframe-rust.exe" `
+            -OutDir "verification-windows" `
+            -CamFrame090Exe "$baselineExe"
+
+      - name: Package the unsigned build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "rust/target/release/camframe-rust.exe" "dist/camframe-rust.exe"
+          Copy-Item "rust/target/release/camframe-rust.exe" "dist/CamFrame-Rust-Portable-0.1.0-Windows-x64.exe"
+          Copy-Item "rust/README.md" "dist/README.txt"
+          Copy-Item "LICENSE" "dist/LICENSE.txt"
+
+      - name: Install the Electron 0.9.0 comparison dependencies
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install comparison dependencies
+        run: npm ci
+
+      - name: Capture Electron 0.9.0 beside Rust
+        shell: bash
+        run: scripts/agents/kit parity verification-parity verification-windows
+
+      - name: Upload side-by-side comparisons
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-parity-windows
+          path: verification-parity/*.png
+          if-no-files-found: error
+
+      - name: Check native settings labels
+        run: rust/target/release/check-panel-text.exe verification-windows/camera-panel.png verification-windows/style-panel.png verification-windows/scenes-panel.png verification-windows/style-glow-panel.png verification-windows/style-blur-panel.png verification-windows/scenes-list-panel.png
+
+      - name: Build and check the unsigned per-user installer
+        shell: pwsh
+        run: |
+          $makensis = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+          if (-not (Test-Path $makensis)) { choco install nsis --yes --no-progress }
+          & $makensis "/DBINARY=$((Resolve-Path 'rust/target/release/camframe-rust.exe').Path)" "/DOUT_DIR=$((Resolve-Path 'dist').Path)" rust/packaging/windows.nsi
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS build failed' }
+          $install = Join-Path $env:RUNNER_TEMP 'camframe-rust-install-check'
+          $setup = Start-Process 'dist/CamFrame-Rust-Setup-0.1.0-Windows-x64.exe' -ArgumentList @('/S', "/D=$install") -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw 'Silent install failed' }
+          $installed = Join-Path $install 'camframe-rust.exe'
+          if ((Get-FileHash $installed).Hash -ne (Get-FileHash 'rust/target/release/camframe-rust.exe').Hash) { throw 'Installed binary differs' }
+          Start-Process (Join-Path $install 'Uninstall.exe') -ArgumentList '/S' -Wait
+          if (Test-Path $installed) { throw 'Uninstall left the binary behind' }
+
+      - name: Upload the Windows build
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-rust-windows-x64
+          path: dist/
+          if-no-files-found: error
+
+      - name: Upload desktop verification screenshots and benchmark
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-rust-verification-windows
+          path: verification-windows/
+          if-no-files-found: warn

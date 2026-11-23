@@ -1,0 +1,192 @@
+name: Rust app (macOS)
+
+# Builds, tests and checks the Rust app (rust/) on a real macOS desktop (Apple Silicon) and
+# uploads an unsigned build as a CI artifact (only the ad-hoc signature Apple Silicon needs to
+# start a program; no developer certificate). Never publishes a release, never creates a tag.
+
+on:
+  workflow_dispatch:
+  # The Preferences fixtures and 0.9.0's settings and Scenes rules are the Rust app's contract
+  # (ADR 0041), so a change there runs this job too.
+  pull_request:
+    paths:
+      - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
+      - 'src/camera-session.js'
+      - '.github/workflows/rust-macos.yml'
+  push:
+    branches:
+      - 'build/tools-393-**'
+    paths:
+      - 'rust/**'
+      - 'test/fixtures/preferences/**'
+      - 'src/settings.js'
+      - 'src/scenes.js'
+      - 'src/camera-session.js'
+      - '.github/workflows/rust-macos.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-macos-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    name: Build & verify camframe-rust (macos-${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          cache-on-failure: true
+
+      - name: Make sure the Metal shader compiler is available
+        run: |
+          sw_vers
+          xcodebuild -version
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun -sdk macosx metal --version
+          fi
+
+      - name: Check formatting
+        working-directory: rust
+        run: cargo fmt --all --check
+
+      - name: Run Rust unit tests
+        working-directory: rust
+        run: cargo test --workspace --locked
+
+      - name: Run Clippy
+        working-directory: rust
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Build release binary
+        working-directory: rust
+        run: cargo build --release --locked -p camframe-rust
+
+      - name: Build the screen check
+        run: swiftc -O rust/scripts/verify-macos.swift -o verify-macos
+
+      - name: Verify on the real desktop and measure
+        run: ./verify-macos --exe rust/target/release/camframe-rust --out verification-macos
+
+      - name: Install the Electron 0.9.0 comparison dependencies
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install comparison dependencies
+        run: npm ci
+
+      - name: Install modern Bash for Agent Kit
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: brew install bash
+
+      - name: Capture Electron 0.9.0 beside Rust
+        shell: bash
+        run: |
+          node_bin="$(dirname "$(command -v node)")"
+          export PATH="$node_bin:$(brew --prefix)/bin:$PATH"
+          bash scripts/agents/kit parity verification-parity verification-macos
+
+      - name: Upload side-by-side comparisons
+        if: always() && hashFiles('verification-parity/*.png') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-parity-macos-${{ matrix.arch }}
+          path: verification-parity/*.png
+          if-no-files-found: error
+
+      - name: Check native settings labels
+        run: rust/target/release/check-panel-text verification-macos/camera-panel.png verification-macos/style-panel.png verification-macos/scenes-panel.png verification-macos/style-glow-panel.png verification-macos/style-blur-panel.png verification-macos/scenes-list-panel.png
+
+      - name: Package the unsigned app
+        run: |
+          app="dist/CamFrame Rust.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp LICENSE "$app/Contents/Resources/LICENSE.txt"
+          cp rust/target/release/camframe-rust "$app/Contents/MacOS/camframe-rust"
+          cat > "$app/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>camframe-rust</string>
+            <key>CFBundleIdentifier</key><string>review.techies.camframe.rust</string>
+            <key>CFBundleName</key><string>CamFrame Rust</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>0.1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
+            <key>LSUIElement</key><true/>
+            <key>NSCameraUsageDescription</key><string>CamFrame shows your camera in a floating bubble.</string>
+          </dict>
+          </plist>
+          PLIST
+          plutil -lint "$app/Contents/Info.plist"
+          codesign --force --sign - "$app"
+          codesign --verify --verbose "$app"
+          # Start the app the way Finder does (reads Info.plist), then quit it.
+          open -n "$app" --args --demo-pattern
+          sleep 4
+          pgrep -f "CamFrame Rust.app/Contents/MacOS/camframe-rust"
+          pkill -f "CamFrame Rust.app/Contents/MacOS/camframe-rust"
+          sleep 1
+          # Check the packaged app's binary too, so the download is the one that was checked.
+          ./verify-macos --exe "$app/Contents/MacOS/camframe-rust" --out verification-macos/packaged-app
+          rust/target/release/check-panel-text verification-macos/packaged-app/camera-panel.png
+          cp rust/README.md dist/README.txt
+          cp LICENSE dist/LICENSE.txt
+          (cd dist && ditto -c -k --keepParent "CamFrame Rust.app" "CamFrame-Rust-macOS-${{ matrix.arch }}-beta.zip")
+          mkdir -p dist/dmg
+          cp -R "$app" dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "CamFrame Rust beta" -srcfolder dist/dmg -ov -format UDZO "dist/CamFrame-Rust-macOS-${{ matrix.arch }}-beta.dmg"
+          hdiutil verify "dist/CamFrame-Rust-macOS-${{ matrix.arch }}-beta.dmg"
+          rm -rf dist/dmg
+          rm -rf "$app"
+          ls -l dist
+
+      - name: Upload the macOS build
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-rust-macos-${{ matrix.arch }}-beta
+          path: dist/
+          if-no-files-found: error
+
+      - name: Upload desktop verification screenshots and benchmark
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: camframe-rust-verification-macos-${{ matrix.arch }}
+          path: verification-macos/
+          if-no-files-found: warn

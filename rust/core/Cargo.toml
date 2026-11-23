@@ -1,0 +1,16 @@
+[package]
+name = "camframe-core"
+description = "CamFrame's rules without a window: Preferences, Scenes, Overlay geometry, framing, the Prompter link contract."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+sha2 = "0.10"
+regex = "1"
+serde.workspace = true
+serde_json.workspace = true
+unicode-normalization = "0.1"
+
+[lints]
+workspace = true
