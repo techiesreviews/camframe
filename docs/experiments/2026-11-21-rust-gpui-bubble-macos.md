@@ -195,16 +195,17 @@ no frame had been drawn in that time. Frame delivery stops after a resize on thi
 entries that pass too. The run before it, without repeats, already showed slow delivery, so the
 repeats did not cause it.
 
-Variant G is variant F with the display aimed at the right layer: the shim marks the Metal
-layer of GPUI's view and commits the transaction, for the display after a resize and for both
-repeats. It also lets the Metal layer give up waiting for a free drawable after one second
+Variant G is variant F with the display aimed at the right layer: the shim has the Metal layer
+of GPUI's view displayed and commits the transaction, for the display after a resize and for
+both repeats. It also lets the Metal layer give up waiting for a free drawable after one second
 while it displays. This revises the rejection of that timeout above: a display link that hands
 out no frames may mean that no drawable is free, and GPUI's wait without limit would then
 freeze the app in the repeat. The timeout is a guard against that freeze, not a repair.
 
-Status: uncertain. Native results pending. The next ARM trace decides between three readings,
+Status: uncertain. Native results pending. The next ARM trace decides between four readings,
 listed in
 [the Metal repaint verification](../verification/runs/2026-11-22-rust-metal-fullscreen.md): the
-repeat draws and no entry is stale; the repeat draws and an entry is still stale; or no drawable
-is free. The last two put the fault below the app, and a check on a real Apple Silicon Mac is
-then the next step rather than another repaint.
+repeat draws and no entry is stale; the repeat draws and an entry is still stale; no drawable
+is free; or `drew 0` again, which means the shim missed the Metal layer once more. The second
+and third put the fault below the app, and a check on a real Apple Silicon Mac is then the next
+step rather than another repaint.

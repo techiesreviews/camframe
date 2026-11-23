@@ -261,10 +261,9 @@ has shown the fault.
 Change in this follow-up (Mac only; Windows, the 280 ms curves, the 0 px/white frame defaults
 and the verifier are untouched):
 
-1. `display_now` takes GPUI's own view, marks that view's Metal layer for display and commits
-   the transaction. GPUI's displayLayer delegate then draws with the transaction, without the
-   display link, and attaches a fresh display link. The display after a resize and both
-   repeats use it.
+1. `display_now` takes GPUI's own view, has that view's Metal layer displayed and commits the
+   transaction. GPUI's displayLayer delegate draws with the transaction, without the display
+   link, and attaches a fresh display link. The display after a resize and both repeats use it.
 2. While it displays, the Metal layer may give up waiting for a free drawable after one second.
    GPUI normally waits without limit; if the stopped display link means that no drawable is
    free, the repeat would otherwise freeze the app. Follow-up 2 rejected this guard because the

@@ -36,10 +36,10 @@ static RESIZES: AtomicU64 = AtomicU64::new(0);
 /// On Apple Silicon CI some moves (up to three in twelve) kept the picture from before the resize
 /// on screen, stretched, until the next pointer event. The trace shows that after a resize the
 /// display link can stop handing out frames for half a second and more, while the window asks
-/// for one; the cause is not proven. So the window draws itself again through AppKit, which
-/// does not need the display link and attaches a fresh one, several display frames after the
-/// move and once more as a second chance. Redundancy against a lost frame, not a repair of the
-/// cause.
+/// for one; the cause is not proven. So the window draws itself again through a Core Animation
+/// layer display, which does not need the display link and attaches a fresh one, several
+/// display frames after the move and once more as a second chance. Redundancy against a lost
+/// frame, not a repair of the cause.
 const SHOW_AGAIN_AFTER_MS: [u64; 2] = [150, 500];
 /// Test runs only: when the trace reports, without drawing, whether frames keep arriving.
 const SETTLED_TRACE_AFTER_MS: u64 = 1000;
@@ -374,17 +374,21 @@ fn display_now(gpui_view: &AnyObject) -> bool {
         // would freeze the app here. With the limit on, Metal gives up after a second and GPUI
         // logs "failed to retrieve next drawable" instead.
         let is_metal: Bool = msg_send![layer, isKindOfClass: class!(CAMetalLayer)];
+        let mut had_timeout = Bool::NO;
         if is_metal.as_bool() {
+            had_timeout = msg_send![layer, allowsNextDrawableTimeout];
             let _: () = msg_send![layer, setAllowsNextDrawableTimeout: Bool::YES];
         }
+        // Displaying the marked layer runs GPUI's displayLayer delegate, here and not at a later
+        // commit, so the limit above covers the draw.
         let _: () = msg_send![layer, setNeedsDisplay];
-        // Committing the transaction displays the marked layer through GPUI's displayLayer
-        // delegate. GPUI presents that frame with the transaction and then attaches a new
-        // display link, so the picture (after a resize, with the new frame size) reaches the
-        // screen before that link can present anything.
+        let _: () = msg_send![layer, displayIfNeeded];
+        // GPUI presents that frame with the Core Animation transaction and then attaches a new
+        // display link. Commit now, so the picture (after a resize, with the new frame size)
+        // reaches the screen before that link can present anything.
         let _: () = msg_send![class!(CATransaction), flush];
         if is_metal.as_bool() {
-            let _: () = msg_send![layer, setAllowsNextDrawableTimeout: Bool::NO];
+            let _: () = msg_send![layer, setAllowsNextDrawableTimeout: had_timeout];
         }
     }
     true
