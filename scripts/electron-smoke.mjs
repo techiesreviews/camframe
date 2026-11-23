@@ -836,7 +836,7 @@ test('real Electron: unreadable Preferences survive debounced saves and quit wit
     application = await launchCamFrame(userDataDirectory)
     application.process().stderr.on('data', (chunk) => { saveOutput += chunk.toString() })
     // An uncaught timer error opens Electron's native error dialog. Capture calls without showing it.
-    await application.evaluate(({ dialog }) => {
+    await application.evaluate(({ app, dialog }) => {
       const errors = []
       dialog.showErrorBox = (title, message) => errors.push({ title, message })
       globalThis.preferencesSaveErrors = errors
@@ -844,7 +844,7 @@ test('real Electron: unreadable Preferences survive debounced saves and quit wit
       const log = console.error
       console.error = (...args) => {
         globalThis.preferencesSaveLogs.push({ message: args[0], code: args[1]?.code })
-        log(...args)
+        log(...args, app.isQuitting ? 'preferences-quit-save' : '')
       }
     })
     const page = await application.firstWindow()
@@ -853,7 +853,7 @@ test('real Electron: unreadable Preferences survive debounced saves and quit wit
     await page.waitForTimeout(350)
     assert.deepEqual(await application.evaluate(() => globalThis.preferencesSaveErrors), [])
     assert.ok(await application.evaluate(() => globalThis.preferencesSaveLogs.some(
-      (entry) => entry.message.includes('could not save Preferences') && entry.code === 'EACCES',
+      (entry) => String(entry.message).includes('could not save Preferences') && entry.code === 'EACCES',
     )), 'the debounced save was tried and refused')
     await chmod(path, mode)
     assert.equal(await readFile(path, 'utf8'), original, 'debounced saves keep the original')
@@ -861,7 +861,7 @@ test('real Electron: unreadable Preferences survive debounced saves and quit wit
     saveOutput = ''
     await application.close()
     application = undefined
-    assert.match(saveOutput, /could not save Preferences:[\s\S]*EACCES/, 'quit tried and refused a save after access returned')
+    assert.match(saveOutput, /could not save Preferences:[\s\S]*EACCES[\s\S]*preferences-quit-save/, 'quit tried and refused a save after access returned')
     assert.equal(await readFile(path, 'utf8'), original, 'the fallback session keeps the original after access returns')
 
     application = await launchCamFrame(userDataDirectory)
