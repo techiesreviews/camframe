@@ -14,6 +14,7 @@ let sequence = 0
 // purpose starts fresh even when a last good copy is left.
 export function createPreferencesStore(path, fs = nodeFs, platform = process.platform) {
   const lastGoodPath = `${path.replace(/\.json$/, '')}.last-good.json`
+  let sessionReadError
 
   function load(file) {
     try {
@@ -91,11 +92,15 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
     read() {
       const current = load(path)
       if (current.missing) return undefined
+      // This session loaded fallback settings. Even if access returns before quit, saving them
+      // would hide the original Scenes again. A new store on restart can load the original.
+      if (current.error) sessionReadError = current.error
       if (isDocument(current.text)) return current.text
       const lastGood = load(lastGoodPath)
       return isDocument(lastGood.text) ? lastGood.text : current.text
     },
     write(text) {
+      if (sessionReadError) throw sessionReadError
       const current = load(path)
       // An unreadable file may still contain the only saved Scenes. Keep it in place until a
       // later save can read it; even a successful rename or Windows in-place write would lose it.

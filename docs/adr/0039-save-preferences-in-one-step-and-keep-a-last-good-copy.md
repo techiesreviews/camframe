@@ -4,6 +4,8 @@
 
 Accepted — 2026-11-15 (Orbit TOOLS-295, pick 0a of the 2026-11-15 architecture review, bug B4).
 
+Superseded in part by ADR 0044 (unreadable Preferences and session save protection, 2026-11-23).
+
 ## Context
 
 Main wrote `preferences.json` in place with `writeFileSync`, both after the 120 ms debounce and on quit. A crash, a forced shutdown or a power cut during that write leaves a cut-off file. `preferencesFromDocument()` treats invalid JSON as a new installation, so CamFrame started from defaults without a word and the next save overwrote the broken file: every saved Scene and setting was gone.

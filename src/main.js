@@ -44,7 +44,8 @@ if (!app.isPackaged && process.env.CAMFRAME_E2E === '1' && isAbsolute(integratio
   }
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream')
 }
-const openPreferencesStore = () => createPreferencesStore(join(app.getPath('userData'), 'preferences.json'))
+let preferencesStore
+const openPreferencesStore = () => preferencesStore ??= createPreferencesStore(join(app.getPath('userData'), 'preferences.json'))
 
 let overlayWindow
 let overlayGeometry
