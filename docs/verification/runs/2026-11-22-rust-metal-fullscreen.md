@@ -268,6 +268,9 @@ and the verifier are untouched):
    GPUI normally waits without limit; if the stopped display link means that no drawable is
    free, the repeat would otherwise freeze the app. Follow-up 2 rejected this guard because the
    trace then showed drawables arriving; the `settled` lines above are the reason to add it.
+3. After review (`342df14`): `display_now` displays the Metal layer itself before it commits,
+   so the draw runs while the one-second limit is on, and afterwards it puts back the limit
+   setting it found. This is a precaution; no trace has shown a draw outside the limit.
 
 How to read the next ARM result:
 
@@ -281,9 +284,11 @@ How to read the next ARM result:
   `[gpui-log] ERROR … failed to retrieve next drawable`: the system holds every drawable. The
   count in `drew` is 1 in this case too, because it counts the scene being built, not the
   frame being presented. This also puts the fault below the app.
-- `drew 0` again: the Metal layer was not reached, a fault in the shim.
+- `drew 0` again: the display did not reach GPUI's drawing. The trace does not say why; the
+  shim is the first place to look.
 
-Checks for this follow-up: `kit rust` pass (tests, formatting and Clippy on Linux);
+Checks for this follow-up, run on `13e1f64` and again on `342df14`: `kit rust` pass (tests,
+formatting and Clippy on Linux);
 `kit unit --affected` none affected; `kit ux` fails as before (no `docs/agents/features.md`),
 not counted as a pass. Linux cannot compile the Mac shim, so only the native CI jobs compile
 and run this change, and no portable test can fail first.

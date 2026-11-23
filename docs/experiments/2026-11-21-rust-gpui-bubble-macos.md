@@ -206,6 +206,6 @@ Status: uncertain. Native results pending. The next ARM trace decides between fo
 listed in
 [the Metal repaint verification](../verification/runs/2026-11-22-rust-metal-fullscreen.md): the
 repeat draws and no entry is stale; the repeat draws and an entry is still stale; no drawable
-is free; or `drew 0` again, which means the shim missed the Metal layer once more. The second
+is free; or `drew 0` again, which means the display did not reach GPUI's drawing. The second
 and third put the fault below the app, and a check on a real Apple Silicon Mac is then the next
 step rather than another repaint.
