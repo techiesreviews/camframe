@@ -114,7 +114,8 @@ jobs:
       - name: Capture Electron 0.9.0 beside Rust
         shell: bash
         run: |
-          export PATH="$(brew --prefix)/bin:$PATH"
+          node_bin="$(dirname "$(command -v node)")"
+          export PATH="$node_bin:$(brew --prefix)/bin:$PATH"
           bash scripts/agents/kit parity verification-parity verification-macos
 
       - name: Upload side-by-side comparisons
