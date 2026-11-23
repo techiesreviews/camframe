@@ -141,7 +141,8 @@ keeps its original cubic curve. Reduced motion skips both geometry animations. T
 no additional high-contrast outline; its frame is controlled by the Frame setting.
 
 `kit parity <output> <native captures>` captures the unchanged 0.9.0 Electron source beside the
-Rust app on each CI desktop. The test-only `--demo-pattern --settings-panel` values are `camera`,
+Rust app on each CI desktop. It extracts the resolved `v0.9.0` tag into a temporary folder, so
+Electron maintenance fixes do not change the baseline. The test-only `--demo-pattern --settings-panel` values are `camera`,
 `style`, `style-glow`, `style-blur`, `scenes`, `scenes-list`, `small-menu` and `large-menu`.
 The latter two show the 180 px Portrait and 640 px Landscape toolbar. Native text/icon pixel
 checks reject blank selected tabs and missing toolbar icons. Synthetic video sources differ;

@@ -2,7 +2,7 @@
 
 - **Date started:** 2026-11-23
 - **Owner:** Codex
-- **Status:** Superseded
+- **Status:** Rejected (the per-save-only hypothesis; the session guard is recorded in ADR 0044).
 - **Related change:** TOOLS-447; [ADR 0044](../adr/0044-keep-unreadable-preferences-in-place.md).
 - **Baseline:** `19cf45221ce08e43052df8975c9aa38dffc93552`.
 

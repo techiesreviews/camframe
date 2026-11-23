@@ -229,13 +229,15 @@ mod tests {
 
             let first_save = store.write(r#"{"size":288}"#);
             let quit_save = store.write(r#"{"size":288}"#);
+            store.read();
             fs::set_permissions(store.path(), permissions).unwrap();
 
             assert_eq!(store.read().as_deref(), Some(original), "the saved Scene comes back");
             assert_eq!(first_save.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
             assert_eq!(quit_save.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
             assert_eq!(fs::read_to_string(&store.last_good).ok().as_deref(), spare);
-            store.write(r#"{"size":320}"#).unwrap();
+            assert_eq!(store.write(r#"{"size":288}"#).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+            PreferencesStore::in_folder(&root).write(r#"{"size":320}"#).unwrap();
             assert_eq!(fs::read_to_string(&store.last_good).unwrap(), original);
             fs::remove_dir_all(root).unwrap();
         }

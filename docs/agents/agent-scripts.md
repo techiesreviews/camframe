@@ -28,7 +28,10 @@ The real-Electron smoke test (`npm run test:electron`, `scripts/electron-smoke.m
 `kit parity <output-directory> <native-screenshot-directory>` runs the unchanged Electron 0.9.0
 source through Electron/Playwright, then places its captures beside the real GPUI desktop captures.
 It requires a Windows or Mac desktop, `npm ci`, the `v0.9.0` tag, and the release `compare-parity`
-binary. It refuses a changed Electron source baseline. Both Rust CI workflows run it; the artifacts
+binary. It extracts `src/` and `package.json` from the resolved `v0.9.0` commit into a temporary
+folder, captures that source and removes the folder, so later Electron maintenance fixes do not
+change the comparison baseline or block the Rust checks. The manifest records the baseline commit.
+Both Rust CI workflows run it; the artifacts
 include the bubble, fullscreen, small/large menus, Camera, Style (None/Glow/Blur), and Scenes
 (grid/list). The two synthetic video sources differ. This is visual evidence, not a pixel equality
 assertion or a physical camera check. `kit shots` continues to check the Electron baseline only.
