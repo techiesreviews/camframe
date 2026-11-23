@@ -1,7 +1,7 @@
 # Verification run: unreadable Preferences preservation — 2026-11-23
 
 - **Baseline:** `19cf45221ce08e43052df8975c9aa38dffc93552` (`origin/dev`).
-- **Commit:** `fd398424dae2004b2540868eca86c5ef7aa8f5f2` (final source and tests; this run's later documentation commit changes no executable files).
+- **Commit:** `dfd92e8712d47b000bc7ce6876bf6d2ec01e1076` (final source and tests; this run's later documentation commit changes no executable files).
 - **Versions:** Electron 0.9.0; unreleased Rust 0.1.0.
 - **Observer:** Codex (`gpt-6.1-sol`).
 - **Environment:** Linux 7.0.0-43-generic x86_64, ordinary UID 1000, Node 24.22.2,
@@ -32,9 +32,20 @@ The existing main checkout's `node_modules` was linked; no dependency install ra
 | Final `kit unit` | Passed: 493 passed, 0 failed, 1 skipped (494 total) | `.scratch/unit/20261123T221105-604813.log` |
 | `kit go tools-447-session-check --max 15m -- scripts/agents/kit rust` | Passed: formatting, 74 tests, Clippy with warnings denied | `.scratch/kit-jobs/tools-447-session-check/log` |
 | `kit go tools-447-electron-session-check --max 3m -- node --test --test-name-pattern 'unreadable Preferences survive\|cut-off preferences.json' scripts/electron-smoke.mjs` | Passed 2/2; refused debounce and quit saves are logged; quit after access returns keeps the original; restart recovers the Scene | `.scratch/kit-jobs/tools-447-electron-session-check/log` |
+| `kit go tools-447-parity-red --max 3m -- scripts/agents/kit parity .scratch/parity-red` before the capture fix | Failed: the old working-tree comparison rejected the required Electron maintenance changes | `.scratch/kit-jobs/tools-447-parity-red/log` |
+| `kit go tools-447-parity-check --max 3m -- scripts/agents/kit parity .scratch/parity-check` | Passed 11 unchanged Electron 0.9.0 captures from the tag; temporary source folder removed | `.scratch/kit-jobs/tools-447-parity-check/log`, `.scratch/parity-check/*-090.png` |
+| `kit go tools-447-final-rust --max 15m -- scripts/agents/kit rust` | Passed: formatting, 74 tests and Clippy, including the store's latched error kind and new-store save assertions | `.scratch/kit-jobs/tools-447-final-rust/log` |
+| `kit go tools-447-final-electron --max 3m -- node --test --test-name-pattern 'unreadable Preferences survive\|cut-off preferences.json' scripts/electron-smoke.mjs` | Passed 2/2; a quit-only test log marker excludes delayed debounce stderr as proof of the quit save | `.scratch/kit-jobs/tools-447-final-electron/log` |
+| `node --check rust/scripts/capture-parity.mjs`; final `kit unit --affected` | Passed; 35/35 affected unit tests | `.scratch/unit/20261123T221749-646459.log` |
 
 The first post-fix Rust run passed all tests but Clippy rejected non-octal permission literals
 in the new tests. Using `0o000` fixed that check; the final run above passed.
+
+The Rust CI parity helper previously required the working-tree Electron source to equal `v0.9.0`,
+which would reject this maintenance fix before capturing anything. It now resolves the tag once,
+extracts its `src/` and `package.json`, imports that baseline's settings rules, and launches it
+from a temporary folder that is removed afterward. Native comparison manifests record the exact
+baseline commit. This preserves the original comparison instead of capturing the changed app.
 
 ## Behavior exercised
 
@@ -65,6 +76,11 @@ Electron test captures debounce and quit refusal logs, proving those save paths 
 - R1-4: fixed. The final tested source commit is recorded above.
 - R1-5 and R1-6: fixed. Store and Rust startup tests now restore access before a fallback save.
 - R1-7: fixed. The real Electron test asserts an EACCES debounce log and a quit refusal on stderr.
+- R2-1: fixed. The experiment now marks the discarded per-save-only hypothesis Rejected.
+- R2-2: fixed. The store-level test checks the latched PermissionDenied kind after access returns
+  and confirms a new store can save and back up the original.
+- The second review's optional smoke robustness nits are fixed: log messages are converted to
+  strings and a quit-only test marker distinguishes the quit refusal from delayed debounce output.
 - Declined: the review's optional invalid-UTF-8 parity suggestion (no finding ID). That predates
   this patch; changing the malformed-document backup policy is outside TOOLS-447's scope.
 
