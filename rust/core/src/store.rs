@@ -131,6 +131,8 @@ impl PreferencesStore {
             }
             Ok(_) => DocumentStatus::Damaged,
             Err(error) if error.kind() == io::ErrorKind::NotFound => DocumentStatus::Missing,
+            // Keep strict UTF-8 backup rejection; this is damaged text, not an OS read failure.
+            Err(error) if error.kind() == io::ErrorKind::InvalidData => DocumentStatus::Damaged,
             Err(error) => DocumentStatus::Unreadable(error.kind()),
         };
         self.load_outcome.set(Some(LoadOutcome { source: LoadSource::Defaults, primary, backup: Some(backup) }));
@@ -297,6 +299,27 @@ mod tests {
     fn a_missing_file_means_no_preferences() {
         let root = folder("missing");
         assert_eq!(PreferencesStore::in_folder(&root).read(), None);
+    }
+
+    #[test]
+    fn invalid_utf8_backups_are_damaged_and_stay_unusable() {
+        for bytes in [&[0xff, 0xfe, b'{'][..], b"{\"name\":\"\xff\"}"] {
+            let root = folder(&format!("invalid-utf8-{}", bytes.len()));
+            let store = PreferencesStore::in_folder(&root);
+            fs::create_dir_all(store.path().parent().unwrap()).unwrap();
+            fs::write(store.path(), "{broken").unwrap();
+            fs::write(&store.last_good, bytes).unwrap();
+            assert_eq!(store.read().as_deref(), Some("{broken"), "keep the existing strict backup rejection");
+            assert_eq!(
+                store.load_outcome(),
+                Some(LoadOutcome {
+                    source: LoadSource::Defaults,
+                    primary: DocumentStatus::Damaged,
+                    backup: Some(DocumentStatus::Damaged),
+                })
+            );
+            fs::remove_dir_all(root).unwrap();
+        }
     }
 
     #[test]

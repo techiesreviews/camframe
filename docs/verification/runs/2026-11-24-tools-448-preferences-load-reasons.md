@@ -20,7 +20,7 @@
   A subsequent run demonstrated the behavioral assertion: actual `None` versus expected
   `Some(LoadOutcome { source: Defaults, primary: Missing, backup: None })`.
   Evidence: `.scratch/kit-jobs/tools-448-rust-red/log` and `tools-448-outcome-red/log`.
-- `kit rust`: format, locked workspace tests (77 passed), and Clippy with warnings denied pass.
+- `kit rust`: format, locked workspace tests (78 passed), and Clippy with warnings denied pass.
   Matrices cover 16 real-file primary/backup combinations and six actual `Prefs::open()` cases
   after frame migration and later saves. Existing Unix permission-preservation tests also pass.
 - `kit unit test/preferences-store.test.js test/preferences-contract.test.js test/settings.test.js`:
@@ -33,6 +33,15 @@
   in the outcome, and no diagnostic field in renderer state. Existing cut-off recovery and
   unreadable debounce/quit/reopen cases pass unchanged.
 - `git diff --check`: passed.
+
+## Review follow-up
+
+Claude Opus 5.5 high returned only P3 findings and test gaps, ending the main review loop.
+R1-1/R1-4 are fixed with a red-first invalid-UTF-8 spare regression (two byte patterns).
+The test first observed `Unreadable(InvalidData)` instead of `Damaged`; the fix changes only
+that classification. The spare remains rejected, even when lossy decoding would make a JSON
+object, preserving recovery. R1-2 updates the canonical module map in `CONTEXT.md`.
+The remaining test gaps are recorded with their reasons in the PR findings ledger.
 
 ## Completion proof
 

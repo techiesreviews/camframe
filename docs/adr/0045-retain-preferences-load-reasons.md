@@ -18,6 +18,8 @@ distinguish a missing primary from a read failure or a damaged document after st
   backup status. Status is valid, missing, damaged, or unreadable with an OS error code
   (JavaScript) or `io::ErrorKind` (Rust). Backup status is absent when it was not tried.
 - A damaged document means readable text that is not a JSON object, including invalid JSON.
+  Rust's strict backup UTF-8 decoder also classifies invalid text bytes as damaged while
+  retaining its existing rejection of that spare, even if lossy decoding would parse as an object.
   `defaults` means neither file supplied a usable object. The store still returns the same
   original fallback text to the existing parser, preserving its legacy non-object behavior.
 - The outcome contains no document text, Scene names, paths, or error messages. Electron exposes
