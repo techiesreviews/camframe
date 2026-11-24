@@ -815,6 +815,43 @@ test('real Electron: a cut-off preferences.json opens with the last good copy, a
   }
 })
 
+test('real Electron: startup records load reasons without settings contents', async () => {
+  for (const primary of ['missing', 'damaged', 'unreadable']) {
+    for (const backup of [false, true]) {
+      const directory = await mkdtemp(join(tmpdir(), 'camframe-load-outcome-'))
+      const path = join(directory, 'preferences.json')
+      if (primary === 'damaged') await writeFile(path, '{Private primary Scene')
+      if (primary === 'unreadable') await mkdir(path)
+      if (backup) await writeFile(join(directory, 'preferences.last-good.json'), JSON.stringify({
+        schemaVersion: 15,
+        completedOnboardingVersion: 1,
+        presets: [{ id: 'private', name: 'Private backup Scene', settings: { size: 350 } }],
+      }))
+      let application
+      try {
+        application = await launchCamFrame(directory)
+        const page = await application.firstWindow()
+        await page.locator('#overlay').waitFor({ state: 'visible' })
+        const state = await page.evaluate(() => window.camFrame.getState())
+        const recovered = primary !== 'missing' && backup
+        assert.equal(state.presets[0].name, recovered ? 'Private backup Scene' : 'Small bottom')
+        const outcome = await application.evaluate((_, path) => {
+          const main = process.getBuiltinModule('node:module').createRequire(path)(path)
+          return main.preferencesLoadOutcome()
+        }, join(projectRoot, 'src/main.js'))
+        assert.equal(outcome.source, recovered ? 'backup' : 'defaults')
+        assert.equal(outcome.primary.status, primary)
+        if (primary === 'unreadable') assert.match(outcome.primary.code, /^E[A-Z]+$/)
+        assert.doesNotMatch(JSON.stringify(outcome), /Private|presets|preferences\.json/)
+        assert.equal(Object.hasOwn(state, 'loadOutcome'), false, 'diagnostics stay out of renderer settings')
+      } finally {
+        await application?.close().catch(() => {})
+        await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 })
+      }
+    }
+  }
+})
+
 test('real Electron: unreadable Preferences survive debounced saves and quit without an error dialog', {
   skip: process.platform === 'win32' ? 'Unix read permissions; Windows rename failures are covered by the store suite' : false,
 }, async () => {

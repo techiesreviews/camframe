@@ -47,6 +47,10 @@ if (!app.isPackaged && process.env.CAMFRAME_E2E === '1' && isAbsolute(integratio
 let preferencesStore
 const openPreferencesStore = () => preferencesStore ??= createPreferencesStore(join(app.getPath('userData'), 'preferences.json'))
 
+export function preferencesLoadOutcome() {
+  return preferencesStore?.loadOutcome
+}
+
 let overlayWindow
 let overlayGeometry
 let tray
@@ -71,6 +75,7 @@ function sceneSessionWith(startSettings) {
 
 function loadSettings() {
   const documentText = openPreferencesStore().read()
+  console.info('CamFrame: Preferences load:', preferencesLoadOutcome())
   sceneSession = sceneSessionWith(preferencesFromDocument(documentText))
   // Start at login is gone (ADR 0037): a packaged build that registered it turns it off once.
   if (app.isPackaged && legacyLaunchAtLogin(documentText)) app.setLoginItemSettings({ openAtLogin: false })

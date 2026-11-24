@@ -41,16 +41,41 @@ fn is_document(text: &str) -> bool {
     matches!(serde_json::from_str::<Value>(text), Ok(Value::Object(_)))
 }
 
+/// Diagnostics only: no document text, paths or error messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DocumentStatus {
+    Valid,
+    Missing,
+    Damaged,
+    Unreadable(io::ErrorKind),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoadSource {
+    Primary,
+    Backup,
+    Defaults,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LoadOutcome {
+    pub source: LoadSource,
+    pub primary: DocumentStatus,
+    /// None when the primary was valid or missing, so the backup was not tried.
+    pub backup: Option<DocumentStatus>,
+}
+
 pub struct PreferencesStore {
     path: PathBuf,
     last_good: PathBuf,
     session_read_error: Cell<Option<io::ErrorKind>>,
+    load_outcome: Cell<Option<LoadOutcome>>,
 }
 
 impl PreferencesStore {
     pub fn new(path: PathBuf) -> PreferencesStore {
         let last_good = path.with_file_name(PREFERENCES_FILE.replace(".json", ".last-good.json"));
-        PreferencesStore { path, last_good, session_read_error: Cell::new(None) }
+        PreferencesStore { path, last_good, session_read_error: Cell::new(None), load_outcome: Cell::new(None) }
     }
 
     /// The store in the app's own folder under `root`.
@@ -62,26 +87,54 @@ impl PreferencesStore {
         &self.path
     }
 
+    /// The most recent read's outcome. Saves leave it intact, including startup migration.
+    pub fn load_outcome(&self) -> Option<LoadOutcome> {
+        self.load_outcome.get()
+    }
+
     /// The text to load: `preferences.json` when it is complete, else the last good copy when that
     /// is, else whatever `preferences.json` held. None when there is no `preferences.json`.
     pub fn read(&self) -> Option<String> {
-        let current = match fs::read(&self.path) {
-            Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
+        let (current, primary) = match fs::read(&self.path) {
+            Ok(bytes) => {
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                let status = if is_document(&text) { DocumentStatus::Valid } else { DocumentStatus::Damaged };
+                (text, status)
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                self.load_outcome.set(Some(LoadOutcome {
+                    source: LoadSource::Defaults,
+                    primary: DocumentStatus::Missing,
+                    backup: None,
+                }));
+                return None;
+            }
             Err(error) => {
                 // Fallback settings must not replace the original if access returns before quit.
                 // Opening a new store on restart allows the original Scenes to load again.
                 self.session_read_error.set(Some(error.kind()));
-                String::new()
+                (String::new(), DocumentStatus::Unreadable(error.kind()))
             }
         };
-        if is_document(&current) {
+        if primary == DocumentStatus::Valid {
+            self.load_outcome.set(Some(LoadOutcome { source: LoadSource::Primary, primary, backup: None }));
             return Some(current);
         }
-        match fs::read_to_string(&self.last_good) {
-            Ok(last_good) if is_document(&last_good) => Some(last_good),
-            _ => Some(current),
-        }
+        let backup = match fs::read_to_string(&self.last_good) {
+            Ok(last_good) if is_document(&last_good) => {
+                self.load_outcome.set(Some(LoadOutcome {
+                    source: LoadSource::Backup,
+                    primary,
+                    backup: Some(DocumentStatus::Valid),
+                }));
+                return Some(last_good);
+            }
+            Ok(_) => DocumentStatus::Damaged,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => DocumentStatus::Missing,
+            Err(error) => DocumentStatus::Unreadable(error.kind()),
+        };
+        self.load_outcome.set(Some(LoadOutcome { source: LoadSource::Defaults, primary, backup: Some(backup) }));
+        Some(current)
     }
 
     pub fn write(&self, text: &str) -> io::Result<()> {
@@ -185,6 +238,59 @@ mod tests {
         let folder = std::env::temp_dir().join(format!("camframe-store-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
         folder
+    }
+
+    #[test]
+    fn load_outcomes_keep_primary_and_backup_reasons_without_settings() {
+        for primary in ["missing", "valid", "damaged", "unreadable"] {
+            for backup in ["missing", "valid", "damaged", "unreadable"] {
+                let root = folder(&format!("outcome-{primary}-{backup}"));
+                let store = PreferencesStore::in_folder(&root);
+                fs::create_dir_all(store.path().parent().unwrap()).unwrap();
+                let original = if primary == "damaged" { "{private-primary" } else { r#"{"size":412}"# };
+                let spare = if backup == "damaged" { "{private-backup" } else { r#"{"size":350}"# };
+                for (state, path, text) in [(primary, &store.path, original), (backup, &store.last_good, spare)] {
+                    match state {
+                        "missing" => {}
+                        // A directory gives a real read error on Windows, macOS and Linux.
+                        "unreadable" => fs::create_dir(path).unwrap(),
+                        _ => fs::write(path, text).unwrap(),
+                    }
+                }
+                let classify = |state, path: &Path| match state {
+                    "missing" => DocumentStatus::Missing,
+                    "valid" => DocumentStatus::Valid,
+                    "damaged" => DocumentStatus::Damaged,
+                    _ => DocumentStatus::Unreadable(fs::read(path).unwrap_err().kind()),
+                };
+                let tried_backup = !matches!(primary, "missing" | "valid");
+                let source = match (primary, tried_backup, backup) {
+                    ("valid", _, _) => LoadSource::Primary,
+                    (_, true, "valid") => LoadSource::Backup,
+                    _ => LoadSource::Defaults,
+                };
+                let expected = LoadOutcome {
+                    source,
+                    primary: classify(primary, &store.path),
+                    backup: tried_backup.then(|| classify(backup, &store.last_good)),
+                };
+                let text = store.read();
+                let outcome = store.load_outcome().unwrap();
+                assert_eq!(outcome, expected, "{primary}/{backup}");
+                let expected_text = match source {
+                    LoadSource::Primary => Some(original),
+                    LoadSource::Backup => Some(spare),
+                    LoadSource::Defaults if primary == "missing" => None,
+                    LoadSource::Defaults if primary == "unreadable" => Some(""),
+                    _ => Some(original),
+                };
+                assert_eq!(text.as_deref(), expected_text);
+                assert!(!format!("{outcome:?}").contains("private"));
+                let _ = store.write(r#"{"size":288}"#);
+                assert_eq!(store.load_outcome(), Some(expected), "saves retain the load reason");
+                fs::remove_dir_all(root).unwrap();
+            }
+        }
     }
 
     #[test]
