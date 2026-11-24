@@ -90,17 +90,10 @@ const systemTimers = {
 // framing demos, handing a demo over to the user, and completing or dismissing the tour.
 // ADRs 0012 and 0016-0023 are its specification.
 //
-// It drives the Overlay only through `overlay`:
-//   state(), showChrome(), scheduleHideChrome(), setTourOpen(open) -> top reserve in px,
-//   settingsOpen(), openSettings(panel), selectSettingsPanel(panel), closeSettings(),
-//   isFraming(), setFraming(on), cycleShape(options), previewFraming(framing), patchState(patch, options),
-//   surfaceSize(), completeOnboarding()
-// Demo steps and their restore pass `{ demo: true }`: they are stored but never saved into the
-// active Scene (ADR 0037); only what the user takes over is a hand change.
-// and draws only through `view`:
-//   show(offset, invoker), hide(), setLayoutOffset(px), restoreFocus(), clearStep(),
-//   renderStep(content, index, count), relayout(reveal), focusTitle(),
-//   setDemoMarker(marker), playCursor(gesture), hideCursor(), endDemo()
+// It drives the Overlay only through `overlay` and draws only through `view`; src/overlay.js builds
+// both and test/onboarding.test.js fakes them. `overlay.setTourOpen(open)` returns the top reserve
+// in px. Demo steps and their restore pass `{ demo: true }`: they are stored but never saved into
+// the active Scene (ADR 0037); only what the user takes over is a hand change.
 export function createOnboardingTour({
   overlay,
   view,
