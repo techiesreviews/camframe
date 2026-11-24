@@ -23,6 +23,46 @@ function document(sceneName) {
   )
 }
 
+for (const primary of ['missing', 'valid', 'damaged', 'EACCES', 'EIO']) {
+  for (const backup of ['missing', 'valid', 'damaged', 'EACCES']) {
+    test(`load outcome keeps ${primary} primary and ${backup} backup reasons without settings`, () => {
+      const directory = folder()
+      const path = join(directory, 'preferences.json')
+      const lastGood = join(directory, 'preferences.last-good.json')
+      const original = primary === 'damaged' ? '{private-primary' : document('Private primary Scene')
+      const spare = backup === 'damaged' ? '{private-backup' : document('Private backup Scene')
+      if (primary !== 'missing') writeFileSync(path, original)
+      if (backup !== 'missing') writeFileSync(lastGood, spare)
+      const recording = {
+        ...fs,
+        readFileSync(file, ...rest) {
+          const code = file === path ? primary : backup
+          if (code.startsWith('E')) throw Object.assign(new Error('private contents and path'), { code })
+          return fs.readFileSync(file, ...rest)
+        },
+      }
+      const store = createPreferencesStore(path, recording)
+      const text = store.read()
+      const triedBackup = !['missing', 'valid'].includes(primary)
+      const source = primary === 'valid' ? 'primary' : triedBackup && backup === 'valid' ? 'backup' : 'defaults'
+      const status = (value) => value.startsWith('E') ? { status: 'unreadable', code: value } : { status: value }
+      const expected = { source, primary: status(primary), backup: triedBackup ? status(backup) : null }
+      assert.deepEqual(store.loadOutcome, expected)
+      assert.equal(text, primary === 'missing' ? undefined : source === 'backup' ? spare : primary.startsWith('E') ? undefined : original)
+      if (source !== 'defaults') {
+        assert.equal(preferencesFromDocument(text).presets[0].name, source === 'backup' ? 'Private backup Scene' : 'Private primary Scene')
+      }
+      assert.doesNotMatch(JSON.stringify(store.loadOutcome), /private|presets|preferences\.json/i)
+      assert.throws(() => { store.loadOutcome.primary.status = 'changed' }, TypeError)
+      // Saving must not erase the startup reason, including the unreadable-session guard.
+      if (primary.startsWith('E')) assert.throws(() => store.write(document('After')), { code: primary })
+      else store.write(document('After'))
+      assert.deepEqual(store.loadOutcome, expected)
+      fs.rmSync(directory, { recursive: true, force: true })
+    })
+  }
+}
+
 test('a broken preferences.json loads the last good copy quietly, so saved Scenes survive', () => {
   const directory = folder()
   const path = join(directory, 'preferences.json')

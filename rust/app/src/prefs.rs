@@ -34,6 +34,7 @@ impl Prefs {
             eprintln!("CamFrame: could not copy the CamFrame 0.9.0 Preferences: {error}");
         }
         let text = store.read();
+        eprintln!("CamFrame: Preferences load: {:?}", store.load_outcome());
         let mut settings = preferences_from_document(text.as_deref());
         let frame_version = text
             .as_deref()
@@ -77,6 +78,51 @@ mod tests {
     use super::*;
     use camframe_core::settings::Shape;
     use camframe_core::store::APP_FOLDER;
+
+    #[test]
+    fn startup_keeps_the_load_outcome_after_automatic_migration_and_saves() {
+        use camframe_core::store::{DocumentStatus, LoadOutcome, LoadSource};
+        use std::fs;
+
+        for primary in ["missing", "damaged", "unreadable"] {
+            for backup in [false, true] {
+                let root = std::env::temp_dir()
+                    .join(format!("camframe-startup-outcome-{primary}-{backup}-{}", std::process::id()));
+                let _ = fs::remove_dir_all(&root);
+                let file = root.join(APP_FOLDER).join(PREFERENCES_FILE);
+                fs::create_dir_all(file.parent().unwrap()).unwrap();
+                match primary {
+                    "damaged" => fs::write(&file, "{private-primary").unwrap(),
+                    "unreadable" => fs::create_dir(&file).unwrap(),
+                    _ => {}
+                }
+                if backup {
+                    fs::write(file.with_file_name("preferences.last-good.json"), r#"{"schemaVersion":15,"size":350}"#)
+                        .unwrap();
+                }
+                let primary_status = match primary {
+                    "missing" => DocumentStatus::Missing,
+                    "damaged" => DocumentStatus::Damaged,
+                    _ => DocumentStatus::Unreadable(fs::read(&file).unwrap_err().kind()),
+                };
+                let (prefs, settings) = Prefs::open(Some(root.clone()));
+                let recovered = primary != "missing" && backup;
+                let expected = LoadOutcome {
+                    source: if recovered { LoadSource::Backup } else { LoadSource::Defaults },
+                    primary: primary_status,
+                    backup: (primary != "missing").then_some(if backup {
+                        DocumentStatus::Valid
+                    } else {
+                        DocumentStatus::Missing
+                    }),
+                };
+                assert_eq!(settings.size, if recovered { 350 } else { 288 });
+                prefs.save(&settings);
+                assert_eq!(prefs.store.as_ref().unwrap().load_outcome(), Some(expected));
+                fs::remove_dir_all(root).unwrap();
+            }
+        }
+    }
 
     fn border_reset_case(label: &str, folder: &str) {
         let root = std::env::temp_dir().join(format!("camframe-border-{label}-{}", std::process::id()));

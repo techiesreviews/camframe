@@ -38,7 +38,7 @@ global shortcuts / tray
 | `src/prompter-link.js` | The opt-in Prompter link: the `127.0.0.1:47833` HTTP server's lifecycle and state, origin/host/body checks, cue parsing, what a cue means (`cueAction`), and the status, which formats the Scene library's answers (`linkStatusBody`, `sceneDetail`, `lookOf`) | Main, `src/prompter-control.js` (`cueAction`, `linkStatusBody`, `sceneDetail`); injected `createServer` |
 | `src/prompter-control.js` | What a checked Prompter link request does: cues (`cueAction` then geometry), layout Scene saves, the small size, and the status `view` (ADR 0035) | Main; injected geometry, Scene state and commit |
 | `src/prompter-link-view.js` | What the Overlay shows for the Prompter link (on, off/starting/on/error, status text, button title) from `prompterLink` and `prompterLinkStatus`; the toolbar button and its hidden description render it | Overlay, tests |
-| `src/preferences-store.js` | The Preferences file on disk: one-step saves (temporary file, flush, rename), the last good copy, which text to load (ADR 0039), and refusing saves over an unreadable primary (ADR 0044) | Main; injected `fs` and platform |
+| `src/preferences-store.js` | The Preferences file on disk: one-step saves (temporary file, flush, rename), the last good copy, which text to load (ADR 0039), refusing saves over an unreadable primary (ADR 0044), and the retained load outcome (ADR 0045) | Main; injected `fs` and platform |
 | `src/settings.js` | Preferences schema, sanitization, loading/migration (`preferencesFromDocument`), Scene snapshots, camera/window dimensions | Main, Scene library, geometry, Overlay, tests |
 | `src/overlay.js` | DOM rendering and event wiring for the Overlay, Inline settings and the onboarding view; mounts the Scenes tab; in the browser QA preview, a bridge fake that runs the real Scene library | `overlay.html` |
 | `src/overlay-interaction.js` | Whether the chrome shows and whether the window is interactive; compact and Full screen hide delays; the toolbar hotspot | Overlay |
@@ -97,6 +97,9 @@ errors for both the 120 ms debounce and synchronous quit save without a native e
 Both stores also latch a read error during loading and refuse saves for that entire session,
 even after access returns. Main reuses one store, so its quit save cannot bypass the block.
 Restarting creates a new store and loads the original saved Scenes before permitting saves.
+Both stores retain a separate load outcome: selected source, primary status, and backup status
+when tried, including OS read-error codes/kinds (ADR 0045). Startup logs that outcome without
+document contents or paths. Saves leave it intact; it never enters Preferences or renderer state.
 Rust's store applies the same guard to later saves and `Prefs::open()`'s frame migration; its
 existing save handler logs failures. Readable malformed files and genuine first saves keep the
 previous repair and migration behavior.

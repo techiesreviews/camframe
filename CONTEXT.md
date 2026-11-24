@@ -35,10 +35,10 @@ Retired term: **Compositor mask** (native window regions). The unapplied helpers
 
 `src/main.js` and `src/overlay.js` are composition roots. They wire Electron and the DOM to the modules below (ADR 0030).
 
-- `src/main.js`: Electron lifecycle, tray, global shortcuts, dialogs, and bridge handlers.
+- `src/main.js`: Electron lifecycle, tray, global shortcuts, dialogs, bridge handlers, and the read-only `preferencesLoadOutcome()` diagnostic accessor.
 - `src/overlay.*`: Overlay markup, styles, DOM rendering, and event wiring.
 - `src/preload.cjs`: the sandboxed `window.camFrame` adapter for the bridge contract.
-- `src/preferences-store.js`: the Preferences file on disk: one-step saves and the last good copy (ADR 0039).
+- `src/preferences-store.js`: the Preferences file on disk: one-step saves, the last good copy (ADR 0039), and the retained load outcome (ADR 0045).
 - `src/bridge.js`: the bridge contract between main and the Overlay: channels, transports, argument checks, main registration, and the browser QA fake.
 - `src/prompter-link.js`: the Prompter link server, its origin/host/request checks, what a cue means (`cueAction`), and the status body.
 - `src/prompter-control.js`: what a checked Prompter link request does to the Overlay and the Scenes, against injected geometry and state.

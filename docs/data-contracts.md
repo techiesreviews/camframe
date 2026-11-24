@@ -47,6 +47,14 @@ Before writing, both stores must read the current primary or establish that it i
 
 The integration harness is the only exception to the normal user-data path: in an unpackaged build, when `CAMFRAME_E2E=1` and `CAMFRAME_E2E_USER_DATA_DIR` is absolute, main selects that isolated directory before reading Preferences and enables Chromium's synthetic video device/permission switches. These process-environment hooks are not exposed through preload, persisted, or honored by packaged launches.
 
+### Load diagnostics
+
+The separate runtime load outcome (ADR 0045) is not a Preferences field. It records the source
+(`primary`, `backup`, `defaults`), primary status, and backup status only when tried. Each status
+is valid, missing, damaged (not a JSON object), or unreadable with an OS code/kind. No settings
+contents, path or error message is retained in this outcome. It remains available after saves
+and startup migration and is logged once at startup; load selection and parser input are unchanged.
+
 ### Legacy migration
 
 Before sanitization, a loaded document with `schemaVersion < 3` receives `borderWidth = 0` and `size = 288`. A successfully loaded Preferences document without `completedOnboardingVersion` receives the current onboarding version so existing users are not interrupted. A missing or invalid Preferences document retains the default version 0. Explicit saved version 0 remains incomplete across restart. Legacy `fullscreenResolution` values are ignored; `overlayResolution` becomes the one retained Camera quality. Other fields continue to rely on defaults and sanitization for forward compatibility.

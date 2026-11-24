@@ -15,6 +15,14 @@ let sequence = 0
 export function createPreferencesStore(path, fs = nodeFs, platform = process.platform) {
   const lastGoodPath = `${path.replace(/\.json$/, '')}.last-good.json`
   let sessionReadError
+  let loadOutcome
+
+  // Diagnostics contain only classifications and OS codes, never text, paths or error messages.
+  function outcomeFor(file) {
+    if (file.missing) return Object.freeze({ status: 'missing' })
+    if (file.error) return Object.freeze({ status: 'unreadable', code: file.error.code ?? null })
+    return Object.freeze({ status: isDocument(file.text) ? 'valid' : 'damaged' })
+  }
 
   function load(file) {
     try {
@@ -86,18 +94,29 @@ export function createPreferencesStore(path, fs = nodeFs, platform = process.pla
   }
 
   return {
+    get loadOutcome() { return loadOutcome },
     // The text to load: `preferences.json` when it is complete, else the last good copy when that
     // is, else whatever `preferences.json` held (`preferencesFromDocument` falls back to defaults).
     // Undefined when there is no `preferences.json`.
     read() {
       const current = load(path)
-      if (current.missing) return undefined
+      const primary = outcomeFor(current)
+      if (current.missing) {
+        loadOutcome = Object.freeze({ source: 'defaults', primary, backup: null })
+        return undefined
+      }
       // This session loaded fallback settings. Even if access returns before quit, saving them
       // would hide the original Scenes again. A new store on restart can load the original.
       if (current.error) sessionReadError = current.error
-      if (isDocument(current.text)) return current.text
+      if (primary.status === 'valid') {
+        loadOutcome = Object.freeze({ source: 'primary', primary, backup: null })
+        return current.text
+      }
       const lastGood = load(lastGoodPath)
-      return isDocument(lastGood.text) ? lastGood.text : current.text
+      const backup = outcomeFor(lastGood)
+      const recovered = backup.status === 'valid'
+      loadOutcome = Object.freeze({ source: recovered ? 'backup' : 'defaults', primary, backup })
+      return recovered ? lastGood.text : current.text
     },
     write(text) {
       if (sessionReadError) throw sessionReadError
