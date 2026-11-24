@@ -20,7 +20,7 @@
   A subsequent run demonstrated the behavioral assertion: actual `None` versus expected
   `Some(LoadOutcome { source: Defaults, primary: Missing, backup: None })`.
   Evidence: `.scratch/kit-jobs/tools-448-rust-red/log` and `tools-448-outcome-red/log`.
-- `kit rust`: format, locked workspace tests (78 passed), and Clippy with warnings denied pass.
+- `kit rust`: format, locked workspace tests (77 passed), and Clippy with warnings denied pass.
   Matrices cover 16 real-file primary/backup combinations and six actual `Prefs::open()` cases
   after frame migration and later saves. Existing Unix permission-preservation tests also pass.
 - `kit unit test/preferences-store.test.js test/preferences-contract.test.js test/settings.test.js`:
